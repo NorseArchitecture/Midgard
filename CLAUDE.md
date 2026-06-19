@@ -18,6 +18,6 @@ This repo's own `.claude/settings.json` carries a `SessionStart` hook that shoul
 
 Midgard is **embodied law** — `Norse.Infrastructure`: the concrete implementations of Asgard's contracts. Persistence, messaging, caching, and external integrations live here — the `DbContext` family, EF conventions, repository implementations (including temporal), `JsonControllerBase<TService>`, the mediator runtime, and UI composition. In the dependency chain it rides on Asgard, Svartalfheim, and Urdarbrunnr; Yggdrasil and everything above rides on it.
 
-This repo is currently a bare shell (LICENSE only) — no specs have converged here yet. Before writing any code: brainstorm → spec → plan, recorded in `../Glitnir/docs/superpowers/`, per the org's spec-first discipline. Do not scaffold a project structure ahead of a converged spec.
+This repo is currently a bare shell (LICENSE only) — no specs have converged here yet. Before writing any code: brainstorm → spec → plan, recorded in `../Glitnir/docs/Midgard/`, per the org's spec-first discipline. Do not scaffold a project structure ahead of a converged spec.
 
 See `../Bifrost/CLAUDE.md` (§2 The Naming Model) and `../Glitnir/CLAUDE.md` (§1 Bounded Context Map) for the full realm table and how Midgard fits the rest of the cosmos.
