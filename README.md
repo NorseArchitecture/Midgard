@@ -2,6 +2,10 @@
 
 > The realm of humankind, where the will of the gods takes physical form.
 
+![Midgard — the realm of humankind, where the will of the gods descends from Asgard and takes concrete form in the world](https://github.com/user-attachments/assets/fee3325c-7d69-4e78-85a4-328b7fe91f22 "Midgard — where the will of the gods takes physical form")
+
+*Image credit: [@norsemythologyclips](https://www.instagram.com/norsemythologyclips/) — go follow them.*
+
 Embodied law for the Norse Architecture — **`Norse.Infrastructure`**: the concrete implementations of Asgard's contracts. Persistence, messaging, caching, and external integrations live here — the `DbContext` family, EF conventions, repository implementations (including temporal), `JsonControllerBase<TService>`, the mediator runtime, and UI composition. In the dependency chain it rides on Asgard, Svartalfheim, and Urdarbrunnr; Yggdrasil and everything above rides on it.
 
 ## Status
