@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace Norse.Infrastructure;
+namespace Norse.Infrastructure.Migrations;
 
 /// <summary>
 /// Extension methods for <see cref="IHostApplicationBuilder"/> to register Norse migrations infrastructure.

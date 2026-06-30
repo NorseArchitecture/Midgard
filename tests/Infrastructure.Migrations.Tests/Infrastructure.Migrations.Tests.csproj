@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
 		<PackageReference Include="NSubstitute" Version="*" />
-		<ProjectReference Include="../../src/Infrastructure/Infrastructure.csproj" />
+		<ProjectReference Include="../../src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" />
 	</ItemGroup>
 </Project>

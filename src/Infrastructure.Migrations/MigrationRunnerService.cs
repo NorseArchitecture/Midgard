@@ -2,7 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Norse.Abstractions.Migrations;
 
-namespace Norse.Infrastructure;
+namespace Norse.Infrastructure.Migrations;
 
 sealed partial class MigrationRunnerService(
 	IEnumerable<IMigrationContributor> contributors,

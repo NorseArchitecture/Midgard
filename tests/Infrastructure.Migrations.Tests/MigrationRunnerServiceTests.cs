@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Norse.Abstractions.Migrations;
 using NSubstitute;
 
-namespace Norse.Infrastructure.Tests;
+namespace Norse.Infrastructure.Migrations.Tests;
 
 public sealed class MigrationRunnerServiceTests
 {
