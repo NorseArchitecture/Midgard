@@ -10,14 +10,14 @@ namespace Norse.Infrastructure.Migrations.Tests;
 public sealed class MigrationRunnerServiceTests
 {
 	[Fact]
-	public async Task StartAsync_runs_all_contributors_and_stops_application()
+	async Task StartAsync_runs_all_contributors_and_stops_application()
 	{
 		var contributor = Substitute.For<IMigrationContributor>();
 		contributor.Name.Returns("Test");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
-		var sut = new MigrationRunnerService(
+		MigrationRunnerService sut = new(
 			[contributor],
 			lifetime,
 			NullLogger<MigrationRunnerService>.Instance);
@@ -29,7 +29,7 @@ public sealed class MigrationRunnerServiceTests
 	}
 
 	[Fact]
-	public async Task StartAsync_with_multiple_contributors_runs_all()
+	async Task StartAsync_with_multiple_contributors_runs_all()
 	{
 		var a = Substitute.For<IMigrationContributor>();
 		a.Name.Returns("A");
@@ -40,7 +40,7 @@ public sealed class MigrationRunnerServiceTests
 		b.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
-		var sut = new MigrationRunnerService(
+		MigrationRunnerService sut = new(
 			[a, b],
 			lifetime,
 			NullLogger<MigrationRunnerService>.Instance);
@@ -53,7 +53,7 @@ public sealed class MigrationRunnerServiceTests
 	}
 
 	[Fact]
-	public async Task StartAsync_propagates_exception_and_does_not_stop_application()
+	async Task StartAsync_propagates_exception_and_does_not_stop_application()
 	{
 		var contributor = Substitute.For<IMigrationContributor>();
 		contributor.Name.Returns("Bad");
@@ -61,7 +61,7 @@ public sealed class MigrationRunnerServiceTests
 			.Returns(Task.FromException(new InvalidOperationException("migration failed")));
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
-		var sut = new MigrationRunnerService(
+		MigrationRunnerService sut = new(
 			[contributor],
 			lifetime,
 			NullLogger<MigrationRunnerService>.Instance);
@@ -73,9 +73,9 @@ public sealed class MigrationRunnerServiceTests
 	}
 
 	[Fact]
-	public async Task StopAsync_is_always_a_noop()
+	async Task StopAsync_is_always_a_noop()
 	{
-		var sut = new MigrationRunnerService(
+		MigrationRunnerService sut = new(
 			[],
 			Substitute.For<IHostApplicationLifetime>(),
 			NullLogger<MigrationRunnerService>.Instance);
@@ -84,14 +84,14 @@ public sealed class MigrationRunnerServiceTests
 	}
 
 	[Fact]
-	public async Task StartAsync_logs_contributor_lifecycle_when_logger_is_enabled()
+	async Task StartAsync_logs_contributor_lifecycle_when_logger_is_enabled()
 	{
 		var contributor = Substitute.For<IMigrationContributor>();
 		contributor.Name.Returns("Test");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
-		var sut = new MigrationRunnerService([contributor], lifetime, new AlwaysEnabledLogger());
+		MigrationRunnerService sut = new([contributor], lifetime, new AlwaysEnabledLogger());
 		await sut.StartAsync(CancellationToken.None);
 
 		lifetime.Received(1).StopApplication();
@@ -105,7 +105,7 @@ public sealed class MigrationRunnerServiceTests
 	}
 
 	[Fact]
-	public void AddNorseMigrationsRunner_registers_MigrationRunnerService_as_hosted_service()
+	void AddNorseMigrationsRunner_registers_MigrationRunnerService_as_hosted_service()
 	{
 		var services = new ServiceCollection();
 		var builder = Substitute.For<IHostApplicationBuilder>();
