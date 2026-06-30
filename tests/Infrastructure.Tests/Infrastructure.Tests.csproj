@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<PackageReference Include="NSubstitute" Version="*" />
+		<ProjectReference Include="../../src/Infrastructure/Infrastructure.csproj" />
+	</ItemGroup>
+</Project>

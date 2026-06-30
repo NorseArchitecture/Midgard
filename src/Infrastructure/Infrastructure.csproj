@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure: the MigrationRunnerService and AddNorseMigrationsRunner extension — the hosted service that calls all IMigrationContributor implementations and exits cleanly.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<NorseRef Include="Abstractions.Migrations">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+	</ItemGroup>
+</Project>
