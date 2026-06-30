@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Norse.Abstractions.Migrations;
 using NSubstitute;
@@ -79,5 +81,39 @@ public sealed class MigrationRunnerServiceTests
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StopAsync(CancellationToken.None);
+	}
+
+	[Fact]
+	public async Task StartAsync_logs_contributor_lifecycle_when_logger_is_enabled()
+	{
+		var contributor = Substitute.For<IMigrationContributor>();
+		contributor.Name.Returns("Test");
+		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+		var lifetime = Substitute.For<IHostApplicationLifetime>();
+		var sut = new MigrationRunnerService([contributor], lifetime, new AlwaysEnabledLogger());
+		await sut.StartAsync(CancellationToken.None);
+
+		lifetime.Received(1).StopApplication();
+	}
+
+	sealed class AlwaysEnabledLogger : ILogger<MigrationRunnerService>
+	{
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+		public bool IsEnabled(LogLevel logLevel) => true;
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
+	}
+
+	[Fact]
+	public void AddNorseMigrationsRunner_registers_MigrationRunnerService_as_hosted_service()
+	{
+		var services = new ServiceCollection();
+		var builder = Substitute.For<IHostApplicationBuilder>();
+		builder.Services.Returns(services);
+
+		builder.AddNorseMigrationsRunner();
+
+		services.Any(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(MigrationRunnerService))
+			.ShouldBeTrue();
 	}
 }
