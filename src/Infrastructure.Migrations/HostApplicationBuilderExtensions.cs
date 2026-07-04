@@ -10,7 +10,7 @@ public static class HostApplicationBuilderExtensions
 {
 	/// <summary>
 	/// Registers <see cref="MigrationRunnerService"/> as a hosted service that runs all
-	/// <see cref="Norse.Abstractions.Migrations.IMigrationContributor"/> implementations on startup and stops the application on completion.
+	/// <see cref="Norse.Abstractions.Migrations.IMigrationContributor"/> implementations on startup.
 	/// </summary>
 	/// <param name="builder">The host application builder.</param>
 	/// <returns>The same <paramref name="builder"/> for chaining.</returns>
