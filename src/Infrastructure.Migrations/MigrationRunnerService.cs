@@ -6,13 +6,11 @@ namespace Norse.Infrastructure.Migrations;
 
 sealed partial class MigrationRunnerService(
 	IEnumerable<IMigrationContributor> contributors,
-	IHostApplicationLifetime lifetime,
 	ILogger<MigrationRunnerService> logger) : IHostedService
 {
 	public async Task StartAsync(CancellationToken cancellationToken)
 	{
 		await Task.WhenAll(contributors.Select(c => RunAsync(c, cancellationToken))).ConfigureAwait(false);
-		lifetime.StopApplication();
 	}
 
 	public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

@@ -10,22 +10,19 @@ namespace Norse.Infrastructure.Migrations.Tests;
 public sealed class MigrationRunnerServiceTests
 {
 	[Fact]
-	async Task StartAsync_runs_all_contributors_and_stops_application()
+	async Task StartAsync_runs_all_contributors()
 	{
 		var contributor = Substitute.For<IMigrationContributor>();
 		contributor.Name.Returns("Test");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-		var lifetime = Substitute.For<IHostApplicationLifetime>();
 		MigrationRunnerService sut = new(
 			[contributor],
-			lifetime,
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StartAsync(CancellationToken.None);
 
 		await contributor.Received(1).MigrateAsync(Arg.Any<CancellationToken>());
-		lifetime.Received(1).StopApplication();
 	}
 
 	[Fact]
@@ -39,37 +36,31 @@ public sealed class MigrationRunnerServiceTests
 		b.Name.Returns("B");
 		b.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-		var lifetime = Substitute.For<IHostApplicationLifetime>();
 		MigrationRunnerService sut = new(
 			[a, b],
-			lifetime,
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StartAsync(CancellationToken.None);
 
 		await a.Received(1).MigrateAsync(Arg.Any<CancellationToken>());
 		await b.Received(1).MigrateAsync(Arg.Any<CancellationToken>());
-		lifetime.Received(1).StopApplication();
 	}
 
 	[Fact]
-	async Task StartAsync_propagates_exception_and_does_not_stop_application()
+	async Task StartAsync_propagates_exception()
 	{
 		var contributor = Substitute.For<IMigrationContributor>();
 		contributor.Name.Returns("Bad");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>())
 			.Returns(Task.FromException(new InvalidOperationException("migration failed")));
 
-		var lifetime = Substitute.For<IHostApplicationLifetime>();
 		MigrationRunnerService sut = new(
 			[contributor],
-			lifetime,
 			NullLogger<MigrationRunnerService>.Instance);
 
 		var act = () => sut.StartAsync(CancellationToken.None);
 
 		await act.ShouldThrowAsync<InvalidOperationException>();
-		lifetime.DidNotReceive().StopApplication();
 	}
 
 	[Fact]
@@ -77,7 +68,6 @@ public sealed class MigrationRunnerServiceTests
 	{
 		MigrationRunnerService sut = new(
 			[],
-			Substitute.For<IHostApplicationLifetime>(),
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StopAsync(CancellationToken.None);
@@ -90,11 +80,11 @@ public sealed class MigrationRunnerServiceTests
 		contributor.Name.Returns("Test");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-		var lifetime = Substitute.For<IHostApplicationLifetime>();
-		MigrationRunnerService sut = new([contributor], lifetime, new AlwaysEnabledLogger());
+		MigrationRunnerService sut = new([contributor], new AlwaysEnabledLogger());
+
 		await sut.StartAsync(CancellationToken.None);
 
-		lifetime.Received(1).StopApplication();
+		await contributor.Received(1).MigrateAsync(Arg.Any<CancellationToken>());
 	}
 
 	sealed class AlwaysEnabledLogger : ILogger<MigrationRunnerService>
