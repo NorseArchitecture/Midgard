@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<ProjectReference Include="../../src/Infrastructure.Components.Theme/Infrastructure.Components.Theme.csproj" />
+	</ItemGroup>
+</Project>
