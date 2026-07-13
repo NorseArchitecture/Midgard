@@ -1,7 +1,14 @@
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Norse.DesignSystem
+@inject IThemeService ThemeService
 
-<FluentDesignTheme Mode="DesignThemeModes.System"
-                    CustomColor="@FluentTokenSeed.AccentBaseColor"
-                    NeutralBaseColor="@FluentTokenSeed.NeutralBaseColor"
-                    StorageName="norse-fluent-theme" />
+@code {
+	// IThemeService is JS-interop-backed; it isn't callable until the circuit has rendered once.
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			await ThemeService.SetThemeAsync(new ThemeSettings(FluentTokenSeed.AccentBaseColor, Mode: ThemeMode.System));
+		}
+	}
+}
