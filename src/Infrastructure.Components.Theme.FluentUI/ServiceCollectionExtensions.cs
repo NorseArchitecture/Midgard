@@ -9,8 +9,8 @@ namespace Norse.Infrastructure.Components.Theme.FluentUI;
 public static class ServiceCollectionExtensions
 {
 	/// <summary>
-	/// Registers FluentUI Blazor's component services, including <see cref="GlobalState"/>, the
-	/// service <see cref="NorseFluentDesignTheme"/> drives to bootstrap the platform's design tokens.
+	/// Registers FluentUI Blazor's component services, including <see cref="IThemeService"/>, which
+	/// <see cref="NorseFluentDesignTheme"/> calls to bootstrap the platform's design tokens.
 	/// </summary>
 	public static IServiceCollection AddNorseFluentUiTheme(this IServiceCollection services) =>
 		services.AddFluentUIComponents();

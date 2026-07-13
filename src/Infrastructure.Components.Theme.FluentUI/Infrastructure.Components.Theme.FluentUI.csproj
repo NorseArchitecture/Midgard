@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 	<PropertyGroup>
-		<Description>Norse.Infrastructure.Components.Theme.FluentUI: bootstraps FluentUI Blazor's DesignTokens from Naglfar's generated token seed. AddNorseFluentUiTheme() registers FluentUI's services; NorseFluentDesignTheme wraps FluentDesignTheme with Mode="System" and the seeded accent/neutral colors. The only project in this pair that references FluentUI.</Description>
+		<Description>Norse.Infrastructure.Components.Theme.FluentUI: bootstraps FluentUI Blazor's theme from Naglfar's generated token seed. AddNorseFluentUiTheme() registers FluentUI's services; NorseFluentDesignTheme calls IThemeService.SetThemeAsync with Mode="System" and the seeded accent color. The only project in this pair that references FluentUI.</Description>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="*" />
+		<PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="*-*" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="../Infrastructure.Components.Theme/Infrastructure.Components.Theme.csproj" />
