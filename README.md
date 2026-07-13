@@ -10,7 +10,7 @@ Embodied law for the Norse Architecture — **`Norse.Infrastructure`**: the conc
 
 ## Status
 
-**`Norse.Infrastructure.Migrations` is live** — `MigrationRunnerService` and `AddNorseMigrationsRunner()` shipped as the runner every Norse migrations service calls through, part of the platform-wide migrations framework proven end to end across six realms (the full story is on [Bifröst's README](https://github.com/NorseArchitecture/Bifrost#readme)). Everything else in this realm remains a bare shell — no `DbContext` family, no repository implementations, no mediator runtime, no UI composition yet. Design happens first for what's left: brainstorm → spec → plan, recorded in Glitnir's `docs/Midgard/`, before any further project is scaffolded here.
+**`Norse.Infrastructure.Migrations` is live** — `MigrationRunnerService` and `AddNorseMigrationsRunner()` shipped as the runner every Norse migrations service calls through, part of the platform-wide migrations framework proven end to end across six realms (the full story is on [Bifröst's README](https://github.com/NorseArchitecture/Bifrost#readme)). Everything else in this realm remains a bare shell — no `DbContext` family, no repository implementations, no mediator runtime. `Infrastructure.Components.Theme`/`.Theme.FluentUI` are live — the first slice of UI composition (app-wide theme bootstrapping); the dashboard-widget-composition half remains unconverged. Design happens first for what's left: brainstorm → spec → plan, recorded in Glitnir's `docs/Midgard/`, before any further project is scaffolded here.
 
 ## The cosmos
 

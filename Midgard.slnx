@@ -14,10 +14,14 @@
 		<File Path="src/Directory.Build.props" />
 		<File Path="src/Directory.Build.targets" />
 		<Project Path="src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" />
+		<Project Path="src/Infrastructure.Components.Theme/Infrastructure.Components.Theme.csproj" />
+		<Project Path="src/Infrastructure.Components.Theme.FluentUI/Infrastructure.Components.Theme.FluentUI.csproj" />
 	</Folder>
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
 		<File Path="tests/Directory.Build.targets" />
 		<Project Path="tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Components.Theme.Tests/Infrastructure.Components.Theme.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Components.Theme.FluentUI.Tests/Infrastructure.Components.Theme.FluentUI.Tests.csproj" />
 	</Folder>
 </Solution>

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<ProjectReference Include="../../src/Infrastructure.Components.Theme.FluentUI/Infrastructure.Components.Theme.FluentUI.csproj" />
+	</ItemGroup>
+</Project>
