@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Caching.Memory;
+using Norse.Abstractions.Web.Server.DeferredSignIn;
 
 namespace Norse.Infrastructure.Web.Server.DeferredSignIn;
 
