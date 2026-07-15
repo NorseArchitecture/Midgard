@@ -3,6 +3,9 @@
 		<Description>Norse.Infrastructure.Web.Server: the embodied half of Asgard's server-only mediator law. Mediator/Grpc translates Outcome&lt;T&gt; into gRPC's native failure idiom (RpcException + trailers) and back out of a thrown OutcomeFailedException — zero domain knowledge, reused verbatim by every gRPC-hosted mediator handler on the platform.</Description>
 	</PropertyGroup>
 	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+	<ItemGroup>
 		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="*" />
 	</ItemGroup>
 	<ItemGroup>

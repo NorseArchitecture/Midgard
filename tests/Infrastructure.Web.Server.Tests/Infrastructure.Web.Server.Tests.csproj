@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
+		<PackageReference Include="NSubstitute" Version="*" />
+	</ItemGroup>
+	<ItemGroup>
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>
