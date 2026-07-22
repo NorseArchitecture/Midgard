@@ -3,8 +3,7 @@
 		<Description>Norse.Infrastructure.Components.Theme: the plain-CSS half of the platform's theme selection machinery. No third-party UI-library dependency — every headless component (Asgard's Loader, any headless markup in a realm's .Components project) implicitly depends on this via currentColor, without ever referencing it directly. See Norse.Infrastructure.Components.Theme.FluentUI for the FluentUI-specific sibling.</Description>
 	</PropertyGroup>
 	<ItemGroup>
-		<NorseRef Include="DesignSystem.Tokens">
-			<Repo>Naglfar</Repo>
-		</NorseRef>
+		<!-- This is the one Norse Reference we should pull from Nuget since the C# is built by Style Dictionary -->
+		<PackageReference Include="Norse.DesignSystem.Tokens" Version="*" />
 	</ItemGroup>
 </Project>
