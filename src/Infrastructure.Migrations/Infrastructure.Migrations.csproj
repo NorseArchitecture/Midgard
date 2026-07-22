@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Worker">
 	<PropertyGroup>
 		<Description>Norse.Infrastructure.Migrations: the MigrationRunnerService and AddNorseMigrationsRunner extension — the hosted service that calls all IMigrationContributor implementations and exits cleanly. Consumed only by the migrations service; never referenced from runtime containers.</Description>
 	</PropertyGroup>

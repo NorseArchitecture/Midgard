@@ -3,7 +3,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Norse.Abstractions.Migrations;
-using NSubstitute;
 
 namespace Norse.Infrastructure.Migrations.Tests;
 

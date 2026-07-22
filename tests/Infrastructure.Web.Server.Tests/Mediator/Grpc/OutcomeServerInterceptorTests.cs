@@ -1,7 +1,6 @@
 using Grpc.Core;
 using Norse.Abstractions.Web.Server.Mediator;
 using Norse.Infrastructure.Web.Server.Mediator.Grpc;
-using NSubstitute;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
