@@ -3,6 +3,6 @@
 		<Description>Norse.Infrastructure.Web.Client: WASM-friendly gRPC client-side failure decoding. Grpc/ decodes an RpcException's problem-bin trailer directly into a plain dictionary — never references Asgard's server-only Outcome/Problem/ErrorCategory, because this project is meant to compile into a WASM client bundle.</Description>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="protobuf-net.Grpc" Version="*" />
+		<PackageReference Include="protobuf-net.Grpc" Version="1.*" />
 	</ItemGroup>
 </Project>
