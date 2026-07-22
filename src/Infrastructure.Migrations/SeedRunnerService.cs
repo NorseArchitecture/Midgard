@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Norse.Abstractions.Migrations.Seeding;
 
 namespace Norse.Infrastructure.Migrations;

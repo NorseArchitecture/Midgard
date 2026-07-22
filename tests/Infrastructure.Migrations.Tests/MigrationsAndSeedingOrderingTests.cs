@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Norse.Abstractions.Migrations;
 using Norse.Abstractions.Migrations.Seeding;
-using NSubstitute;
 
 namespace Norse.Infrastructure.Migrations.Tests;
 
