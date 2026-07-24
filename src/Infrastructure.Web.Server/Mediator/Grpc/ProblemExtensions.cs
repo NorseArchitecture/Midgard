@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Grpc.Core;
-using Norse.Abstractions.Web.Server.Mediator;
+using Norse.Abstractions.Contracts;
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 

@@ -1,4 +1,4 @@
-using Norse.Abstractions.Web.Server.Mediator;
+using Norse.Abstractions.Contracts;
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 

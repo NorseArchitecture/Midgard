@@ -1,7 +1,10 @@
 using System.Text.Json;
 using Grpc.Core;
-using Norse.Abstractions.Web.Server.Mediator;
+using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Web.Server.Mediator.Grpc;
+#pragma warning disable IDE0005 // Using directive is unnecessary
+using Shouldly;
+#pragma warning restore IDE0005
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
