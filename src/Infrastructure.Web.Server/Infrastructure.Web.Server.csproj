@@ -6,6 +6,7 @@
 		<NorseRef Include="Abstractions.Web.Server">
 			<Repo>Asgard</Repo>
 		</NorseRef>
+		<PackageReference Include="FluentValidation" Version="11.*" />
 		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="1.*" />
 	</ItemGroup>
 </Project>
