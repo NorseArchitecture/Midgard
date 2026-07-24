@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 	<PropertyGroup>
-		<Description>Norse.Infrastructure.Web.Server: the embodied half of Asgard's server-only mediator law. Mediator/Grpc translates Outcome&lt;T&gt; into gRPC's native failure idiom (RpcException + trailers) and back out of a thrown OutcomeFailedException — zero domain knowledge, reused verbatim by every gRPC-hosted mediator handler on the platform.</Description>
+		<Description>Norse.Infrastructure.Web.Server: gRPC server-side failure encoding. Mediator/Grpc translates Problem into google.rpc.Status + ErrorInfo/BadRequest/DebugInfo well-known types on a grpc-status-details-bin trailer, paired with Infrastructure.Web.Client for symmetrical decoding.</Description>
 	</PropertyGroup>
 	<ItemGroup>
 		<NorseRef Include="Abstractions.Web.Server">

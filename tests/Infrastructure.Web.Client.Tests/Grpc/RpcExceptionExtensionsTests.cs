@@ -21,4 +21,26 @@ public sealed class RpcExceptionExtensionsTests
 		lockedOutException.DecodeProblem().Category.ShouldBe(Norse.Abstractions.Contracts.ErrorCategory.LockedOut);
 		forbiddenException.DecodeProblem().Category.ShouldBe(Norse.Abstractions.Contracts.ErrorCategory.Forbidden);
 	}
+
+	[Fact]
+	void CorrelationId_RoundTrips_ThroughDebugInfo()
+	{
+		var correlationId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+		var exception = Norse.Infrastructure.Web.Server.Mediator.Grpc.ProblemExtensions.ToRpcException(
+			new Norse.Abstractions.Contracts.Problem { Category = Norse.Abstractions.Contracts.ErrorCategory.Fault, CorrelationId = correlationId });
+
+		exception.DecodeProblem().CorrelationId.ShouldBe(correlationId);
+	}
+
+	[Fact]
+	void Errors_RoundTrip_ThroughBadRequestFieldViolations()
+	{
+		var errors = new Dictionary<string, string[]> { ["Email"] = ["Email is required", "Email is not a valid address"], ["Password"] = ["Password is required"] };
+		var exception = Norse.Infrastructure.Web.Server.Mediator.Grpc.ProblemExtensions.ToRpcException(
+			new Norse.Abstractions.Contracts.Problem { Category = Norse.Abstractions.Contracts.ErrorCategory.Validation, Errors = errors });
+
+		var decoded = exception.DecodeProblem().Errors;
+		decoded["Email"].ShouldBe(["Email is required", "Email is not a valid address"]);
+		decoded["Password"].ShouldBe(["Password is required"]);
+	}
 }
