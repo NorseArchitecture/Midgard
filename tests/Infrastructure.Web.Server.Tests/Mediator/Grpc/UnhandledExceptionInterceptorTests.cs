@@ -80,6 +80,14 @@ public sealed class UnhandledExceptionInterceptorTests
 		cts.Cancel();
 #pragma warning restore CA1849
 
+		// Not a reference-identity check (unlike AlreadyWellFormedRpcException_PassesThroughUnchanged
+		// above) — deliberately. When an OperationCanceledException matching the awaited token
+		// propagates through an async method, .NET's Task infrastructure marks the Task Canceled
+		// rather than Faulted; observing a canceled Task via await synthesizes a *new*
+		// TaskCanceledException rather than preserving the original instance. Asserting on exception
+		// type + the carried CancellationToken value is the correct, achievable proof that this
+		// propagated via the interceptor's cooperative-cancellation branch rather than being caught
+		// and converted to a Fault — reference identity genuinely does not survive this path.
 		var exception = await Should.ThrowAsync<OperationCanceledException>(async () =>
 			await interceptor.UnaryServerHandler<string, object>(
 				"request",
@@ -87,5 +95,6 @@ public sealed class UnhandledExceptionInterceptorTests
 				(_, _) => throw new OperationCanceledException(cts.Token)).ConfigureAwait(false));
 
 		exception.CancellationToken.ShouldBe(cts.Token);
+		logger.ErrorLogCount.ShouldBe(0);
 	}
 }
