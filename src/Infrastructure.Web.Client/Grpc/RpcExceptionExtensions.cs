@@ -1,26 +1,47 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
+using Google.Rpc;
 using Grpc.Core;
+using Norse.Abstractions.Contracts;
 
 namespace Norse.Infrastructure.Web.Client.Grpc;
 
-/// <summary>Client-side companion to Infrastructure.Web.Server's OutcomeServerInterceptor — decodes an
-/// RpcException's problem-bin trailer directly into a plain dictionary. Never references Asgard's
-/// Problem/ErrorCategory (server-only) — this project compiles into a WASM client bundle.</summary>
+/// <summary>
+/// Client-side companion to Infrastructure.Web.Server's <c>ProblemExtensions.ToRpcException</c>.
+/// Decodes the <c>grpc-status-details-bin</c> trailer's <c>google.rpc.ErrorInfo.Reason</c> field
+/// authoritatively — never the gRPC status code, which is not injective across all nine
+/// <see cref="ErrorCategory"/> members (spec §2.1).
+/// </summary>
 public static class RpcExceptionExtensions
 {
-	/// <summary>
-	/// Extracts and deserializes the errors from a gRPC RpcException's "problem-bin" trailer.
-	/// </summary>
-	/// <param name="exception">The RpcException to decode.</param>
-	/// <returns>A dictionary mapping error field names to arrays of error messages, or an empty dictionary if no trailer is present.</returns>
-	[SuppressMessage("Trimming", "IL2026", Justification = "JSON deserialization of error dictionary from gRPC trailer.")]
-	[SuppressMessage("AOT", "IL3050", Justification = "JSON deserialization of error dictionary from gRPC trailer.")]
-	public static IReadOnlyDictionary<string, string[]> DecodeProblem(this RpcException exception)
+	/// <summary>Decodes an <see cref="RpcException"/>'s <c>grpc-status-details-bin</c> trailer into a <see cref="Problem"/>.</summary>
+	public static Problem DecodeProblem(this RpcException exception)
 	{
-		var trailer = exception.Trailers.Get("problem-bin");
-		return trailer is null
-			? []
-			: JsonSerializer.Deserialize<Dictionary<string, string[]>>(trailer.ValueBytes) ?? [];
+		var trailer = exception.Trailers.Get("grpc-status-details-bin");
+		if (trailer is null)
+			return new Problem { Category = ErrorCategory.Fault };
+
+		var richStatus = Google.Rpc.Status.Parser.ParseFrom(trailer.ValueBytes);
+		var category = ErrorCategory.Fault;
+		var errors = new Dictionary<string, string[]>();
+		Guid? correlationId = null;
+
+		foreach (var detail in richStatus.Details)
+		{
+			if (detail.Is(ErrorInfo.Descriptor) && detail.TryUnpack<ErrorInfo>(out var errorInfo) && Enum.TryParse<ErrorCategory>(errorInfo.Reason, out var parsed))
+			{
+				category = parsed;
+			}
+			else if (detail.Is(BadRequest.Descriptor) && detail.TryUnpack<BadRequest>(out var badRequest))
+			{
+				errors = badRequest.FieldViolations
+					.GroupBy(violation => violation.Field)
+					.ToDictionary(group => group.Key, group => group.Select(violation => violation.Description).ToArray());
+			}
+			else if (detail.Is(DebugInfo.Descriptor) && detail.TryUnpack<DebugInfo>(out var debugInfo) && Guid.TryParse(debugInfo.Detail, out var parsedCorrelationId))
+			{
+				correlationId = parsedCorrelationId;
+			}
+		}
+
+		return new Problem { Category = category, Errors = errors, CorrelationId = correlationId };
 	}
 }

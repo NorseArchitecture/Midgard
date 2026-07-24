@@ -1,34 +1,80 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
+using Google.Protobuf;
+using Google.Protobuf.WellKnownTypes;
+using Google.Rpc;
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
+using GrpcStatus = Grpc.Core.Status;
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 
 /// <summary>
-/// Extension methods for <see cref="Problem"/> that translate <see cref="ErrorCategory"/> to gRPC <see cref="StatusCode"/>
-/// and serialize error details into an RpcException trailer.
+/// Converts a <see cref="Problem"/> to an <see cref="RpcException"/>. The gRPC status code is the
+/// partner-legible idiom — standard tooling reads it correctly without knowing Norse exists — but it
+/// is not injective (<see cref="ErrorCategory.LockedOut"/>/<see cref="ErrorCategory.Forbidden"/> share
+/// PermissionDenied; <see cref="ErrorCategory.Unauthorized"/>/<see cref="ErrorCategory.InvalidCredentials"/>
+/// share Unauthenticated). Every response also carries a <c>google.rpc.ErrorInfo</c> detail whose
+/// <c>Reason</c> is the exact <see cref="ErrorCategory"/> member name — the only field
+/// the client-side <c>RpcExceptionExtensions.DecodeProblem</c> method trusts (spec §2.1).
 /// </summary>
 public static class ProblemExtensions
 {
-	/// <summary>
-	/// Converts a <see cref="Problem"/> to an <see cref="RpcException"/>, mapping the error category to the appropriate
-	/// <see cref="StatusCode"/> and serializing the errors dictionary into a "problem-bin" trailer.
-	/// </summary>
-	/// <param name="problem">The problem to convert.</param>
-	/// <returns>An RpcException with the appropriate status code and a problem-bin trailer containing the serialized errors.</returns>
-	[SuppressMessage("Trimming", "IL2026", Justification = "JSON serialization of error dictionary is required for gRPC trailers.")]
-	[SuppressMessage("AOT", "IL3050", Justification = "JSON serialization of error dictionary is required for gRPC trailers.")]
+	const string ErrorInfoDomain = "norse.io";
+
+	/// <summary>Converts a <see cref="Problem"/> to an <see cref="RpcException"/> carrying a <c>grpc-status-details-bin</c> trailer.</summary>
 	public static RpcException ToRpcException(this Problem problem)
 	{
-		var status = problem.Category switch
+		var statusCode = problem.Category switch
 		{
 			ErrorCategory.Validation => StatusCode.InvalidArgument,
+			ErrorCategory.NotFound => StatusCode.NotFound,
 			ErrorCategory.Conflict => StatusCode.AlreadyExists,
-			ErrorCategory.LockedOut or ErrorCategory.NotAllowed => StatusCode.PermissionDenied,
+			ErrorCategory.Unauthorized => StatusCode.Unauthenticated,
+			ErrorCategory.Forbidden => StatusCode.PermissionDenied,
+			ErrorCategory.LockedOut => StatusCode.PermissionDenied,
+			ErrorCategory.NotAllowed => StatusCode.FailedPrecondition,
+			ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
+			ErrorCategory.Fault => StatusCode.Internal,
 			_ => StatusCode.Unknown,
 		};
-		var trailers = new Metadata { { "problem-bin", JsonSerializer.SerializeToUtf8Bytes(problem.Errors) } };
-		return new RpcException(new Status(status, problem.Category.ToString()), trailers);
+
+		var richStatus = new Google.Rpc.Status
+		{
+			Code = (int)MapToGoogleRpcCode(statusCode),
+			Message = problem.Category.ToString(),
+		};
+		richStatus.Details.Add(Any.Pack(new ErrorInfo
+		{
+			Reason = problem.Category.ToString(),
+			Domain = ErrorInfoDomain,
+		}));
+		if (problem.Errors.Count > 0)
+		{
+			var badRequest = new BadRequest();
+			foreach (var (field, messages) in problem.Errors)
+			{
+				foreach (var message in messages)
+					badRequest.FieldViolations.Add(new BadRequest.Types.FieldViolation { Field = field, Description = message });
+			}
+			richStatus.Details.Add(Any.Pack(badRequest));
+		}
+		if (problem.CorrelationId is { } correlationId)
+		{
+			richStatus.Details.Add(Any.Pack(new DebugInfo { Detail = correlationId.ToString() }));
+		}
+
+		var trailers = new Metadata { { "grpc-status-details-bin", richStatus.ToByteString().ToByteArray() } };
+		return new RpcException(new GrpcStatus(statusCode, problem.Category.ToString()), trailers);
 	}
+
+	static Code MapToGoogleRpcCode(StatusCode statusCode) => statusCode switch
+	{
+		StatusCode.InvalidArgument => Code.InvalidArgument,
+		StatusCode.NotFound => Code.NotFound,
+		StatusCode.AlreadyExists => Code.AlreadyExists,
+		StatusCode.Unauthenticated => Code.Unauthenticated,
+		StatusCode.PermissionDenied => Code.PermissionDenied,
+		StatusCode.FailedPrecondition => Code.FailedPrecondition,
+		StatusCode.Internal => Code.Internal,
+		_ => Code.Unknown,
+	};
 }

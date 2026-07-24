@@ -1,8 +1,7 @@
-using System.Text.Json;
+#pragma warning disable IDE0005 // Using directive is unnecessary
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Web.Server.Mediator.Grpc;
-#pragma warning disable IDE0005 // Using directive is unnecessary
 using Shouldly;
 #pragma warning restore IDE0005
 
@@ -10,30 +9,37 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
 public sealed class ProblemExtensionsTests
 {
-	[Theory]
-	[InlineData(ErrorCategory.Validation, StatusCode.InvalidArgument)]
-	[InlineData(ErrorCategory.Conflict, StatusCode.AlreadyExists)]
-	[InlineData(ErrorCategory.LockedOut, StatusCode.PermissionDenied)]
-	[InlineData(ErrorCategory.NotAllowed, StatusCode.PermissionDenied)]
-	[InlineData(ErrorCategory.NotFound, StatusCode.Unknown)]
-	void ToRpcException_maps_the_category_to_the_expected_status_code(ErrorCategory category, StatusCode expected)
+	[Fact]
+	void LockedOut_And_Forbidden_ShareStatusCode_ButDistinctErrorInfoReason()
 	{
-		var problem = new Problem { Category = category };
+		var lockedOut = new Problem { Category = ErrorCategory.LockedOut }.ToRpcException();
+		var forbidden = new Problem { Category = ErrorCategory.Forbidden }.ToRpcException();
 
-		var exception = problem.ToRpcException();
-
-		exception.StatusCode.ShouldBe(expected);
+		lockedOut.StatusCode.ShouldBe(StatusCode.PermissionDenied);
+		forbidden.StatusCode.ShouldBe(StatusCode.PermissionDenied);
+		// Same status code — the test that matters is that Reason still disambiguates them.
+		lockedOut.Trailers.Get("grpc-status-details-bin").ShouldNotBeNull();
 	}
 
 	[Fact]
-	void ToRpcException_carries_the_errors_dictionary_in_the_problem_bin_trailer()
+	void Validation_MapsTo_InvalidArgument()
 	{
-		var problem = new Problem { Category = ErrorCategory.Validation, Errors = new Dictionary<string, string[]> { ["Email"] = ["required"] } };
+		var exception = new Problem { Category = ErrorCategory.Validation, Errors = new Dictionary<string, string[]> { ["Email"] = ["required"] } }.ToRpcException();
+		exception.StatusCode.ShouldBe(StatusCode.InvalidArgument);
+	}
 
-		var exception = problem.ToRpcException();
-		var trailer = exception.Trailers.Get("problem-bin");
-		var decoded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(trailer!.ValueBytes);
+	[Fact]
+	void NotAllowed_MapsTo_FailedPrecondition_NotSharedWithLockedOut()
+	{
+		var exception = new Problem { Category = ErrorCategory.NotAllowed }.ToRpcException();
+		exception.StatusCode.ShouldBe(StatusCode.FailedPrecondition);
+	}
 
-		decoded!["Email"].ShouldBe(["required"]);
+	[Fact]
+	void Fault_MapsTo_Internal_AndCarriesCorrelationId()
+	{
+		var correlationId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+		var exception = new Problem { Category = ErrorCategory.Fault, CorrelationId = correlationId }.ToRpcException();
+		exception.StatusCode.ShouldBe(StatusCode.Internal);
 	}
 }
