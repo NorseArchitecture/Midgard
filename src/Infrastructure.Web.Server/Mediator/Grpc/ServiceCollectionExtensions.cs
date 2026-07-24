@@ -1,0 +1,20 @@
+#pragma warning disable IDE0005 // Using directive is unnecessary
+using Microsoft.Extensions.DependencyInjection;
+using ProtoBuf.Grpc.Server;
+#pragma warning restore IDE0005
+
+namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+/// <summary>
+/// Generic gRPC hosting wiring, called once by the composition root (Yggdrasil), never by a
+/// realm-specific service registration — no service, including Heimdall's, knows this call happens.
+/// </summary>
+public static class ServiceCollectionExtensions
+{
+	/// <summary>Wires protobuf-net.Grpc's code-first hosting with the platform's <see cref="UnhandledExceptionInterceptor"/>.</summary>
+	public static IServiceCollection AddNorseCodeFirstGrpc(this IServiceCollection services)
+	{
+		services.AddCodeFirstGrpc(options => options.Interceptors.Add<UnhandledExceptionInterceptor>());
+		return services;
+	}
+}
