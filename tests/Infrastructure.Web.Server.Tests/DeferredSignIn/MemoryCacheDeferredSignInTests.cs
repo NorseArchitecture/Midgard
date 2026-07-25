@@ -56,4 +56,12 @@ public sealed class MemoryCacheDeferredSignInTests
 
 		secondAction.ShouldBeNull();
 	}
+
+	[Fact]
+	void BuildCompletionUrl_CombinesTheDefaultPattern_WithEscapedKeyAndReturnUrl()
+	{
+		var url = _sut.BuildCompletionUrl("abc 123", "/dashboard?tab=1&x=y");
+
+		url.ShouldBe("/_auth/complete?key=abc%20123&returnUrl=%2Fdashboard%3Ftab%3D1%26x%3Dy");
+	}
 }

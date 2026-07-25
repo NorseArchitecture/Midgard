@@ -36,4 +36,7 @@ sealed class MemoryCacheDeferredSignIn(IMemoryCache cache) : IDeferredSignIn
 		action = found;
 		return true;
 	}
+
+	public string BuildCompletionUrl(string key, string returnUrl) =>
+		$"{DeferredSignInEndpointRouteBuilderExtensions.DefaultPattern}?key={Uri.EscapeDataString(key)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
 }

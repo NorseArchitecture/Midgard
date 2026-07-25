@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
 		<ProjectReference Include="../../src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
+		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
+		<NorseRef Include="Abstractions.Contracts">
+			<Repo>Asgard</Repo>
+		</NorseRef>
 	</ItemGroup>
 </Project>
