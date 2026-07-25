@@ -8,6 +8,10 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// Runs the request's <see cref="IValidator{T}"/> (resolved by the generator via the
 /// <c>{RequestName}Validator</c> naming convention, registered as <c>IValidator&lt;TRequest&gt;</c> in
 /// DI) and collapses failures into field-grouped <see cref="ErrorCategory.Validation"/>.
+///
+/// Stays <c>internal</c> (2026-07-25): see <see cref="TelemetryBehavior{TRequest,TResponse}"/>'s
+/// remark — visible to InProcessHost-mode consumers via this project's <c>InternalsVisibleTo</c>
+/// grant, not by widening to <c>public</c>.
 /// </summary>
 sealed class ValidationBehavior<TRequest, TResponse>(IValidator<TRequest> validator) : IBehavior<TRequest, TResponse>
 	where TResponse : notnull

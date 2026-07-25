@@ -12,6 +12,12 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// <see cref="ExceptionTranslationBehavior{TRequest,TResponse}"/> specifically so it reads the
 /// finished outcome problem details directly off the return value rather than watching an exception
 /// fly past unlabeled. Trusted not to throw — it is not itself further wrapped.
+///
+/// Stays <c>internal</c> (2026-07-25): Asgard's gateway generator constructs this type directly
+/// inside its InProcessHost-mode output, which compiles into the consuming composition root's own
+/// assembly (e.g. Yggdrasil's <c>Hosting.Web.Server</c>) — visible there only via this project's
+/// <c>InternalsVisibleTo</c> grant, not by widening to <c>public</c>. A future composition root
+/// needs its own grant added here.
 /// </summary>
 sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TRequest, TResponse>> logger)
 	: IBehavior<TRequest, TResponse>

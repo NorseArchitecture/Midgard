@@ -13,6 +13,10 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// (valid only for the initial synchronous render, null/stale after SignalR reconnection), exactly the
 /// path this feature exists to make safe. Not authenticated at all → <see cref="ErrorCategory.Unauthorized"/>;
 /// authenticated but the policy fails → <see cref="ErrorCategory.Forbidden"/>.
+///
+/// Stays <c>internal</c> (2026-07-25): see <see cref="TelemetryBehavior{TRequest,TResponse}"/>'s
+/// remark — visible to InProcessHost-mode consumers via this project's <c>InternalsVisibleTo</c>
+/// grant, not by widening to <c>public</c>.
 /// </summary>
 sealed class AuthorizationBehavior<TRequest, TResponse>(
 	string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor)
