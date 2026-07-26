@@ -20,49 +20,52 @@ public static class ProblemExtensions
 {
 	const string ErrorInfoDomain = "norse.io";
 
-	/// <summary>Converts a <see cref="Problem"/> to an <see cref="RpcException"/> carrying a <c>grpc-status-details-bin</c> trailer.</summary>
-	public static RpcException ToRpcException(this Problem problem)
+	extension(Problem problem)
 	{
-		var statusCode = problem.Category switch
+		/// <summary>Converts a <see cref="Problem"/> to an <see cref="RpcException"/> carrying a <c>grpc-status-details-bin</c> trailer.</summary>
+		public RpcException ToRpcException()
 		{
-			ErrorCategory.Validation => StatusCode.InvalidArgument,
-			ErrorCategory.NotFound => StatusCode.NotFound,
-			ErrorCategory.Conflict => StatusCode.AlreadyExists,
-			ErrorCategory.Unauthorized => StatusCode.Unauthenticated,
-			ErrorCategory.Forbidden or ErrorCategory.LockedOut => StatusCode.PermissionDenied,
-			ErrorCategory.NotAllowed => StatusCode.FailedPrecondition,
-			ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
-			ErrorCategory.Fault => StatusCode.Internal,
-			_ => StatusCode.Unknown
-		};
-
-		Status richStatus = new()
-		{
-			Code = (int)MapToGoogleRpcCode(statusCode),
-			Message = problem.Category.ToString()
-		};
-		richStatus.Details.Add(Any.Pack(new ErrorInfo
-		{
-			Reason = problem.Category.ToString(),
-			Domain = ErrorInfoDomain
-		}));
-		if (problem.Errors.Count > 0)
-		{
-			BadRequest badRequest = new();
-			foreach (var (field, messages) in problem.Errors)
+			var statusCode = problem.Category switch
 			{
-				foreach (var message in messages)
-					badRequest.FieldViolations.Add(new BadRequest.Types.FieldViolation { Field = field, Description = message });
-			}
-			richStatus.Details.Add(Any.Pack(badRequest));
-		}
-		if (problem.CorrelationId is { } correlationId)
-		{
-			richStatus.Details.Add(Any.Pack(new DebugInfo { Detail = correlationId.ToString() }));
-		}
+				ErrorCategory.Validation => StatusCode.InvalidArgument,
+				ErrorCategory.NotFound => StatusCode.NotFound,
+				ErrorCategory.Conflict => StatusCode.AlreadyExists,
+				ErrorCategory.Unauthorized => StatusCode.Unauthenticated,
+				ErrorCategory.Forbidden or ErrorCategory.LockedOut => StatusCode.PermissionDenied,
+				ErrorCategory.NotAllowed => StatusCode.FailedPrecondition,
+				ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
+				ErrorCategory.Fault => StatusCode.Internal,
+				_ => StatusCode.Unknown
+			};
 
-		Metadata trailers = new() { { "grpc-status-details-bin", richStatus.ToByteString().ToByteArray() } };
-		return new(new(statusCode, problem.Category.ToString()), trailers);
+			Status richStatus = new()
+			{
+				Code = (int)MapToGoogleRpcCode(statusCode),
+				Message = problem.Category.ToString()
+			};
+			richStatus.Details.Add(Any.Pack(new ErrorInfo
+			{
+				Reason = problem.Category.ToString(),
+				Domain = ErrorInfoDomain
+			}));
+			if (problem.Errors.Count > 0)
+			{
+				BadRequest badRequest = new();
+				foreach (var (field, messages) in problem.Errors)
+				{
+					foreach (var message in messages)
+						badRequest.FieldViolations.Add(new BadRequest.Types.FieldViolation { Field = field, Description = message });
+				}
+				richStatus.Details.Add(Any.Pack(badRequest));
+			}
+			if (problem.CorrelationId is { } correlationId)
+			{
+				richStatus.Details.Add(Any.Pack(new DebugInfo { Detail = correlationId.ToString() }));
+			}
+
+			Metadata trailers = new() { { "grpc-status-details-bin", richStatus.ToByteString().ToByteArray() } };
+			return new(new(statusCode, problem.Category.ToString()), trailers);
+		}
 	}
 
 	static Code MapToGoogleRpcCode(StatusCode statusCode) => statusCode switch

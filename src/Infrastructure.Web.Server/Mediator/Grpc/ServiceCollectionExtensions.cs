@@ -8,10 +8,13 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-	/// <summary>Wires protobuf-net.Grpc's code-first hosting with the platform's <see cref="UnhandledExceptionInterceptor"/>.</summary>
-	public static IServiceCollection AddNorseCodeFirstGrpc(this IServiceCollection services)
+	extension(IServiceCollection services)
 	{
-		services.AddCodeFirstGrpc(options => options.Interceptors.Add<UnhandledExceptionInterceptor>());
-		return services;
+		/// <summary>Wires protobuf-net.Grpc's code-first hosting with the platform's <see cref="UnhandledExceptionInterceptor"/>.</summary>
+		public IServiceCollection AddNorseCodeFirstGrpc()
+		{
+			services.AddCodeFirstGrpc(options => options.Interceptors.Add<UnhandledExceptionInterceptor>());
+			return services;
+		}
 	}
 }
