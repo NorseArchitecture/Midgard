@@ -13,7 +13,8 @@ sealed partial class SeedRunnerService(
 		lifetime.StopApplication();
 	}
 
-	public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	public Task StopAsync(CancellationToken cancellationToken) =>
+		Task.CompletedTask;
 
 	async Task RunAsync(ISeedContributor contributor, CancellationToken ct)
 	{

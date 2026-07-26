@@ -3,7 +3,6 @@ using Google.Protobuf.WellKnownTypes;
 using Google.Rpc;
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
-using GrpcStatus = Grpc.Core.Status;
 using Status = Google.Rpc.Status;
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
@@ -63,7 +62,7 @@ static class ProblemExtensions
 		}
 
 		Metadata trailers = new() { { "grpc-status-details-bin", richStatus.ToByteString().ToByteArray() } };
-		return new RpcException(new GrpcStatus(statusCode, problem.Category.ToString()), trailers);
+		return new(new(statusCode, problem.Category.ToString()), trailers);
 	}
 
 	static Code MapToGoogleRpcCode(StatusCode statusCode) => statusCode switch

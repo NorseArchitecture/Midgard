@@ -16,7 +16,7 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 sealed class ValidationBehavior<TRequest, TResponse>(IValidator<TRequest> validator) : IBehavior<TRequest, TResponse>
 	where TResponse : notnull
 {
-	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate<TResponse> next)
+	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, BehaviorDelegate<TResponse> next, CancellationToken cancellationToken = default)
 	{
 		var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
 

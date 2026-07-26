@@ -1,6 +1,7 @@
 using Google.Rpc;
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
+using Status = Google.Rpc.Status;
 
 namespace Norse.Infrastructure.Web.Client.Grpc;
 
@@ -19,9 +20,9 @@ public static class RpcExceptionExtensions
 		if (trailer is null)
 			return new Problem { Category = ErrorCategory.Fault };
 
-		var richStatus = Google.Rpc.Status.Parser.ParseFrom(trailer.ValueBytes);
+		var richStatus = Status.Parser.ParseFrom(trailer.ValueBytes);
 		var category = ErrorCategory.Fault;
-		var errors = new Dictionary<string, string[]>();
+		Dictionary<string, string[]> errors = [];
 		Guid? correlationId = null;
 
 		foreach (var detail in richStatus.Details)
@@ -42,6 +43,6 @@ public static class RpcExceptionExtensions
 			}
 		}
 
-		return new Problem { Category = category, Errors = errors, CorrelationId = correlationId };
+		return new() { Category = category, Errors = errors, CorrelationId = correlationId };
 	}
 }
