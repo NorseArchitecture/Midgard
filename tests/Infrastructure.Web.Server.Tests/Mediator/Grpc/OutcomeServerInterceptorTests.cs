@@ -24,7 +24,7 @@ public sealed class OutcomeServerInterceptorTests
 	[Fact]
 	async Task Failed_BecomesRpcException_WithCategoryFidelity()
 	{
-		var interceptor = new OutcomeServerInterceptor();
+		OutcomeServerInterceptor interceptor = new();
 		var outcome = Outcome<BoolResponse>.Err(ErrorCategory.LockedOut);
 
 		var exception = await Should.ThrowAsync<RpcException>(async () =>
@@ -40,7 +40,7 @@ public sealed class OutcomeServerInterceptorTests
 	[Fact]
 	async Task Success_PassesThroughUnchanged()
 	{
-		var interceptor = new OutcomeServerInterceptor();
+		OutcomeServerInterceptor interceptor = new();
 		var outcome = Outcome<BoolResponse>.Ok(new BoolResponse { Value = true });
 
 		var response = await interceptor.UnaryServerHandler<string, Outcome<BoolResponse>>(
@@ -54,8 +54,8 @@ public sealed class OutcomeServerInterceptorTests
 	[Fact]
 	async Task NonOutcomeResponse_PassesThroughUnchanged()
 	{
-		var interceptor = new OutcomeServerInterceptor();
-		var response = new BoolResponse { Value = true };
+		OutcomeServerInterceptor interceptor = new();
+		BoolResponse response = new() { Value = true };
 
 		var result = await interceptor.UnaryServerHandler<string, BoolResponse>(
 			"request",
