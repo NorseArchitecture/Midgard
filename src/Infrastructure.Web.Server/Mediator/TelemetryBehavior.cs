@@ -17,7 +17,7 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// <c>InternalsVisibleTo</c> grant, not by widening to <c>public</c>. A future composition root
 /// needs its own grant added here.
 /// </summary>
-sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TRequest, TResponse>> logger) :
+sealed partial class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TRequest, TResponse>> logger) :
 	IBehavior<TRequest, TResponse>
 	where TResponse : notnull
 {
@@ -30,30 +30,25 @@ sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TR
 		switch (outcome)
 		{
 			case Success<TResponse>:
-#pragma warning disable CA1848 // Use LoggerMessage delegates
-#pragma warning disable CA1873 // Avoid unnecessary logging
-				logger.LogInformation("{RequestType} succeeded in {ElapsedMs}ms", typeof(TRequest).Name, stopwatch.ElapsedMilliseconds);
-#pragma warning restore CA1873
-#pragma warning restore CA1848
+				LogSucceeded(logger, typeof(TRequest).Name, stopwatch.ElapsedMilliseconds);
 				break;
 			case Failed({ Category: ErrorCategory.Fault } problem):
-#pragma warning disable CA1848 // Use LoggerMessage delegates
-#pragma warning disable CA1873 // Avoid unnecessary logging
-				logger.LogWarning("{RequestType} faulted in {ElapsedMs}ms, correlation id {CorrelationId}",
-					typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.CorrelationId);
-#pragma warning restore CA1873
-#pragma warning restore CA1848
+				LogFaulted(logger, typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.CorrelationId);
 				break;
 			case Failed(var problem):
-#pragma warning disable CA1848 // Use LoggerMessage delegates
-#pragma warning disable CA1873 // Avoid unnecessary logging
-				logger.LogInformation("{RequestType} failed in {ElapsedMs}ms with {Category}",
-					typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.Category);
-#pragma warning restore CA1873
-#pragma warning restore CA1848
+				LogFailed(logger, typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.Category);
 				break;
 		}
 
 		return outcome;
 	}
+
+	[LoggerMessage(Level = LogLevel.Information, Message = "{RequestType} succeeded in {ElapsedMs}ms")]
+	static partial void LogSucceeded(ILogger logger, string requestType, long elapsedMs);
+
+	[LoggerMessage(Level = LogLevel.Warning, Message = "{RequestType} faulted in {ElapsedMs}ms, correlation id {CorrelationId}")]
+	static partial void LogFaulted(ILogger logger, string requestType, long elapsedMs, Guid? correlationId);
+
+	[LoggerMessage(Level = LogLevel.Information, Message = "{RequestType} failed in {ElapsedMs}ms with {Category}")]
+	static partial void LogFailed(ILogger logger, string requestType, long elapsedMs, ErrorCategory category);
 }

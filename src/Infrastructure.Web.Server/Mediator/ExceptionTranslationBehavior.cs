@@ -13,7 +13,7 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// remark — visible to InProcessHost-mode consumers via this project's <c>InternalsVisibleTo</c>
 /// grant, not by widening to <c>public</c>.
 /// </summary>
-sealed class ExceptionTranslationBehavior<TRequest, TResponse>(ILogger<ExceptionTranslationBehavior<TRequest, TResponse>> logger) :
+sealed partial class ExceptionTranslationBehavior<TRequest, TResponse>(ILogger<ExceptionTranslationBehavior<TRequest, TResponse>> logger) :
 	IBehavior<TRequest, TResponse>
 	where TResponse : notnull
 {
@@ -30,10 +30,11 @@ sealed class ExceptionTranslationBehavior<TRequest, TResponse>(ILogger<Exception
 		catch (Exception ex)
 		{
 			var correlationId = Guid.NewGuid();
-#pragma warning disable CA1848 // Use LoggerMessage delegates
-			logger.LogError(ex, "Unhandled exception, correlation id {CorrelationId}", correlationId);
-#pragma warning restore CA1848
+			LogUnhandledException(logger, ex, correlationId);
 			return Outcome<TResponse>.Err(ErrorCategory.Fault, correlationId: correlationId);
 		}
 	}
+
+	[LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception, correlation id {CorrelationId}")]
+	static partial void LogUnhandledException(ILogger logger, Exception ex, Guid correlationId);
 }

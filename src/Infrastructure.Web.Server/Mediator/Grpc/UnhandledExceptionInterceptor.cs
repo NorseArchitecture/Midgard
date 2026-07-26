@@ -11,7 +11,7 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 /// directly (Task 12). This interceptor's only job is catching whatever a service implementation
 /// let escape uncaught and converting it to <see cref="ErrorCategory.Fault"/>.
 /// </summary>
-sealed class UnhandledExceptionInterceptor(ILogger<UnhandledExceptionInterceptor> logger) : Interceptor
+sealed partial class UnhandledExceptionInterceptor(ILogger<UnhandledExceptionInterceptor> logger) : Interceptor
 {
 	public override async Task<TResponse> UnaryServerHandler<TRequest, TResponse>(
 		TRequest request, ServerCallContext context, UnaryServerMethod<TRequest, TResponse> continuation)
@@ -31,10 +31,11 @@ sealed class UnhandledExceptionInterceptor(ILogger<UnhandledExceptionInterceptor
 		catch (Exception ex)
 		{
 			var correlationId = Guid.NewGuid();
-#pragma warning disable CA1848 // Use LoggerMessage delegates
-			logger.LogError(ex, "Unhandled exception in {Method}, correlation id {CorrelationId}", context.Method, correlationId);
-#pragma warning restore CA1848
+			LogUnhandledException(logger, ex, context.Method, correlationId);
 			throw new Problem { Category = ErrorCategory.Fault, CorrelationId = correlationId }.ToRpcException();
 		}
 	}
+
+	[LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception in {Method}, correlation id {CorrelationId}")]
+	static partial void LogUnhandledException(ILogger logger, Exception ex, string method, Guid correlationId);
 }
