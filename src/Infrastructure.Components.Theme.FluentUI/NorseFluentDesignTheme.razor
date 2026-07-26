@@ -4,7 +4,8 @@
 
 @code {
 	// IThemeService is JS-interop-backed; it isn't callable until the circuit has rendered once.
-	protected override async Task OnAfterRenderAsync(bool firstRender)
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
 		if (firstRender)
 		{

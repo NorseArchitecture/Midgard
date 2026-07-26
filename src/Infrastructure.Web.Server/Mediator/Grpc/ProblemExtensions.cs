@@ -4,6 +4,7 @@ using Google.Rpc;
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
 using GrpcStatus = Grpc.Core.Status;
+using Status = Google.Rpc.Status;
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 
@@ -16,12 +17,12 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 /// <c>Reason</c> is the exact <see cref="ErrorCategory"/> member name — the only field
 /// the client-side <c>RpcExceptionExtensions.DecodeProblem</c> method trusts (spec §2.1).
 /// </summary>
-public static class ProblemExtensions
+static class ProblemExtensions
 {
 	const string ErrorInfoDomain = "norse.io";
 
 	/// <summary>Converts a <see cref="Problem"/> to an <see cref="RpcException"/> carrying a <c>grpc-status-details-bin</c> trailer.</summary>
-	public static RpcException ToRpcException(this Problem problem)
+	internal static RpcException ToRpcException(this Problem problem)
 	{
 		var statusCode = problem.Category switch
 		{
@@ -29,27 +30,26 @@ public static class ProblemExtensions
 			ErrorCategory.NotFound => StatusCode.NotFound,
 			ErrorCategory.Conflict => StatusCode.AlreadyExists,
 			ErrorCategory.Unauthorized => StatusCode.Unauthenticated,
-			ErrorCategory.Forbidden => StatusCode.PermissionDenied,
-			ErrorCategory.LockedOut => StatusCode.PermissionDenied,
+			ErrorCategory.Forbidden or ErrorCategory.LockedOut => StatusCode.PermissionDenied,
 			ErrorCategory.NotAllowed => StatusCode.FailedPrecondition,
 			ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
 			ErrorCategory.Fault => StatusCode.Internal,
-			_ => StatusCode.Unknown,
+			_ => StatusCode.Unknown
 		};
 
-		var richStatus = new Google.Rpc.Status
+		Status richStatus = new()
 		{
 			Code = (int)MapToGoogleRpcCode(statusCode),
-			Message = problem.Category.ToString(),
+			Message = problem.Category.ToString()
 		};
 		richStatus.Details.Add(Any.Pack(new ErrorInfo
 		{
 			Reason = problem.Category.ToString(),
-			Domain = ErrorInfoDomain,
+			Domain = ErrorInfoDomain
 		}));
 		if (problem.Errors.Count > 0)
 		{
-			var badRequest = new BadRequest();
+			BadRequest badRequest = new();
 			foreach (var (field, messages) in problem.Errors)
 			{
 				foreach (var message in messages)
@@ -62,7 +62,7 @@ public static class ProblemExtensions
 			richStatus.Details.Add(Any.Pack(new DebugInfo { Detail = correlationId.ToString() }));
 		}
 
-		var trailers = new Metadata { { "grpc-status-details-bin", richStatus.ToByteString().ToByteArray() } };
+		Metadata trailers = new() { { "grpc-status-details-bin", richStatus.ToByteString().ToByteArray() } };
 		return new RpcException(new GrpcStatus(statusCode, problem.Category.ToString()), trailers);
 	}
 
@@ -75,6 +75,6 @@ public static class ProblemExtensions
 		StatusCode.PermissionDenied => Code.PermissionDenied,
 		StatusCode.FailedPrecondition => Code.FailedPrecondition,
 		StatusCode.Internal => Code.Internal,
-		_ => Code.Unknown,
+		_ => Code.Unknown
 	};
 }

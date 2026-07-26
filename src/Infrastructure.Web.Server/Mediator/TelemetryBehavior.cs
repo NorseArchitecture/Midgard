@@ -1,7 +1,4 @@
 using System.Diagnostics;
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Microsoft.Extensions.Logging;
-#pragma warning restore IDE0005
 using Norse.Abstractions.Contracts;
 using Norse.Abstractions.Web.Server.Mediator;
 
@@ -31,7 +28,7 @@ sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TR
 
 		switch (outcome)
 		{
-			case Norse.Primitives.Success<TResponse>:
+			case Primitives.Success<TResponse>:
 #pragma warning disable CA1848 // Use LoggerMessage delegates
 #pragma warning disable CA1873 // Avoid unnecessary logging
 				logger.LogInformation("{RequestType} succeeded in {ElapsedMs}ms", typeof(TRequest).Name, stopwatch.ElapsedMilliseconds);

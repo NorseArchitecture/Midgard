@@ -1,15 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Norse.Abstractions.Contracts;
-#pragma warning disable IDE0005 // Using directive is unnecessary
 using Norse.Infrastructure.Web.Server.Mediator;
-#pragma warning restore IDE0005
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using NSubstitute;
-#pragma warning restore IDE0005
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Shouldly;
-#pragma warning restore IDE0005
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
@@ -56,7 +48,7 @@ public sealed class AuthorizationBehaviorTests
 
 		var outcome = await behavior.Handle("request", CancellationToken.None, () => ValueTask.FromResult(Outcome<bool>.Ok(true)));
 
-		outcome.TryGetValue(out Norse.Primitives.Success<bool> success).ShouldBeTrue();
+		outcome.TryGetValue(out Primitives.Success<bool> success).ShouldBeTrue();
 		success.Value.ShouldBeTrue();
 	}
 }

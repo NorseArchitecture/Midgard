@@ -1,8 +1,5 @@
-#pragma warning disable IDE0005 // Using directive is unnecessary
 using Grpc.Core;
 using Grpc.Core.Interceptors;
-using Microsoft.Extensions.Logging;
-#pragma warning restore IDE0005
 using Norse.Abstractions.Contracts;
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;

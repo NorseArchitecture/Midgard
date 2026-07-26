@@ -1,15 +1,7 @@
 using FluentValidation;
 using FluentValidation.Results;
 using Norse.Abstractions.Contracts;
-#pragma warning disable IDE0005 // Using directive is unnecessary
 using Norse.Infrastructure.Web.Server.Mediator;
-#pragma warning restore IDE0005
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using NSubstitute;
-#pragma warning restore IDE0005
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Shouldly;
-#pragma warning restore IDE0005
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
@@ -45,6 +37,6 @@ public sealed class ValidationBehaviorTests
 
 		var outcome = await behavior.Handle("request", CancellationToken.None, () => ValueTask.FromResult(Outcome<bool>.Ok(true)));
 
-		outcome.TryGetValue(out Norse.Primitives.Success<bool> _).ShouldBeTrue();
+		outcome.TryGetValue(out Primitives.Success<bool> _).ShouldBeTrue();
 	}
 }

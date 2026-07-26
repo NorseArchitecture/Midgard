@@ -1,12 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Norse.Abstractions.Contracts;
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Norse.Abstractions.Web.Server.Mediator;
-#pragma warning restore IDE0005
 using Norse.Infrastructure.Web.Server.Mediator;
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Shouldly;
-#pragma warning restore IDE0005
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
@@ -41,7 +35,7 @@ public sealed class TelemetryBehaviorTests
 			() => translation.Handle("request", CancellationToken.None,
 				() => ValueTask.FromResult(Outcome<bool>.Ok(true))));
 
-		outcome.TryGetValue(out Norse.Primitives.Success<bool> success).ShouldBeTrue();
+		outcome.TryGetValue(out Primitives.Success<bool> success).ShouldBeTrue();
 		success.Value.ShouldBeTrue();
 	}
 

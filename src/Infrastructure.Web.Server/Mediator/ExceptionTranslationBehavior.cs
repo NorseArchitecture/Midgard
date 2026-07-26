@@ -1,6 +1,3 @@
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Microsoft.Extensions.Logging;
-#pragma warning restore IDE0005
 using Norse.Abstractions.Contracts;
 using Norse.Abstractions.Web.Server.Mediator;
 
