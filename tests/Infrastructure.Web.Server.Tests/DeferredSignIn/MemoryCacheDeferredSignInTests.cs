@@ -12,8 +12,8 @@ public sealed class MemoryCacheDeferredSignInTests
 	[Fact]
 	void StashSignIn_then_TryConsume_returns_the_stashed_sign_in()
 	{
-		var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "buvy")]));
-		var properties = new AuthenticationProperties { IsPersistent = true };
+		ClaimsPrincipal principal = new(new ClaimsIdentity([new Claim(ClaimTypes.Name, "buvy")]));
+		AuthenticationProperties properties = new() { IsPersistent = true };
 
 		var key = _sut.StashSignIn("Identity.Application", principal, properties);
 		var found = _sut.TryConsume(key, out var action);

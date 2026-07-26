@@ -19,11 +19,11 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// grant, not by widening to <c>public</c>.
 /// </summary>
 sealed class AuthorizationBehavior<TRequest, TResponse>(
-	string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor)
-	: IBehavior<TRequest, TResponse>
+	string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor) :
+	IBehavior<TRequest, TResponse>
 	where TResponse : notnull
 {
-	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate<TResponse> next)
+	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, BehaviorDelegate<TResponse> next, CancellationToken cancellationToken = default)
 	{
 		var user = await principalAccessor().ConfigureAwait(false);
 		var result = await authorizationService.AuthorizeAsync(user, policyName).ConfigureAwait(false);

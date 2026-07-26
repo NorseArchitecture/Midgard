@@ -6,12 +6,11 @@ sealed partial class MigrationRunnerService(
 	IEnumerable<IMigrationContributor> contributors,
 	ILogger<MigrationRunnerService> logger) : IHostedService
 {
-	public async Task StartAsync(CancellationToken cancellationToken)
-	{
-		await Task.WhenAll(contributors.Select(c => RunAsync(c, cancellationToken))).ConfigureAwait(false);
-	}
+	public Task StartAsync(CancellationToken cancellationToken) =>
+		Task.WhenAll(contributors.Select(c => RunAsync(c, cancellationToken)));
 
-	public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	public Task StopAsync(CancellationToken cancellationToken) =>
+		Task.CompletedTask;
 
 	async Task RunAsync(IMigrationContributor contributor, CancellationToken ct)
 	{

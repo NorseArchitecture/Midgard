@@ -1,6 +1,3 @@
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Microsoft.Extensions.Logging;
-#pragma warning restore IDE0005
 using Norse.Abstractions.Contracts;
 using Norse.Abstractions.Web.Server.Mediator;
 
@@ -16,11 +13,11 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// remark — visible to InProcessHost-mode consumers via this project's <c>InternalsVisibleTo</c>
 /// grant, not by widening to <c>public</c>.
 /// </summary>
-sealed class ExceptionTranslationBehavior<TRequest, TResponse>(ILogger<ExceptionTranslationBehavior<TRequest, TResponse>> logger)
-	: IBehavior<TRequest, TResponse>
+sealed class ExceptionTranslationBehavior<TRequest, TResponse>(ILogger<ExceptionTranslationBehavior<TRequest, TResponse>> logger) :
+	IBehavior<TRequest, TResponse>
 	where TResponse : notnull
 {
-	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate<TResponse> next)
+	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, BehaviorDelegate<TResponse> next, CancellationToken cancellationToken = default)
 	{
 		try
 		{

@@ -1,9 +1,7 @@
 using System.Diagnostics;
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Microsoft.Extensions.Logging;
-#pragma warning restore IDE0005
 using Norse.Abstractions.Contracts;
 using Norse.Abstractions.Web.Server.Mediator;
+using Norse.Primitives;
 
 namespace Norse.Infrastructure.Web.Server.Mediator;
 
@@ -19,11 +17,11 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// <c>InternalsVisibleTo</c> grant, not by widening to <c>public</c>. A future composition root
 /// needs its own grant added here.
 /// </summary>
-sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TRequest, TResponse>> logger)
-	: IBehavior<TRequest, TResponse>
+sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TRequest, TResponse>> logger) :
+	IBehavior<TRequest, TResponse>
 	where TResponse : notnull
 {
-	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate<TResponse> next)
+	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, BehaviorDelegate<TResponse> next, CancellationToken cancellationToken = default)
 	{
 		var stopwatch = Stopwatch.StartNew();
 		var outcome = await next().ConfigureAwait(false);
@@ -31,14 +29,14 @@ sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TR
 
 		switch (outcome)
 		{
-			case Norse.Primitives.Success<TResponse>:
+			case Success<TResponse>:
 #pragma warning disable CA1848 // Use LoggerMessage delegates
 #pragma warning disable CA1873 // Avoid unnecessary logging
 				logger.LogInformation("{RequestType} succeeded in {ElapsedMs}ms", typeof(TRequest).Name, stopwatch.ElapsedMilliseconds);
 #pragma warning restore CA1873
 #pragma warning restore CA1848
 				break;
-			case Failed(var problem) when problem.Category == ErrorCategory.Fault:
+			case Failed({ Category: ErrorCategory.Fault } problem):
 #pragma warning disable CA1848 // Use LoggerMessage delegates
 #pragma warning disable CA1873 // Avoid unnecessary logging
 				logger.LogWarning("{RequestType} faulted in {ElapsedMs}ms, correlation id {CorrelationId}",

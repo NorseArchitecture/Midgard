@@ -5,30 +5,32 @@ namespace Norse.Infrastructure.Migrations;
 /// </summary>
 public static class HostApplicationBuilderExtensions
 {
-	/// <summary>
-	/// Registers <see cref="MigrationRunnerService"/> as a hosted service that runs all
-	/// <see cref="Norse.Abstractions.Migrations.IMigrationContributor"/> implementations on startup.
-	/// </summary>
 	/// <param name="builder">The host application builder.</param>
-	/// <returns>The same <paramref name="builder"/> for chaining.</returns>
-	public static IHostApplicationBuilder AddNorseMigrationsRunner(this IHostApplicationBuilder builder)
+	extension(IHostApplicationBuilder builder)
 	{
-		builder.Services.AddHostedService<MigrationRunnerService>();
-		return builder;
-	}
+		/// <summary>
+		/// Registers <see cref="MigrationRunnerService"/> as a hosted service that runs all
+		/// <see cref="Norse.Abstractions.Migrations.IMigrationContributor"/> implementations on startup.
+		/// </summary>
+		/// <returns>The same <paramref name="builder"/> for chaining.</returns>
+		public IHostApplicationBuilder AddNorseMigrationsRunner()
+		{
+			builder.Services.AddHostedService<MigrationRunnerService>();
+			return builder;
+		}
 
-	/// <summary>
-	/// Registers <see cref="SeedRunnerService"/> as a hosted service that runs all
-	/// <see cref="Norse.Abstractions.Migrations.Seeding.ISeedContributor"/> implementations after
-	/// migrations complete, and stops the application on completion. Always the last phase — register
-	/// this after <see cref="AddNorseMigrationsRunner"/> so seeding cannot begin before every migration
-	/// contributor has finished.
-	/// </summary>
-	/// <param name="builder">The host application builder.</param>
-	/// <returns>The same <paramref name="builder"/> for chaining.</returns>
-	public static IHostApplicationBuilder AddNorseSeedingRunner(this IHostApplicationBuilder builder)
-	{
-		builder.Services.AddHostedService<SeedRunnerService>();
-		return builder;
+		/// <summary>
+		/// Registers <see cref="SeedRunnerService"/> as a hosted service that runs all
+		/// <see cref="Norse.Abstractions.Migrations.Seeding.ISeedContributor"/> implementations after
+		/// migrations complete, and stops the application on completion. Always the last phase — register
+		/// this after <see cref="AddNorseMigrationsRunner"/> so seeding cannot begin before every migration
+		/// contributor has finished.
+		/// </summary>
+		/// <returns>The same <paramref name="builder"/> for chaining.</returns>
+		public IHostApplicationBuilder AddNorseSeedingRunner()
+		{
+			builder.Services.AddHostedService<SeedRunnerService>();
+			return builder;
+		}
 	}
 }

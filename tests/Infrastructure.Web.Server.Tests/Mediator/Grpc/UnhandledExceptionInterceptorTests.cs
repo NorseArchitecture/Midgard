@@ -1,10 +1,7 @@
-#pragma warning disable IDE0005 // Using directive is unnecessary
 using Grpc.Core;
 using Grpc.Core.Testing;
 using Microsoft.Extensions.Logging;
 using Norse.Infrastructure.Web.Server.Mediator.Grpc;
-using Shouldly;
-#pragma warning restore IDE0005
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
@@ -41,8 +38,8 @@ public sealed class UnhandledExceptionInterceptorTests
 	[Fact]
 	async Task UnhandledException_BecomesInternalRpcException_WithErrorInfoFault()
 	{
-		var logger = new TestLogger();
-		var interceptor = new UnhandledExceptionInterceptor(logger);
+		TestLogger logger = new();
+		UnhandledExceptionInterceptor interceptor = new(logger);
 
 		var exception = await Should.ThrowAsync<RpcException>(async () =>
 			await interceptor.UnaryServerHandler<string, object>(
@@ -57,9 +54,9 @@ public sealed class UnhandledExceptionInterceptorTests
 	[Fact]
 	async Task AlreadyWellFormedRpcException_PassesThroughUnchanged()
 	{
-		var logger = new TestLogger();
-		var interceptor = new UnhandledExceptionInterceptor(logger);
-		var original = new RpcException(new Status(StatusCode.NotFound, "not found"));
+		TestLogger logger = new();
+		UnhandledExceptionInterceptor interceptor = new(logger);
+		RpcException original = new(new(StatusCode.NotFound, "not found"));
 
 		var exception = await Should.ThrowAsync<RpcException>(async () =>
 			await interceptor.UnaryServerHandler<string, object>(
@@ -73,12 +70,10 @@ public sealed class UnhandledExceptionInterceptorTests
 	[Fact]
 	async Task OperationCanceledOnCallerCancelledToken_PassesThroughUnchanged()
 	{
-		var logger = new TestLogger();
-		var interceptor = new UnhandledExceptionInterceptor(logger);
-		using var cts = new CancellationTokenSource();
-#pragma warning disable CA1849
-		cts.Cancel();
-#pragma warning restore CA1849
+		TestLogger logger = new();
+		UnhandledExceptionInterceptor interceptor = new(logger);
+		using CancellationTokenSource cts = new();
+		await cts.CancelAsync();
 
 		// Not a reference-identity check (unlike AlreadyWellFormedRpcException_PassesThroughUnchanged
 		// above) — deliberately. When an OperationCanceledException matching the awaited token

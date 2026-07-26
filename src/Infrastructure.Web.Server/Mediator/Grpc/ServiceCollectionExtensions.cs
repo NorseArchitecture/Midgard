@@ -1,7 +1,4 @@
-#pragma warning disable IDE0005 // Using directive is unnecessary
-using Microsoft.Extensions.DependencyInjection;
 using ProtoBuf.Grpc.Server;
-#pragma warning restore IDE0005
 
 namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 
