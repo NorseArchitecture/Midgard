@@ -16,12 +16,12 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 /// <c>Reason</c> is the exact <see cref="ErrorCategory"/> member name — the only field
 /// the client-side <c>RpcExceptionExtensions.DecodeProblem</c> method trusts (spec §2.1).
 /// </summary>
-static class ProblemExtensions
+public static class ProblemExtensions
 {
 	const string ErrorInfoDomain = "norse.io";
 
 	/// <summary>Converts a <see cref="Problem"/> to an <see cref="RpcException"/> carrying a <c>grpc-status-details-bin</c> trailer.</summary>
-	internal static RpcException ToRpcException(this Problem problem)
+	public static RpcException ToRpcException(this Problem problem)
 	{
 		var statusCode = problem.Category switch
 		{

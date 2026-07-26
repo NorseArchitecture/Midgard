@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Mime;
 using Microsoft.AspNetCore.Authentication;
@@ -6,7 +7,7 @@ using Norse.Abstractions.Web.Server.DeferredSignIn;
 namespace Norse.Infrastructure.Web.Server.DeferredSignIn;
 
 /// <summary>Completion-endpoint wiring for a deferred sign-in/out.</summary>
-static class DeferredSignInEndpointRouteBuilderExtensions
+public static class DeferredSignInEndpointRouteBuilderExtensions
 {
 	/// <summary>The default route pattern <see cref="MapDeferredSignIn"/> maps — callers building a completion URL reference this rather than duplicating the literal.</summary>
 	public const string DefaultPattern = "/_auth/complete";
@@ -17,7 +18,9 @@ static class DeferredSignInEndpointRouteBuilderExtensions
 	/// meta-refresh page rather than a redirect: mobile Chrome has a long-standing bug where it silently
 	/// drops Set-Cookie on a 302, which would otherwise loop forever.
 	/// </summary>
-	static IEndpointRouteBuilder MapDeferredSignIn(this IEndpointRouteBuilder endpoints,
+	[SuppressMessage("Trimming", "IL2026", Justification = "MapGet's delegate overload reflects over the supplied delegate's parameters; the delegate here is a fixed, statically-known shape.")]
+	[SuppressMessage("AOT", "IL3050", Justification = "MapGet's delegate overload reflects over the supplied delegate's parameters; the delegate here is a fixed, statically-known shape.")]
+	public static IEndpointRouteBuilder MapDeferredSignIn(this IEndpointRouteBuilder endpoints,
 		string pattern = DefaultPattern)
 	{
 		endpoints.MapGet(pattern,
