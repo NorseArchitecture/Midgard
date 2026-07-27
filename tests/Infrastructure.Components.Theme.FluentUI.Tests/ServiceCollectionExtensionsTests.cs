@@ -8,7 +8,7 @@ public sealed class ServiceCollectionExtensionsTests
 	[Fact]
 	void AddNorseFluentUiTheme_RegistersIThemeService()
 	{
-		var services = new ServiceCollection();
+		ServiceCollection services = new();
 
 		services.AddNorseFluentUiTheme();
 

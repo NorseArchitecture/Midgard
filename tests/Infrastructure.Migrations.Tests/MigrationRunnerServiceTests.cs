@@ -96,7 +96,7 @@ public sealed class MigrationRunnerServiceTests
 	[Fact]
 	void AddNorseMigrationsRunner_registers_MigrationRunnerService_as_hosted_service()
 	{
-		var services = new ServiceCollection();
+		ServiceCollection services = new();
 		var builder = Substitute.For<IHostApplicationBuilder>();
 		builder.Services.Returns(services);
 

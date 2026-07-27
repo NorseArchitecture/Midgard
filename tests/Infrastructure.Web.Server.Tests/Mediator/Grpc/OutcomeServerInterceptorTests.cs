@@ -31,7 +31,7 @@ public sealed class OutcomeServerInterceptorTests
 			await interceptor.UnaryServerHandler<string, Outcome<BoolResponse>>(
 				"request",
 				CreateContext(),
-				(_, _) => Task.FromResult(outcome)).ConfigureAwait(false));
+				(_, _) => Task.FromResult(outcome)));
 
 		exception.StatusCode.ShouldBe(StatusCode.PermissionDenied);
 		exception.Status.Detail.ShouldBe(nameof(ErrorCategory.LockedOut));

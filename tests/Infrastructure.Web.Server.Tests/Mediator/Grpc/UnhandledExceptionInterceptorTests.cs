@@ -45,7 +45,7 @@ public sealed class UnhandledExceptionInterceptorTests
 			await interceptor.UnaryServerHandler<string, object>(
 				"request",
 				CreateContext(),
-				(_, _) => throw new InvalidOperationException("unexpected")).ConfigureAwait(false));
+				(_, _) => throw new InvalidOperationException("unexpected")));
 
 		exception.StatusCode.ShouldBe(StatusCode.Internal);
 		logger.ErrorLogCount.ShouldBe(1);
@@ -62,7 +62,7 @@ public sealed class UnhandledExceptionInterceptorTests
 			await interceptor.UnaryServerHandler<string, object>(
 				"request",
 				CreateContext(),
-				(_, _) => throw original).ConfigureAwait(false));
+				(_, _) => throw original));
 
 		exception.ShouldBeSameAs(original);
 	}
@@ -87,7 +87,7 @@ public sealed class UnhandledExceptionInterceptorTests
 			await interceptor.UnaryServerHandler<string, object>(
 				"request",
 				CreateContext(cts.Token),
-				(_, _) => throw new OperationCanceledException(cts.Token)).ConfigureAwait(false));
+				(_, _) => throw new OperationCanceledException(cts.Token)));
 
 		exception.CancellationToken.ShouldBe(cts.Token);
 		logger.ErrorLogCount.ShouldBe(0);

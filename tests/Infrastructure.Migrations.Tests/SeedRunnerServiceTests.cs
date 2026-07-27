@@ -106,7 +106,7 @@ public sealed class SeedRunnerServiceTests
 	[Fact]
 	void AddNorseSeedingRunner_registers_SeedRunnerService_as_hosted_service()
 	{
-		var services = new ServiceCollection();
+		ServiceCollection services = new();
 		var builder = Substitute.For<IHostApplicationBuilder>();
 		builder.Services.Returns(services);
 
