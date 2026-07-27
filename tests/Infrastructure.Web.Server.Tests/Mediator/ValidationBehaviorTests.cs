@@ -1,43 +1,35 @@
 using FluentValidation;
-using FluentValidation.Results;
 using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Web.Server.Mediator;
-using Norse.Primitives;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
 public sealed class ValidationBehaviorTests
 {
+	public sealed record Sample(string Name) : ICommandRequest<bool>;
+
 	[Fact]
-	async Task Invalid_ReturnsValidationOutcome_GroupedByField()
+	async Task No_registered_validators_means_a_valid_request()
 	{
-		var validator = Substitute.For<IValidator<string>>();
-		validator.ValidateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-			.Returns(Task.FromResult(new ValidationResult([
-				new ValidationFailure("Email", "Email is required"),
-				new("Email", "Email is not a valid address"),
-				new("Password", "Password is required"),
-			])));
-		ValidationBehavior<string, bool> behavior = new(validator);
-
-		var outcome = await behavior.Handle("request", () => throw new InvalidOperationException("should not reach handler"), TestContext.Current.CancellationToken);
-
-		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
-		failed.Problem.Category.ShouldBe(ErrorCategory.Validation);
-		failed.Problem.Errors["Email"].ShouldBe(["Email is required", "Email is not a valid address"]);
-		failed.Problem.Errors["Password"].ShouldBe(["Password is required"]);
+		ValidationBehavior<Sample, bool> behavior = new([]);
+		var outcome = await behavior.Handle(new("anything"), () => ValueTask.FromResult(Outcome<bool>.Ok(true)), TestContext.Current.CancellationToken);
+		outcome.TryGetValue(out Norse.Primitives.Success<bool> success).ShouldBeTrue();
+		success.Value.ShouldBeTrue();
 	}
 
 	[Fact]
-	async Task Valid_CallsNext()
+	async Task Multiple_validators_aggregate_failures_by_property()
 	{
-		var validator = Substitute.For<IValidator<string>>();
-		validator.ValidateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-			.Returns(Task.FromResult(new ValidationResult()));
-		ValidationBehavior<string, bool> behavior = new(validator);
+		InlineValidator<Sample> first = [];
+		first.RuleFor(s => s.Name).NotEmpty();
+		InlineValidator<Sample> second = [];
+		second.RuleFor(s => s.Name).MinimumLength(3).WithMessage("too short");
 
-		var outcome = await behavior.Handle("request", () => ValueTask.FromResult(Outcome<bool>.Ok(true)), TestContext.Current.CancellationToken);
+		ValidationBehavior<Sample, bool> behavior = new([first, second]);
+		var outcome = await behavior.Handle(new(""), () => throw new InvalidOperationException("must not reach handler"), TestContext.Current.CancellationToken);
 
-		outcome.TryGetValue(out Success<bool> _).ShouldBeTrue();
+		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
+		failed.Problem.Category.ShouldBe(ErrorCategory.Validation);
+		failed.Problem.Errors["Name"].Length.ShouldBe(2);
 	}
 }

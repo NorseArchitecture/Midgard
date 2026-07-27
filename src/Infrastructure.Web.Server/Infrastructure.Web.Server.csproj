@@ -9,10 +9,5 @@
 		<PackageReference Include="FluentValidation" Version="12.*" />
 		<PackageReference Include="Google.Api.CommonProtos" Version="2.*" />
 		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="1.*" />
-		<!-- 2026-07-25: the gateway generator's InProcessHost-mode output constructs the four
-		     internal Mediator Behavior classes directly from the consuming composition root's own
-		     assembly. Grant per consumer, not a blanket public widening — the next composition root
-		     that adopts InProcessHost mode needs its own InternalsVisibleTo added here. -->
-		<InternalsVisibleTo Include="Norse.Hosting.Web.Server" />
 	</ItemGroup>
 </Project>
