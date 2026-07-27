@@ -1,5 +1,6 @@
 using FluentValidation;
 using Norse.Abstractions.Contracts;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.Infrastructure.Web.Server.Mediator;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
