@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Web.Client.Generator: discovers Norse gRPC contracts ([ServiceContract] interfaces named I{Context}Service with >=1 Task&lt;Outcome&lt;T&gt;&gt;/ValueTask&lt;Outcome&lt;T&gt;&gt; method) at compile time and emits AddNorseGrpcClients() — code-first CreateGrpcService proxy registration over an OutcomeClientInterceptor-decorated invoker, plus idempotent Outcome&lt;T&gt; surrogate wiring against RuntimeTypeModel.Default. Bundled into Infrastructure.Web.Client's package (analyzers/dotnet/cs/), never referenced or packed standalone.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<NorseRef Include="Abstractions.Emit">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+		<Compile Include="../Infrastructure.Web.Grpc.Generator.Shared/ContractDiscovery.cs" Link="Shared/ContractDiscovery.cs" />
+	</ItemGroup>
+</Project>

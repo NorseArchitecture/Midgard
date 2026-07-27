@@ -19,6 +19,12 @@
 		<Project Path="src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 		<Project Path="src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
 	</Folder>
+	<Folder Name="/gen/">
+		<File Path="gen/Directory.Build.props" />
+		<File Path="gen/Infrastructure.Web.Grpc.Generator.Shared/ContractDiscovery.cs" />
+		<Project Path="gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
+		<Project Path="gen/Infrastructure.Web.Client.Generator/Infrastructure.Web.Client.Generator.csproj" />
+	</Folder>
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
 		<File Path="tests/Directory.Build.targets" />
@@ -27,5 +33,7 @@
 		<Project Path="tests/Infrastructure.Components.Theme.FluentUI.Tests/Infrastructure.Components.Theme.FluentUI.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Server.Tests/Infrastructure.Web.Server.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Client.Tests/Infrastructure.Web.Client.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Web.Server.Generator.Tests/Infrastructure.Web.Server.Generator.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Web.Client.Generator.Tests/Infrastructure.Web.Client.Generator.Tests.csproj" />
 	</Folder>
 </Solution>
