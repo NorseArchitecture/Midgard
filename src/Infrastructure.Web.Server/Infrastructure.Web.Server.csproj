@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 	<PropertyGroup>
-		<Description>Norse.Infrastructure.Web.Server: gRPC server-side failure encoding. Mediator/Grpc translates Problem into google.rpc.Status + ErrorInfo/BadRequest/DebugInfo well-known types on a grpc-status-details-bin trailer, paired with Infrastructure.Web.Client for symmetrical decoding.</Description>
+		<Description>Norse.Infrastructure.Web.Server: gRPC server-side failure encoding. Mediator/Grpc translates Problem into google.rpc.Status + ErrorInfo/BadRequest/DebugInfo well-known types on a grpc-status-details-bin trailer, paired with Infrastructure.Web.Client for symmetrical decoding. Bundles the gRPC server registration generator (analyzers/dotnet/cs/), which discovers a compilation's Norse gRPC contracts and their implementations at compile time and emits MapNorseGrpcServices() — code-first MapGrpcService/EnableGrpcWeb registration plus idempotent Outcome&lt;T&gt; surrogate wiring.</Description>
 	</PropertyGroup>
 	<ItemGroup>
 		<NorseRef Include="Abstractions.Web.Server">
@@ -8,11 +8,26 @@
 		</NorseRef>
 		<PackageReference Include="FluentValidation" Version="12.*" />
 		<PackageReference Include="Google.Api.CommonProtos" Version="2.*" />
+		<PackageReference Include="Grpc.AspNetCore.Web" Version="2.*" />
 		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="1.*" />
-		<!-- 2026-07-25: the gateway generator's InProcessHost-mode output constructs the four
-		     internal Mediator Behavior classes directly from the consuming composition root's own
-		     assembly. Grant per consumer, not a blanket public widening — the next composition root
-		     that adopts InProcessHost mode needs its own InternalsVisibleTo added here. -->
-		<InternalsVisibleTo Include="Norse.Hosting.Web.Server" />
+		<ProjectReference
+			Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj"
+			OutputItemType="Analyzer"
+			ReferenceOutputAssembly="false" />
 	</ItemGroup>
+	<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">
+		<MSBuild Projects="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj"
+			Targets="Build"
+			Properties="Configuration=$(Configuration)" />
+		<ItemGroup>
+			<None Include="../../gen/Infrastructure.Web.Server.Generator/bin/$(Configuration)/netstandard2.0/Norse.Infrastructure.Web.Server.Generator.dll"
+				Pack="true"
+				PackagePath="analyzers/dotnet/cs/"
+				Visible="false" />
+			<None Include="../../gen/Infrastructure.Web.Server.Generator/bin/$(Configuration)/netstandard2.0/Norse.Abstractions.Emit.dll"
+				Pack="true"
+				PackagePath="analyzers/dotnet/cs/"
+				Visible="false" />
+		</ItemGroup>
+	</Target>
 </Project>

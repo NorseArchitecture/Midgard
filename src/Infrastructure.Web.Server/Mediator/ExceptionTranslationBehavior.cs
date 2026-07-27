@@ -8,10 +8,6 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// — as a returned <see cref="Outcome{T}"/>, never rethrown past this point (spec §2.5, §2.6).
 /// <see cref="OperationCanceledException"/> on the caller's own token is never caught; it propagates
 /// so the channel's native cancellation handling takes over.
-///
-/// Stays <c>internal</c> (2026-07-25): see <see cref="TelemetryBehavior{TRequest,TResponse}"/>'s
-/// remark — visible to InProcessHost-mode consumers via this project's <c>InternalsVisibleTo</c>
-/// grant, not by widening to <c>public</c>.
 /// </summary>
 sealed partial class ExceptionTranslationBehavior<TRequest, TResponse>(ILogger<ExceptionTranslationBehavior<TRequest, TResponse>> logger) :
 	IBehavior<TRequest, TResponse>

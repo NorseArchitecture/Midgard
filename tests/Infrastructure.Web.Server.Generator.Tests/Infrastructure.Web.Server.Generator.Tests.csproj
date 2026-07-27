@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+	<ItemGroup>
+		<NorseRef Include="Abstractions.Contracts">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+		<PackageReference Include="Grpc.AspNetCore.Web" Version="2.*" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
+		<PackageReference Include="protobuf-net" Version="*" />
+		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="1.*" />
+		<PackageReference Include="System.ServiceModel.Primitives" Version="10.*" />
+		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
+	</ItemGroup>
+</Project>
