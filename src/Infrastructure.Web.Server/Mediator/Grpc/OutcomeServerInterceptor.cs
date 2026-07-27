@@ -13,10 +13,12 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 /// <c>Value</c> escape hatch (no reflection, no knowledge of the payload type <c>T</c>), and throws
 /// <see cref="ProblemExtensions.ToRpcException"/> only there. A response that isn't an
 /// <see cref="IUnion"/> at all, or is the <c>Success&lt;T&gt;</c> case, passes through unchanged and
-/// serializes as the bare payload — the composition root's <c>Outcome&lt;T&gt;</c> surrogate
-/// registration (spec §9(c)) makes this byte-identical to the pre-envelope wire shape, so the
-/// success path never carries partner-visible union structure, only the failure path adds
-/// <c>google.rpc.Status</c>/<c>ErrorInfo</c> on top of what would otherwise ship anyway.
+/// serializes as the bare payload — the <c>Outcome&lt;T&gt;</c> surrogate registration (spec §9(c))
+/// makes this byte-identical to the pre-envelope wire shape, so the success path never carries
+/// partner-visible union structure, only the failure path adds
+/// <c>google.rpc.Status</c>/<c>ErrorInfo</c> on top of what would otherwise ship anyway. Registered
+/// by <c>AddNorseCodeFirstGrpc()</c>; surrogates are registered by the generated gRPC wiring
+/// (Task 9).
 /// </summary>
 sealed class OutcomeServerInterceptor : Interceptor
 {

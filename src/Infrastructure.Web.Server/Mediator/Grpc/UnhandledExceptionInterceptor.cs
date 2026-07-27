@@ -6,10 +6,12 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 
 /// <summary>
 /// Generic, zero-domain-knowledge safety net registered once for every gRPC-hosted service (spec
-/// §2.6). Expected business failures are already well-formed <see cref="RpcException"/>s by the time
-/// they reach this interceptor — a service implementation throws <c>Problem.ToRpcException()</c>
-/// directly (Task 12). This interceptor's only job is catching whatever a service implementation
-/// let escape uncaught and converting it to <see cref="ErrorCategory.Fault"/>.
+/// §2.6), outermost in the interceptor stack wired by <c>AddNorseCodeFirstGrpc()</c>. Expected
+/// business failures are already well-formed <see cref="RpcException"/>s by the time they reach this
+/// interceptor — a service implementation never throws to communicate one; <see cref="OutcomeServerInterceptor"/>
+/// is the sole business-failure throw point, translating a <c>Failed</c> <c>Outcome&lt;T&gt;</c> into
+/// <c>Problem.ToRpcException()</c> further in. This interceptor's only job is catching whatever a
+/// service implementation let escape uncaught and converting it to <see cref="ErrorCategory.Fault"/>.
 /// </summary>
 sealed partial class UnhandledExceptionInterceptor(ILogger<UnhandledExceptionInterceptor> logger) : Interceptor
 {
