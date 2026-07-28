@@ -59,9 +59,30 @@ public sealed class IdentifierSerializersTests
 		TestModel.Deserialize<GuidEnvelope>(model, payload).Id.ShouldBe(Guid.Empty);
 	}
 
+	static readonly DateTime _knownInstant = new(2026, 7, 27, 12, 0, 0, DateTimeKind.Utc);
+	const decimal KnownAmount = 1234.56m;
+
 	[Fact]
-	void Sets_compatibility_level_300_as_the_model_default() =>
-		TestModel.Create().DefaultCompatibilityLevel.ShouldBe(CompatibilityLevel.Level300);
+	void Applies_level_300_semantics_per_member_without_touching_the_model_default()
+	{
+		var reference = RuntimeTypeModel.Create();
+		reference.DefaultCompatibilityLevel = CompatibilityLevel.Level300;
+		var expected = TestModel.Serialize(reference,
+			new Level300Envelope { When = _knownInstant, Amount = KnownAmount });
+		var model = TestModel.Create();
+		model.DefaultCompatibilityLevel.ShouldBe(CompatibilityLevel.Level200);
+		var actual = TestModel.Serialize(model,
+			new Level300Envelope { When = _knownInstant, Amount = KnownAmount });
+		actual.ShouldBe(expected);
+	}
+
+	[Fact]
+	void Applies_the_wire_law_on_the_default_model()
+	{
+		Should.NotThrow(() => IdentifierSerializers.Register(RuntimeTypeModel.Default));
+		var payload = TestModel.Serialize(RuntimeTypeModel.Default, new GuidEnvelope { Id = _knownGuid });
+		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
+	}
 
 	[Fact]
 	void Registers_idempotently_when_called_twice_on_one_model()
@@ -100,4 +121,13 @@ public sealed class FixedSizeGuidEnvelope
 {
 	[ProtoMember(1, DataFormat = DataFormat.FixedSize)]
 	public Guid Id { get; set; }
+}
+
+[ProtoContract]
+public sealed class Level300Envelope
+{
+	[ProtoMember(1)]
+	public DateTime When { get; set; }
+	[ProtoMember(2)]
+	public decimal Amount { get; set; }
 }
