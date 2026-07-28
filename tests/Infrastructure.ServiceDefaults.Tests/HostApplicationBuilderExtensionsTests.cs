@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
@@ -101,5 +102,27 @@ public sealed class HostApplicationBuilderExtensionsTests
 		using var host = builder.Build();
 		host.Services.GetService<IOptions<HealthCheckServiceOptions>>()
 			?.Value.Registrations.ShouldBeEmpty();
+	}
+
+	[Fact]
+	async Task A_host_with_no_otlp_endpoint_builds_and_starts_cleanly()
+	{
+		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		builder.AddServiceDefaults();
+		using var host = builder.Build();
+		await host.StartAsync(TestContext.Current.CancellationToken);
+		await host.StopAsync(TestContext.Current.CancellationToken);
+	}
+
+	[Fact]
+	async Task A_host_with_an_otlp_endpoint_builds_and_starts_cleanly()
+	{
+		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		builder.Configuration.AddInMemoryCollection(
+			[new("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")]);
+		builder.AddServiceDefaults();
+		using var host = builder.Build();
+		await host.StartAsync(TestContext.Current.CancellationToken);
+		await host.StopAsync(TestContext.Current.CancellationToken);
 	}
 }

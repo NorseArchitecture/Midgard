@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 
@@ -50,6 +51,13 @@ public static class HostApplicationBuilderExtensions
 				.WithMetrics(static metrics => metrics
 					.AddMeter("Norse.*")
 					.AddRuntimeInstrumentation());
+			// The guard is ours, not the SDK's: UseOtlpExporter() with no endpoint configured defaults
+			// to localhost:4317 and fails on every export attempt (spec §3.7). Behind this check,
+			// absence is a genuine no-op and console still works.
+			if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+			{
+				builder.Services.AddOpenTelemetry().UseOtlpExporter();
+			}
 			return builder;
 		}
 
