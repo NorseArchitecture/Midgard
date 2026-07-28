@@ -12,9 +12,7 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// </summary>
 public static class IdentifierSerializers
 {
-#pragma warning disable IDE0028
-	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = new();
-#pragma warning restore IDE0028
+	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = [];
 
 	/// <summary>
 	/// Registers the wire law on <paramref name="model"/>. Idempotent per model. Must run before any
