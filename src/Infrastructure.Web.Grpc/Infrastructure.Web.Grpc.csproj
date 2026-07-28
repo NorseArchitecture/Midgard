@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Web.Grpc: the shared gRPC wire-format recipe consumed at all three levels — MAUI, WASM client, and server. IdentifierSerializers applies the Norse wire law to a protobuf-net RuntimeTypeModel: CompatibilityLevel 300 as the model default, every Guid member swept to DataFormat.FixedSize (a bare bytes field of 16 bytes in RFC 9562 order — never the legacy bcl.Guid encoding, never the 36-character string), and custom scalar serializers putting SequentialGuid and DeterministicGuid on the wire in the same canonical form. Nothing app-specific lives here: gRPC-Web browser plumbing, server endpoint mapping, and MAUI transport wiring are host concerns.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<NorseRef Include="Primitives">
+			<Repo>Svartalfheim</Repo>
+		</NorseRef>
+		<PackageReference Include="protobuf-net" Version="3.*" />
+	</ItemGroup>
+</Project>

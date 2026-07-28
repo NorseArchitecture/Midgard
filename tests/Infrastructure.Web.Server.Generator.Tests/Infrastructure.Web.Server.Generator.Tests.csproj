@@ -12,5 +12,6 @@
 		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="1.*" />
 		<PackageReference Include="System.ServiceModel.Primitives" Version="10.*" />
 		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
+		<ProjectReference Include="../../src/Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" />
 	</ItemGroup>
 </Project>

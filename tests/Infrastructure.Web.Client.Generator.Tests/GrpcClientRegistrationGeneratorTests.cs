@@ -66,6 +66,18 @@ public sealed class GrpcClientRegistrationGeneratorTests
 	}
 
 	[Fact]
+	void Registers_the_identifier_serializers_before_the_Outcome_surrogates()
+	{
+		var generated = Generate(Contract);
+		var registerIndex = generated.IndexOf(
+			"global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);",
+			StringComparison.Ordinal);
+		var surrogateIndex = generated.IndexOf(".SetSurrogate(", StringComparison.Ordinal);
+		registerIndex.ShouldBeGreaterThan(-1);
+		registerIndex.ShouldBeLessThan(surrogateIndex);
+	}
+
+	[Fact]
 	void Emits_nothing_when_no_contract_is_discovered()
 	{
 		const string NoContract = """
@@ -155,6 +167,7 @@ public sealed class GrpcClientRegistrationGeneratorTests
 		MetadataReference.CreateFromFile(typeof(Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions).Assembly.Location),
 		MetadataReference.CreateFromFile(typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection).Assembly.Location),
 		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Client.Grpc.OutcomeClientInterceptor).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Grpc.IdentifierSerializers).Assembly.Location),
 		.. _sharedFramework,
 	];
 

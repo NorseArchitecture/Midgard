@@ -74,6 +74,18 @@ public sealed class GrpcServerRegistrationGeneratorTests
 	}
 
 	[Fact]
+	void Registers_the_identifier_serializers_before_the_Outcome_surrogates()
+	{
+		var generated = Generate(Contract);
+		var registerIndex = generated.IndexOf(
+			"global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);",
+			StringComparison.Ordinal);
+		var surrogateIndex = generated.IndexOf(".SetSurrogate(", StringComparison.Ordinal);
+		registerIndex.ShouldBeGreaterThan(-1);
+		registerIndex.ShouldBeLessThan(surrogateIndex);
+	}
+
+	[Fact]
 	void NORSE020_fires_when_the_implementation_is_absent()
 	{
 		var withoutImplementation = Contract.Replace(
@@ -176,6 +188,7 @@ public sealed class GrpcServerRegistrationGeneratorTests
 		MetadataReference.CreateFromFile(typeof(ProtoBuf.Meta.TypeModel).Assembly.Location),
 		MetadataReference.CreateFromFile(typeof(Microsoft.AspNetCore.Builder.GrpcEndpointRouteBuilderExtensions).Assembly.Location),
 		MetadataReference.CreateFromFile(typeof(Microsoft.AspNetCore.Builder.GrpcWebEndpointConventionBuilderExtensions).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Grpc.IdentifierSerializers).Assembly.Location),
 		.. _sharedFrameworks,
 	];
 
