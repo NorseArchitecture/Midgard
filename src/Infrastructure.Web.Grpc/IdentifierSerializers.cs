@@ -30,6 +30,8 @@ public static class IdentifierSerializers
 		model.AfterApplyDefaultBehaviour += SweepGuidMembers;
 		model.Add(typeof(SequentialGuid), applyDefaultBehaviour: false).SerializerType =
 			typeof(SequentialGuidSerializer);
+		model.Add(typeof(DeterministicGuid), applyDefaultBehaviour: false).SerializerType =
+			typeof(DeterministicGuidSerializer);
 	}
 
 	static void SweepGuidMembers(object? sender, TypeAddedEventArgs e)
