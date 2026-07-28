@@ -18,6 +18,7 @@
 		<Project Path="src/Infrastructure.Components.Theme.FluentUI/Infrastructure.Components.Theme.FluentUI.csproj" />
 		<Project Path="src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 		<Project Path="src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
+		<Project Path="src/Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" />
 	</Folder>
 	<Folder Name="/gen/">
 		<File Path="gen/Directory.Build.props" />
@@ -35,5 +36,6 @@
 		<Project Path="tests/Infrastructure.Web.Client.Tests/Infrastructure.Web.Client.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Server.Generator.Tests/Infrastructure.Web.Server.Generator.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Client.Generator.Tests/Infrastructure.Web.Client.Generator.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Web.Grpc.Tests/Infrastructure.Web.Grpc.Tests.csproj" />
 	</Folder>
 </Solution>

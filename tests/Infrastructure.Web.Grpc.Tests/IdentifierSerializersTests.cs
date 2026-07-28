@@ -1,0 +1,103 @@
+using ProtoBuf;
+using ProtoBuf.Meta;
+
+namespace Norse.Infrastructure.Web.Grpc.Tests;
+
+public sealed class IdentifierSerializersTests
+{
+	static readonly Guid _knownGuid = new("12345678-9abc-def0-1234-56789abcdef0");
+	const string KnownWireHex = "0A10123456789ABCDEF0123456789ABCDEF0";
+
+	[Fact]
+	void Serializes_a_Guid_member_as_sixteen_rfc_9562_bytes_on_an_auto_discovered_type()
+	{
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new GuidEnvelope { Id = _knownGuid });
+		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
+	}
+
+	[Fact]
+	void Matches_protobuf_nets_own_level_300_fixed_size_form_bit_for_bit()
+	{
+		var reference = RuntimeTypeModel.Create();
+		reference.DefaultCompatibilityLevel = CompatibilityLevel.Level300;
+		var expected = TestModel.Serialize(reference, new FixedSizeGuidEnvelope { Id = _knownGuid });
+		var actual = TestModel.Serialize(TestModel.Create(), new GuidEnvelope { Id = _knownGuid });
+		actual.ShouldBe(expected);
+	}
+
+	[Fact]
+	void Sweeps_a_type_added_explicitly_to_the_model()
+	{
+		var model = TestModel.Create();
+		model.Add(typeof(GuidEnvelope));
+		var payload = TestModel.Serialize(model, new GuidEnvelope { Id = _knownGuid });
+		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
+	}
+
+	[Fact]
+	void Sweeps_nullable_Guid_members()
+	{
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new NullableGuidEnvelope { Id = _knownGuid });
+		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
+	}
+
+	[Fact]
+	void Round_trips_a_null_nullable_Guid_member_as_null()
+	{
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new NullableGuidEnvelope());
+		TestModel.Deserialize<NullableGuidEnvelope>(model, payload).Id.ShouldBeNull();
+	}
+
+	[Fact]
+	void Round_trips_Guid_Empty()
+	{
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new GuidEnvelope { Id = Guid.Empty });
+		TestModel.Deserialize<GuidEnvelope>(model, payload).Id.ShouldBe(Guid.Empty);
+	}
+
+	[Fact]
+	void Sets_compatibility_level_300_as_the_model_default() =>
+		TestModel.Create().DefaultCompatibilityLevel.ShouldBe(CompatibilityLevel.Level300);
+
+	[Fact]
+	void Registers_idempotently_when_called_twice_on_one_model()
+	{
+		var model = TestModel.Create();
+		Should.NotThrow(() => IdentifierSerializers.Register(model));
+		var payload = TestModel.Serialize(model, new GuidEnvelope { Id = _knownGuid });
+		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
+	}
+
+	[Fact]
+	void Renders_Guid_members_as_bytes_fields_in_the_schema()
+	{
+		var model = TestModel.Create();
+		model.Add(typeof(GuidEnvelope));
+		model.GetSchema(typeof(GuidEnvelope), ProtoSyntax.Proto3).ShouldContain("bytes Id = 1;");
+	}
+}
+
+[ProtoContract]
+public sealed class GuidEnvelope
+{
+	[ProtoMember(1)]
+	public Guid Id { get; set; }
+}
+
+[ProtoContract]
+public sealed class NullableGuidEnvelope
+{
+	[ProtoMember(1)]
+	public Guid? Id { get; set; }
+}
+
+[ProtoContract]
+public sealed class FixedSizeGuidEnvelope
+{
+	[ProtoMember(1, DataFormat = DataFormat.FixedSize)]
+	public Guid Id { get; set; }
+}
