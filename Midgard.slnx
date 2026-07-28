@@ -14,6 +14,7 @@
 		<File Path="src/Directory.Build.props" />
 		<File Path="src/Directory.Build.targets" />
 		<Project Path="src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" />
+		<Project Path="src/Infrastructure.ServiceDefaults/Infrastructure.ServiceDefaults.csproj" />
 		<Project Path="src/Infrastructure.Components.Theme/Infrastructure.Components.Theme.csproj" />
 		<Project Path="src/Infrastructure.Components.Theme.FluentUI/Infrastructure.Components.Theme.FluentUI.csproj" />
 		<Project Path="src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
@@ -30,6 +31,7 @@
 		<File Path="tests/Directory.Build.props" />
 		<File Path="tests/Directory.Build.targets" />
 		<Project Path="tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj" />
+		<Project Path="tests/Infrastructure.ServiceDefaults.Tests/Infrastructure.ServiceDefaults.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Components.Theme.Tests/Infrastructure.Components.Theme.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Components.Theme.FluentUI.Tests/Infrastructure.Components.Theme.FluentUI.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Server.Tests/Infrastructure.Web.Server.Tests.csproj" />
