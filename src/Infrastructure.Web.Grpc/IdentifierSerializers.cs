@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Norse.Primitives.Identifiers;
 using ProtoBuf;
 using ProtoBuf.Meta;
 
@@ -27,6 +28,8 @@ public static class IdentifierSerializers
 
 		model.DefaultCompatibilityLevel = CompatibilityLevel.Level300;
 		model.AfterApplyDefaultBehaviour += SweepGuidMembers;
+		model.Add(typeof(SequentialGuid), applyDefaultBehaviour: false).SerializerType =
+			typeof(SequentialGuidSerializer);
 	}
 
 	static void SweepGuidMembers(object? sender, TypeAddedEventArgs e)
