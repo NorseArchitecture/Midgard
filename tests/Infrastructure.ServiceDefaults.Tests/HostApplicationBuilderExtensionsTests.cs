@@ -125,4 +125,12 @@ public sealed class HostApplicationBuilderExtensionsTests
 		await host.StartAsync(TestContext.Current.CancellationToken);
 		await host.StopAsync(TestContext.Current.CancellationToken);
 	}
+
+	[Fact]
+	void The_service_defaults_assembly_references_nothing_from_aspnetcore()
+	{
+		typeof(HostApplicationBuilderExtensions).Assembly
+			.GetReferencedAssemblies()
+			.ShouldAllBe(a => !a.Name!.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal));
+	}
 }
