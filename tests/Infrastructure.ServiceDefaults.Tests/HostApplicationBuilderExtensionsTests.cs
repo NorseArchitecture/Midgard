@@ -133,4 +133,42 @@ public sealed class HostApplicationBuilderExtensionsTests
 			.GetReferencedAssemblies()
 			.ShouldAllBe(a => !a.Name!.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal));
 	}
+
+	[Fact]
+	void A_forwarded_tracing_delegate_is_invoked_alongside_the_norse_wildcard()
+	{
+		List<Activity> exported = [];
+		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		builder.AddServiceDefaults(configureTracing: static tracing => tracing.AddSource("Forwarded.Probe"));
+		builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing.AddInMemoryExporter(exported));
+		using var host = builder.Build();
+		var tracerProvider = host.Services.GetRequiredService<TracerProvider>();
+		using ActivitySource
+			norse = new("Norse.Test"),
+			forwarded = new("Forwarded.Probe");
+		norse.StartActivity("norse-op")?.Dispose();
+		forwarded.StartActivity("forwarded-op")?.Dispose();
+		tracerProvider.ForceFlush();
+		exported.Select(a => a.OperationName).ShouldBe(["norse-op", "forwarded-op"], ignoreOrder: true);
+	}
+
+	[Fact]
+	void A_forwarded_metrics_delegate_is_invoked_alongside_the_norse_wildcard()
+	{
+		List<Metric> exported = [];
+		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		builder.AddServiceDefaults(configureMetrics: static metrics => metrics.AddMeter("Forwarded.Probe"));
+		builder.Services.AddOpenTelemetry().WithMetrics(metrics => metrics.AddInMemoryExporter(exported));
+		using var host = builder.Build();
+		var meterProvider = host.Services.GetRequiredService<MeterProvider>();
+		using Meter
+			norse = new("Norse.TestMeter"),
+			forwarded = new("Forwarded.Probe");
+		norse.CreateCounter<long>("norse_counter").Add(1);
+		forwarded.CreateCounter<long>("forwarded_counter").Add(1);
+		meterProvider.ForceFlush();
+		string[] names = [.. exported.Select(static metric => metric.Name)];
+		names.ShouldContain("norse_counter");
+		names.ShouldContain("forwarded_counter");
+	}
 }

@@ -3,13 +3,22 @@ using Norse.Abstractions.Migrations.Seeding;
 namespace Norse.Infrastructure.Migrations;
 
 sealed partial class SeedRunnerService(
-	IEnumerable<ISeedContributor> contributors,
+	IServiceScopeFactory scopeFactory,
 	IHostApplicationLifetime lifetime,
 	ILogger<SeedRunnerService> logger) : IHostedService
 {
+	// Contributors resolve from a scoped call site — an EF seed contributor is registered transient
+	// but takes a scoped DbContext — so injecting IEnumerable<ISeedContributor> straight into this
+	// singleton is a captive dependency that scope validation rejects at build.
 	public async Task StartAsync(CancellationToken cancellationToken)
 	{
-		await Task.WhenAll(contributors.Select(c => RunAsync(c, cancellationToken))).ConfigureAwait(false);
+		var scope = scopeFactory.CreateAsyncScope();
+		await using (scope.ConfigureAwait(false))
+		{
+			var contributors = scope.ServiceProvider.GetServices<ISeedContributor>();
+			await Task.WhenAll(contributors.Select(c => RunAsync(c, cancellationToken))).ConfigureAwait(false);
+		}
+
 		lifetime.StopApplication();
 	}
 

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace Norse.Infrastructure.ServiceDefaults;
 
@@ -29,8 +30,21 @@ public static class HostApplicationBuilderExtensions
 		/// participation, and participation arrives with the layer that guarantees a consumer
 		/// (see <see cref="AddDefaultHealthChecks"/>).
 		/// </summary>
+		/// <param name="configureTracing">
+		/// Optional additional tracing configuration, invoked inside this method's own
+		/// <c>WithTracing</c> block after the <c>Norse.*</c> subscription. Additive only — nothing
+		/// passed here can subtract emission. Used by a higher layer (for example the ASP.NET root) to
+		/// contribute to this single OpenTelemetry composition instead of opening a second one.
+		/// </param>
+		/// <param name="configureMetrics">
+		/// Optional additional metrics configuration, invoked inside this method's own
+		/// <c>WithMetrics</c> block after the <c>Norse.*</c> subscription and runtime instrumentation.
+		/// Additive only, on the same terms as <paramref name="configureTracing"/>.
+		/// </param>
 		/// <returns>The same <paramref name="builder"/> for chaining.</returns>
-		public IHostApplicationBuilder AddServiceDefaults()
+		public IHostApplicationBuilder AddServiceDefaults(
+			Action<TracerProviderBuilder>? configureTracing = null,
+			Action<MeterProviderBuilder>? configureMetrics = null)
 		{
 			builder.Logging
 				.AddConsole()
@@ -47,10 +61,18 @@ public static class HostApplicationBuilderExtensions
 						builder.Configuration["OTEL_SERVICE_NAME"] ?? builder.Environment.ApplicationName,
 						serviceVersion: Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion)
 					.AddAttributes([new("deployment.environment.name", builder.Environment.EnvironmentName)]))
-				.WithTracing(static tracing => tracing.AddSource("Norse.*"))
-				.WithMetrics(static metrics => metrics
-					.AddMeter("Norse.*")
-					.AddRuntimeInstrumentation());
+				.WithTracing(tracing =>
+				{
+					tracing.AddSource("Norse.*");
+					configureTracing?.Invoke(tracing);
+				})
+				.WithMetrics(metrics =>
+				{
+					metrics
+						.AddMeter("Norse.*")
+						.AddRuntimeInstrumentation();
+					configureMetrics?.Invoke(metrics);
+				});
 			// The guard is ours, not the SDK's: UseOtlpExporter() with no endpoint configured defaults
 			// to localhost:4317 and fails on every export attempt (spec §3.7). Behind this check,
 			// absence is a genuine no-op and console still works.

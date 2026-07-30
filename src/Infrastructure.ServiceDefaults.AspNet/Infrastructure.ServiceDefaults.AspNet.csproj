@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.ServiceDefaults.AspNet: the ASP.NET Core observability root. Composes Norse.Infrastructure.ServiceDefaults, subscribes ASP.NET Core metrics and — for application hosts — request tracing, composes the health-check rail, and maps the /livez and /readyz probe endpoints. Carries the family's only FrameworkReference, so a worker or init container cannot reference it.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		<PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.*" />
+		<ProjectReference Include="../Infrastructure.ServiceDefaults/Infrastructure.ServiceDefaults.csproj" />
+	</ItemGroup>
+</Project>
