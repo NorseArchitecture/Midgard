@@ -15,8 +15,9 @@ public sealed class MigrationRunnerServiceTests
 		contributor.Name.Returns("Test");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
+		await using var provider = BuildProvider(contributor);
 		MigrationRunnerService sut = new(
-			[contributor],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StartAsync(CancellationToken.None);
@@ -35,8 +36,9 @@ public sealed class MigrationRunnerServiceTests
 		b.Name.Returns("B");
 		b.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
+		await using var provider = BuildProvider(a, b);
 		MigrationRunnerService sut = new(
-			[a, b],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StartAsync(CancellationToken.None);
@@ -53,8 +55,9 @@ public sealed class MigrationRunnerServiceTests
 		contributor.MigrateAsync(Arg.Any<CancellationToken>())
 			.Returns(Task.FromException(new InvalidOperationException("migration failed")));
 
+		await using var provider = BuildProvider(contributor);
 		MigrationRunnerService sut = new(
-			[contributor],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			NullLogger<MigrationRunnerService>.Instance);
 
 		var act = () => sut.StartAsync(CancellationToken.None);
@@ -65,8 +68,9 @@ public sealed class MigrationRunnerServiceTests
 	[Fact]
 	async Task StopAsync_is_always_a_noop()
 	{
+		await using var provider = BuildProvider();
 		MigrationRunnerService sut = new(
-			[],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			NullLogger<MigrationRunnerService>.Instance);
 
 		await sut.StopAsync(CancellationToken.None);
@@ -79,11 +83,25 @@ public sealed class MigrationRunnerServiceTests
 		contributor.Name.Returns("Test");
 		contributor.MigrateAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-		MigrationRunnerService sut = new([contributor], new AlwaysEnabledLogger());
+		await using var provider = BuildProvider(contributor);
+		MigrationRunnerService sut = new(
+			provider.GetRequiredService<IServiceScopeFactory>(),
+			new AlwaysEnabledLogger());
 
 		await sut.StartAsync(CancellationToken.None);
 
 		await contributor.Received(1).MigrateAsync(Arg.Any<CancellationToken>());
+	}
+
+	static ServiceProvider BuildProvider(params IMigrationContributor[] contributors)
+	{
+		ServiceCollection services = new();
+		foreach (var contributor in contributors)
+		{
+			services.AddSingleton(contributor);
+		}
+
+		return services.BuildServiceProvider();
 	}
 
 	sealed class AlwaysEnabledLogger : ILogger<MigrationRunnerService>

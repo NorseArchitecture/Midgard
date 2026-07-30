@@ -16,8 +16,9 @@ public sealed class SeedRunnerServiceTests
 		contributor.SeedAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
+		await using var provider = BuildProvider(contributor);
 		SeedRunnerService sut = new(
-			[contributor],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			lifetime,
 			NullLogger<SeedRunnerService>.Instance);
 
@@ -39,8 +40,9 @@ public sealed class SeedRunnerServiceTests
 		b.SeedAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
+		await using var provider = BuildProvider(a, b);
 		SeedRunnerService sut = new(
-			[a, b],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			lifetime,
 			NullLogger<SeedRunnerService>.Instance);
 
@@ -60,8 +62,9 @@ public sealed class SeedRunnerServiceTests
 			.Returns(Task.FromException(new InvalidOperationException("seed failed")));
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
+		await using var provider = BuildProvider(contributor);
 		SeedRunnerService sut = new(
-			[contributor],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			lifetime,
 			NullLogger<SeedRunnerService>.Instance);
 
@@ -74,8 +77,9 @@ public sealed class SeedRunnerServiceTests
 	[Fact]
 	async Task StopAsync_is_always_a_noop()
 	{
+		await using var provider = BuildProvider();
 		SeedRunnerService sut = new(
-			[],
+			provider.GetRequiredService<IServiceScopeFactory>(),
 			Substitute.For<IHostApplicationLifetime>(),
 			NullLogger<SeedRunnerService>.Instance);
 
@@ -90,10 +94,26 @@ public sealed class SeedRunnerServiceTests
 		contributor.SeedAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
 		var lifetime = Substitute.For<IHostApplicationLifetime>();
-		SeedRunnerService sut = new([contributor], lifetime, new AlwaysEnabledLogger());
+		await using var provider = BuildProvider(contributor);
+		SeedRunnerService sut = new(
+			provider.GetRequiredService<IServiceScopeFactory>(),
+			lifetime,
+			new AlwaysEnabledLogger());
+
 		await sut.StartAsync(CancellationToken.None);
 
 		lifetime.Received(1).StopApplication();
+	}
+
+	static ServiceProvider BuildProvider(params ISeedContributor[] contributors)
+	{
+		ServiceCollection services = new();
+		foreach (var contributor in contributors)
+		{
+			services.AddSingleton(contributor);
+		}
+
+		return services.BuildServiceProvider();
 	}
 
 	sealed class AlwaysEnabledLogger : ILogger<SeedRunnerService>
