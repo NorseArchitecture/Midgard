@@ -14,6 +14,9 @@ public static class ServiceCollectionExtensions
 		/// Wires protobuf-net.Grpc code-first hosting with the platform interceptor stack (spec §2.1):
 		/// UnhandledExceptionInterceptor outermost (the net), PrincipalSeedingInterceptor (channel adapter),
 		/// OutcomeServerInterceptor innermost (the DU's idiom translator — Failed → throw + ErrorInfo).
+		/// Also registers the standard <c>grpc.health.v1.Health</c> service against the host's health
+		/// rail: this project brings the gRPC transport, so it owns gRPC health. A host that does not
+		/// reference this project — Stories.Server — cannot acquire it, which is the point.
 		/// </summary>
 		public IServiceCollection AddNorseCodeFirstGrpc()
 		{
@@ -23,6 +26,7 @@ public static class ServiceCollectionExtensions
 				options.Interceptors.Add<PrincipalSeedingInterceptor>();
 				options.Interceptors.Add<OutcomeServerInterceptor>();
 			});
+			services.AddGrpcHealthChecks();
 			return services;
 		}
 	}
