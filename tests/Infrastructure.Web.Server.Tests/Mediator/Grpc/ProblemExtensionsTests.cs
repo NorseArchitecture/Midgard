@@ -39,4 +39,13 @@ public sealed class ProblemExtensionsTests
 		var exception = new Problem { Category = ErrorCategory.Fault, CorrelationId = correlationId }.ToRpcException();
 		exception.StatusCode.ShouldBe(StatusCode.Internal);
 	}
+
+	[Fact]
+	void MultipleMatches_MapsTo_Internal_NotACallerError()
+	{
+		// A cardinality violation is a server-side data-integrity failure, not a caller error —
+		// shares Internal with Fault, distinguished by ErrorInfo.Reason on the wire.
+		var exception = new Problem { Category = ErrorCategory.MultipleMatches }.ToRpcException();
+		exception.StatusCode.ShouldBe(StatusCode.Internal);
+	}
 }

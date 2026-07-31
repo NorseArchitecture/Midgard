@@ -96,12 +96,39 @@ sealed class Repository<
 		return Outcome<IReadOnlyList<TProjection>>.Ok(list);
 	}
 
-	public Task<Outcome<TView>> SingleAsync(Expression<Func<TView, bool>> predicate, CancellationToken cancellationToken = default) =>
-		throw new NotImplementedException(); // Task 4
+	public async Task<Outcome<TView>> SingleAsync(Expression<Func<TView, bool>> predicate, CancellationToken cancellationToken = default)
+	{
+		var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+		await using var contextDisposable = context.ConfigureAwait(false);
+		// Take(2) + count inspection — the same TOP(2)/LIMIT 2 SQL EF's SingleOrDefaultAsync emits,
+		// with the exception replaced by a count check. NEVER SingleOrDefaultAsync + catch: EF's
+		// InvalidOperationException is a junk drawer shared with untranslatable-predicate and
+		// context-lifetime failures — catching it would ship translation bugs up the wire as
+		// phantom duplicate data (well-and-wire spec §5.3, pinned by RepositorySingleTests).
+		var candidates = await Query(context, predicate).Select(_selector).Take(2).ToListAsync(cancellationToken).ConfigureAwait(false);
+		return candidates.Count switch
+		{
+			0 => Outcome<TView>.Err(ErrorCategory.NotFound),
+			1 => Outcome<TView>.Ok(candidates[0]),
+			_ => Outcome<TView>.Err(ErrorCategory.MultipleMatches),
+		};
+	}
 
-	public Task<Outcome<TProjection>> SingleAsync<TProjection>(Expression<Func<TView, bool>> predicate, Expression<Func<TView, TProjection>> projection, CancellationToken cancellationToken = default)
-		where TProjection : notnull =>
-		throw new NotImplementedException(); // Task 4
+	public async Task<Outcome<TProjection>> SingleAsync<TProjection>(Expression<Func<TView, bool>> predicate, Expression<Func<TView, TProjection>> projection, CancellationToken cancellationToken = default)
+		where TProjection : notnull
+	{
+		var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+		await using var contextDisposable = context.ConfigureAwait(false);
+		// Take(2) + count inspection — see the non-projection overload; the projection rides the SQL
+		// via Select(projection), it does not post-process a materialized TView.
+		var candidates = await Query(context, predicate).Select(_selector).Select(projection).Take(2).ToListAsync(cancellationToken).ConfigureAwait(false);
+		return candidates.Count switch
+		{
+			0 => Outcome<TProjection>.Err(ErrorCategory.NotFound),
+			1 => Outcome<TProjection>.Ok(candidates[0]),
+			_ => Outcome<TProjection>.Err(ErrorCategory.MultipleMatches),
+		};
+	}
 
 	IQueryable<TEntity> Query(TContext context, Expression<Func<TView, bool>> predicate) =>
 		context.Set<TEntity>().AsNoTracking().Where(PredicateRewriter.Rewrite<TEntity, TView>(predicate, map));
