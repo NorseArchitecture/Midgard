@@ -69,4 +69,8 @@ sealed record WidgetEntity : NorseEntityBase<WidgetEntity>, IViewBearer<WidgetVi
 // WidgetEntity/WidgetTagEntity in this project's own compilation.
 sealed partial class WellContext(DbContextOptions<WellContext> options) : NorseDbContext(options)
 {
+	// AddWell<TContext>'s discovery law (Task 5) scans public DbSet<TEntity> properties by CLR
+	// reflection, not the built EF model — RepositoryReadTests/PostgresContainerFixture never needed
+	// this accessor (they go through context.Set<WidgetEntity>() directly), but AddWellTests does.
+	public DbSet<WidgetEntity> Widgets => Set<WidgetEntity>();
 }

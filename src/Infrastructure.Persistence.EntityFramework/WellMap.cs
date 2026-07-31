@@ -53,8 +53,11 @@ sealed record WellMap
 		};
 	}
 
+	// internal, not private: WellValidation (Task 5) reuses the identical IEnumerable<T>-shape check
+	// to enforce the collection half of the total-mirror law against real EF model metadata — the
+	// smallest widening that avoids duplicating this exact reflection logic a second time.
 	[RequiresUnreferencedCode("Reflects over the element type's interfaces to detect IEnumerable<T> shapes; safe under the mirror law but not statically provable to the trimmer.")]
-	static Type? ElementType(Type type) =>
+	internal static Type? ElementType(Type type) =>
 		type != typeof(string) ?
 			type.GetInterfaces().Append(type)
 				.FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))

@@ -3,8 +3,8 @@ using Norse.Abstractions.Backend;
 namespace Norse.Infrastructure.Persistence.EntityFramework.Tests;
 
 // Mirror-law-conformant synthetic pair: every view scalar/collection name+type matches the entity.
-// PolicyView.Notes is deliberately view-extra (residual); PolicyEntity.RowStamp is deliberately
-// [NotProjected]-shaped (no view counterpart) for the Task 5 validation suite.
+// PolicyView.Notes is deliberately view-extra (residual) — no [NotProjected] exercise in this
+// synthetic model; see Task 5's ExemptContext (AddWellTests.cs) for that case.
 public sealed record PolicyClassCodeView(string Code);
 public sealed record PolicyClassCodeEntity(string Code);
 
