@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Persistence.EntityFramework: the EF Core embodiment of the well-and-wire read law — the generic Repository closing IReadRepository&lt;TView&gt; per well entity, the promoted-member predicate rewriter, and AddWell&lt;TContext&gt; startup wiring with total-mirror validation. Vendor-family named: a document-store implementation lands as a sibling project, never here.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<NorseRef Include="Abstractions.Backend">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+		<NorseRef Include="Persistence.EntityFramework">
+			<Repo>Urdarbrunnr</Repo>
+		</NorseRef>
+	</ItemGroup>
+</Project>

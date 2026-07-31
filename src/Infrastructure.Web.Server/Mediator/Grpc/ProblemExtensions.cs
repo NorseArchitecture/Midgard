@@ -35,6 +35,7 @@ public static class ProblemExtensions
 				ErrorCategory.NotAllowed => StatusCode.FailedPrecondition,
 				ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
 				ErrorCategory.Fault => StatusCode.Internal,
+				ErrorCategory.MultipleMatches => StatusCode.Internal,
 				_ => StatusCode.Unknown
 			};
 
