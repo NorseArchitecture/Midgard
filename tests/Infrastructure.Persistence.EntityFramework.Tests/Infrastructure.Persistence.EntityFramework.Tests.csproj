@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<ProjectReference Include="../../src/Infrastructure.Persistence.EntityFramework/Infrastructure.Persistence.EntityFramework.csproj" />
+	</ItemGroup>
+</Project>
