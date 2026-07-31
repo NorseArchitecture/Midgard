@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Norse.Persistence.EntityFramework.PostgreSQL;
 using Norse.Persistence.EntityFramework.SqlServer;
@@ -81,7 +82,10 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 
 		var map = WellMap.For<WidgetEntity, WidgetView>();
 		var alphaEffectiveDate = new DateOnly(2026, 1, 1);
-		Expression<Func<WidgetView, bool>> anchored = v => v.CustomerId == "C1" && v.EffectiveDate == alphaEffectiveDate && v.Notes == "hot";
+		// EF.Constant (not a bare captured local) for the same reason as the Postgres half: the
+		// plan-XML capture below needs a fully literal, standalone-executable statement — a captured
+		// local would leave an unresolved parameter reference in ToQueryString()'s output.
+		Expression<Func<WidgetView, bool>> anchored = v => v.CustomerId == "C1" && v.EffectiveDate == EF.Constant(alphaEffectiveDate) && v.Notes == "hot";
 		var rewritten = PredicateRewriter.Rewrite<WidgetEntity, WidgetView>(anchored, map);
 		var results = await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
 			.ToListAsync(TestContext.Current.CancellationToken);
@@ -100,6 +104,47 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 		commandText.ShouldContain(".[EffectiveDate] = ");
 		commandText.ShouldNotContain("CAST(");
 		commandText.ShouldNotContain("CONVERT(");
+
+		// Plan-XML capture — spec §9.6: "full plan XML capture is telemetry, dumped not asserted",
+		// distinct from (and in addition to) the sargable-shape assertion above. Deliberately a
+		// separate, isolated ADO.NET connection/command pair, never the DbContext's own connection:
+		// SET SHOWPLAN_XML ON changes session-level behavior for every subsequent statement on that
+		// connection (the next statement returns its plan instead of running), and SQL Server also
+		// requires SHOWPLAN_XML to be the only statement in its batch — sharing the context's
+		// connection would risk corrupting whatever EF itself does with it afterward. This block's
+		// own SqlConnection is opened, used for exactly this, and disposed here; the DbContext used
+		// above for the real, executed query is never touched by it.
+		var literalSql = SeekVerificationSupport.StripParameterCommentPreamble(
+			context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map)).ToQueryString());
+		await using SqlConnection planConnection = new(fixture.ConnectionString);
+		await planConnection.OpenAsync(TestContext.Current.CancellationToken);
+		string? planXml = null;
+		try
+		{
+			await using var showplanOn = planConnection.CreateCommand();
+			showplanOn.CommandText = "SET SHOWPLAN_XML ON";
+			await showplanOn.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+			await using var planCommand = planConnection.CreateCommand();
+			// `literalSql` is EF's own ToQueryString() output (via EF.Constant, same reasoning as the
+			// Postgres half) over a parameterized LINQ query the rewriter built from a strongly-typed
+			// predicate — never caller/user input, so CA2100's SQL-injection concern does not apply.
+#pragma warning disable CA2100
+			planCommand.CommandText = literalSql;
+#pragma warning restore CA2100
+			await using var reader = await planCommand.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+			if (await reader.ReadAsync(TestContext.Current.CancellationToken))
+				planXml = reader.GetString(0);
+		}
+		finally
+		{
+			await using var showplanOff = planConnection.CreateCommand();
+			showplanOff.CommandText = "SET SHOWPLAN_XML OFF";
+			await showplanOff.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+		}
+
+		output.WriteLine("--- SqlServer: Anchored_composite_query_is_sargable_shaped (SHOWPLAN_XML, telemetry only, not asserted) ---");
+		output.WriteLine(planXml ?? "(no plan returned)");
 	}
 }
 

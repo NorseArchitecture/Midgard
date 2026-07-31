@@ -107,7 +107,18 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 		TranslationCanarySupport.Dump(output, "SqlServer: Unpromoted_json_collection_any_translates_server_side", log);
 
 		outcome.Match(list => list.Count, _ => -1).ShouldBe(1);
-		log.ShouldContain(l => l.Contains("OPENJSON", StringComparison.OrdinalIgnoreCase));
+		// Confirmed against real SQL Server 2025 CI output on 2026-07-31 (x64 GitHub Actions
+		// runner — this test never ran on this repo's own arm64 dev host, which cannot start a SQL
+		// Server container at all; see SqlServerContainerFixture's remarks): the actual translation
+		// is JSON_CONTAINS(JSON_QUERY([w].[View], '$.Labels'), N'featured') = 1, SQL Server 2025's
+		// native-JSON-type array-membership function — a better fit for this platform's forced
+		// compat-170 floor than the older OPENJSON+cross-apply pattern this assertion originally
+		// guessed at. Both are real, valid server-side translations (never client-eval, never a
+		// throw), so both are accepted — same "accept multiple valid EF shapes" pattern already used
+		// for the TOP(@__p_0)/TOP(@p) parameter-naming check below.
+		log.ShouldContain(l =>
+			l.Contains("JSON_CONTAINS", StringComparison.OrdinalIgnoreCase) ||
+			l.Contains("OPENJSON", StringComparison.OrdinalIgnoreCase));
 	}
 
 	[Fact(SkipUnless = nameof(IsDockerAvailable), Skip = "Requires a running Docker daemon.")]

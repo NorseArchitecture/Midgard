@@ -1,4 +1,3 @@
-using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Norse.Persistence.EntityFramework;
 using Norse.Persistence.EntityFramework.SqlServer;
@@ -63,12 +62,18 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime
 		{
 			await _container.StartAsync();
 		}
-		catch (ContainerNotRunningException ex)
+		catch (Exception ex)
 		{
-			// Narrow catch, not a blanket one: only "the container process itself never came up"
-			// (this task's arm64/qemu discovery — see Available's remarks) degrades to a skip. Any
-			// other failure (bad options, a real code bug in seeding below) still propagates and
-			// fails loudly, per platform law.
+			// Scoped narrow by what this try block does, not by exception type: the qemu-emulation
+			// segfault (this fixture's original discovery — see Available's remarks) doesn't always
+			// fail the same way. One run threw ContainerNotRunningException; a later run instead threw
+			// System.NotSupportedException ("The sqlcmd binary could not be found") from Testcontainers'
+			// own readiness-wait sqlcmd-path probe, because the container died at a different point
+			// during startup before the probe could find it — same root cause, different exception
+			// shape. The only work this try block does is "start the container," so any exception here
+			// inherently means "it didn't come up" — catching Exception is scoped to that one call, not
+			// a blanket swallow of the fixture; seeding below (a real code bug there would be a real
+			// bug, not an environment limitation) stays outside this try and still fails loudly.
 			UnavailableReason = ex.Message;
 			return;
 		}
