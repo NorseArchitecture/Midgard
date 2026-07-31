@@ -1,3 +1,4 @@
+using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Norse.Persistence.EntityFramework;
 using Norse.Persistence.EntityFramework.SqlServer;
@@ -62,18 +63,24 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime
 		{
 			await _container.StartAsync();
 		}
-		catch (Exception ex)
+		// Two named types, not a bare catch (Exception) — platform law (Glitnir CLAUDE.md §8) is
+		// about exception-TYPE breadth, not which line of code the try wraps: narrowing the try block
+		// to just this one call reduces blast radius but does not, by itself, make catching
+		// Exception safe — a real unrelated bug (a bad connection string, a genuinely dead Docker
+		// daemon, disk exhaustion) would still silently degrade to "environment unavailable, skip"
+		// instead of failing loudly, which is exactly wrong on real CI, where a skip would mean
+		// something is actually broken. ContainerNotRunningException is Testcontainers' own signal
+		// that the container process died before becoming ready — the qemu-emulation segfault's
+		// direct shape. NotSupportedException is folded in narrowly for one specific, observed cause,
+		// not because it's a plausible-sounding BCL type: Testcontainers.MsSql's own
+		// MsSqlContainer.FindSqlCmdFilePathAsync() readiness-wait probe throws exactly this type,
+		// with message "The sqlcmd binary could not be found," when the container died at a slightly
+		// different point during the same qemu-emulated startup — before the probe could even locate
+		// the sqlcmd binary inside it — rather than after full readiness-check failure. Confirmed by
+		// reproducing both shapes locally, moments apart, same image, same host. Any other exception
+		// type is a real bug and propagates.
+		catch (Exception ex) when (ex is ContainerNotRunningException or NotSupportedException)
 		{
-			// Scoped narrow by what this try block does, not by exception type: the qemu-emulation
-			// segfault (this fixture's original discovery — see Available's remarks) doesn't always
-			// fail the same way. One run threw ContainerNotRunningException; a later run instead threw
-			// System.NotSupportedException ("The sqlcmd binary could not be found") from Testcontainers'
-			// own readiness-wait sqlcmd-path probe, because the container died at a different point
-			// during startup before the probe could find it — same root cause, different exception
-			// shape. The only work this try block does is "start the container," so any exception here
-			// inherently means "it didn't come up" — catching Exception is scoped to that one call, not
-			// a blanket swallow of the fixture; seeding below (a real code bug there would be a real
-			// bug, not an environment limitation) stays outside this try and still fails loudly.
 			UnavailableReason = ex.Message;
 			return;
 		}
