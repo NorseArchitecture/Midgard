@@ -3,6 +3,9 @@
 		<NorseRef Include="Persistence.EntityFramework" Generator="true">
 			<Repo>Urdarbrunnr</Repo>
 		</NorseRef>
+		<NorseRef Include="Persistence.EntityFramework.Migrations">
+			<Repo>Urdarbrunnr</Repo>
+		</NorseRef>
 		<NorseRef Include="Persistence.EntityFramework.PostgreSQL">
 			<Repo>Urdarbrunnr</Repo>
 		</NorseRef>
