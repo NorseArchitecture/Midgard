@@ -2,7 +2,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Norse.Abstractions.Backend;
+using Norse.Persistence.EntityFramework;
 
 namespace Norse.Infrastructure.Persistence.EntityFramework;
 
@@ -56,6 +58,31 @@ public static class ServiceCollectionExtensions
 			}
 		}
 		return services;
+	}
+
+	/// <summary>
+	/// Composes <see cref="NorseContextExtensions.AddNorseContextFactory{TContext}"/> (Urðarbrunnr's
+	/// provider seam, factory-shaped) with <see cref="AddWell{TContext}"/> (this class's own
+	/// well/repository discovery) into one call — the entry point every realm's runtime composition
+	/// should use instead of hand-rolling EF registration and remembering to chain discovery
+	/// afterward (well-composition spec §3.2).
+	/// </summary>
+	/// <typeparam name="TContext">
+	/// The <see cref="DbContext"/> type to register. Must implement <see cref="INorseDbContext"/>.
+	/// </typeparam>
+	/// <param name="builder">The host application builder.</param>
+	/// <param name="provider">The provider binding.</param>
+	/// <param name="connectionStringName">The configuration key under <c>ConnectionStrings</c>.</param>
+	/// <returns>The same <paramref name="builder"/> for chaining.</returns>
+	[RequiresUnreferencedCode("Scans TContext's public DbSet<TEntity> properties and each entity's interfaces via runtime reflection to discover well roots, then dispatches to RegisterCore<TContext,TEntity,TView> — the well-and-wire mirror law (spec §4.2) guarantees the shapes are valid at runtime, but neither the discovery scan nor the generic dispatch is statically provable to the trimmer.")]
+	[RequiresDynamicCode("Closes RegisterCore<TContext,TEntity,TView> via MakeGenericMethod over CLR types discovered at startup by reflection; a well's entity/view pairs are not known at compile time, so ahead-of-time generic instantiation cannot cover them.")]
+	public static IHostApplicationBuilder AddNorseWell<TContext>(this IHostApplicationBuilder builder,
+		INorseEfProvider provider, string connectionStringName)
+		where TContext : DbContext, INorseDbContext
+	{
+		builder.AddNorseContextFactory<TContext>(provider, connectionStringName);
+		builder.Services.AddWell<TContext>();
+		return builder;
 	}
 
 	[RequiresUnreferencedCode("Calls WellMap.For<TEntity,TView>, itself RequiresUnreferencedCode (well-and-wire spec §4.2 mirror law promotion map, not statically provable to the trimmer).")]

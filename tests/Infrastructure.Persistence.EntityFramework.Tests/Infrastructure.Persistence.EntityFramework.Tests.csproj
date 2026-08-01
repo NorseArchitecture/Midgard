@@ -10,6 +10,7 @@
 			<Repo>Urdarbrunnr</Repo>
 		</NorseRef>
 		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.*-*" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="11.*-*" />
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="11.*-*" />
 		<PackageReference Include="Testcontainers.MsSql" Version="*" />
 		<PackageReference Include="Testcontainers.PostgreSql" Version="*" />
