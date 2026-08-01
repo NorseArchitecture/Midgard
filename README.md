@@ -2,7 +2,9 @@
 
 > The realm of humankind, where the will of the gods takes physical form.
 
-![Midgard — the realm of humankind, where the will of the gods descends from Asgard and takes concrete form in the world](https://github.com/user-attachments/assets/fee3325c-7d69-4e78-85a4-328b7fe91f22 "Midgard — where the will of the gods takes physical form")
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/fee3325c-7d69-4e78-85a4-328b7fe91f22" alt="Midgard — the realm of humankind, where the will of the gods descends from Asgard and takes concrete form in the world" title="Midgard — where the will of the gods takes physical form" />
+</p>
 
 *Image credit: [@norsemythologyclips](https://www.instagram.com/norsemythologyclips/) — go follow them.*
 
