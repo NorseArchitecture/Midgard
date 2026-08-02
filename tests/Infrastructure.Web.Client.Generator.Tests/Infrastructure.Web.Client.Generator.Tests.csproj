@@ -1,8 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
 		<PackageReference Include="Grpc.Net.Client" Version="2.*" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11-*.*" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.*-*" />
 		<PackageReference Include="protobuf-net" Version="*" />
 		<PackageReference Include="protobuf-net.Grpc" Version="1.*" />
 		<!-- Overrides a known-vulnerable transitive version pulled in by System.ServiceModel.Primitives, mirroring Heimdall's AuthN.Services.csproj. -->
