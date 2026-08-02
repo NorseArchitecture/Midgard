@@ -1,5 +1,7 @@
 using System.Runtime.Serialization;
+using System.Text.Json.Nodes;
 using Microsoft.OpenApi;
+using Norse.Infrastructure.Web.Server.Xml;
 using Norse.Primitives;
 
 namespace Norse.Infrastructure.Web.Server.OpenApi;
@@ -11,13 +13,17 @@ namespace Norse.Infrastructure.Web.Server.OpenApi;
 /// runtime assembly cannot see the generator's compile-time-only symbol classification. A static
 /// dictionary keyed by CLR <see cref="Type"/>, not static abstract interface members — BCL types
 /// (<see cref="Guid"/>, <see cref="DateOnly"/>, …) cannot implement a Norse interface, so a per-type
-/// table is the honest mechanism (ratified at plan review, 2026-08-02). Deliberately narrower than
-/// the generator's own taxonomy: enum-typed <c>Result&lt;TEnum&gt;</c>/raw enum members are not
-/// covered — an enum is an open-ended CLR type, not a fixed BCL type, so it cannot key a closed
-/// static table the way the other nineteen rows do. Flagged as a known gap in Task 11's report;
-/// left untouched by both <see cref="ResultSchemaTransformer"/> and <see cref="XmlMetadataTransformer"/>
-/// rather than guessed at.
+/// table is the honest mechanism (ratified at plan review, 2026-08-02).
 /// </summary>
+/// <remarks>
+/// Enums are §7's twentieth row and are fully in scope — the BCL table above cannot key an
+/// open-ended CLR type by construction, so enums are handled by a separate, generic branch
+/// (<see cref="TryBuildEnumSchema"/>) mirroring how the Xml.Generator's own
+/// <c>ClosureWalker.Classify</c> (Task 5) resolves enums: a <c>type.IsEnum</c> check plus a reflected
+/// member table, never an enumeration of concrete enum types. (An earlier revision of this file
+/// wrongly treated enums as out of scope — corrected in the same fix round that added
+/// <see cref="TryBuildEnumSchema"/>.)
+/// </remarks>
 static class ScalarTaxonomy
 {
 	static readonly Dictionary<Type, (JsonSchemaType Type, string? Format)> _map = new()
@@ -58,9 +64,9 @@ static class ScalarTaxonomy
 	public static bool IsFutharkContract(Type type) =>
 		type.IsDefined(typeof(DataContractAttribute), inherit: false);
 
-	/// <summary>Whether <paramref name="type"/> is a row in the closed scalar table.</summary>
+	/// <summary>Whether <paramref name="type"/> is a row in the closed scalar table — the fixed BCL set or an enum.</summary>
 	public static bool IsClosedScalar(Type type) =>
-		_map.ContainsKey(type);
+		_map.ContainsKey(type) || type.IsEnum;
 
 	/// <summary>
 	/// Unwraps <c>Result&lt;T&gt;</c>/<c>Result&lt;T&gt;?</c>, returning the wrapped scalar type and
@@ -85,10 +91,11 @@ static class ScalarTaxonomy
 	}
 
 	/// <summary>
-	/// Builds a fresh, clean schema for a closed-taxonomy scalar type — a new instance every call,
+	/// Builds a fresh, clean schema for a fixed-BCL-row scalar type — a new instance every call,
 	/// deliberately: two properties sharing one mutable <see cref="OpenApiSchema"/> instance would
 	/// alias each other's later <c>Xml</c>/<c>ReadOnly</c>/<c>WriteOnly</c> stamps.
-	/// <see langword="false"/> outside the closed set (e.g. an enum).
+	/// <see langword="false"/> outside the closed BCL set — including an enum, which is
+	/// <see cref="TryBuildEnumSchema"/>'s row, not this one.
 	/// </summary>
 	public static bool TryBuildSchema(Type clrType, out OpenApiSchema schema)
 	{
@@ -99,6 +106,33 @@ static class ScalarTaxonomy
 		}
 
 		schema = new OpenApiSchema { Type = entry.Type, Format = entry.Format };
+		return true;
+	}
+
+	/// <summary>
+	/// Builds §7's twentieth taxonomy row — <see langword="false"/> for a non-enum type. Per spec §6.5
+	/// ("Enums: names, never numerics"), the schema is <c>string</c> with an <c>enum</c> keyword listing
+	/// every defined member's name, case-styled through <paramref name="style"/> exactly like
+	/// <see cref="XmlMetadataTransformer"/>'s attribute names — the same wire form the generated shapes
+	/// emit (spec §7's enums row: "case-styled member name(s)"). <c>[Flags]</c> enums still resolve to a
+	/// <c>string</c> schema listing the individual defined member names; the space-separated multi-token
+	/// combinations spec §6.5 allows for a flags value have no clean finite <c>enum</c> keyword
+	/// representation in JSON Schema, so this deliberately lists the token vocabulary rather than every
+	/// combination — a documented simplification, not a silent gap.
+	/// </summary>
+	public static bool TryBuildEnumSchema(Type clrType, XmlCaseStyle style, out OpenApiSchema schema)
+	{
+		if (!clrType.IsEnum)
+		{
+			schema = null!;
+			return false;
+		}
+
+		schema = new OpenApiSchema
+		{
+			Type = JsonSchemaType.String,
+			Enum = [.. Enum.GetNames(clrType).Select(name => (JsonNode)RuntimeNameCasing.Apply(style, name))]
+		};
 		return true;
 	}
 }

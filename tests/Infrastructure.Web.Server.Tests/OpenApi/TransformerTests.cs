@@ -44,6 +44,7 @@ public sealed class TransformerTests
 
 		required.ShouldContain("effectiveDate");
 		required.ShouldContain("lineCount");
+		required.ShouldContain("kind");
 		required.ShouldNotContain("expirationDate");
 	}
 
@@ -99,6 +100,25 @@ public sealed class TransformerTests
 		// XmlMetadataTransformer's remarks. The array property itself carries no stray xml stamp; the
 		// vocabulary's own unwrapped-by-default behavior already matches Futhark's law.
 		document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["lines"]!.AsObject().ContainsKey("xml").ShouldBeFalse();
+	}
+
+	[Fact]
+	async Task Result_wrapped_enum_renders_as_string_with_case_styled_member_names_not_the_leaky_union_shape()
+	{
+		var document = await BuildDocumentAsync();
+
+		// The closed BCL table cannot key an open-ended enum type — enums are §7's twentieth row,
+		// resolved through ScalarTaxonomy.TryBuildEnumSchema instead, mirroring how the generator's own
+		// ClosureWalker.Classify handles enums generically (type.IsEnum, not a table of concrete types).
+		var kind = document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["kind"]!;
+		kind["type"]!.GetValue<string>().ShouldBe("string");
+		kind.AsObject().ContainsKey("anyOf").ShouldBeFalse(); // never the default reflected union shape.
+
+		var members = kind["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+		members.ShouldBe(["general_liability", "property_damage"]);
+
+		kind["writeOnly"]!.GetValue<bool>().ShouldBeTrue();
+		kind["xml"]!["nodeType"]!.GetValue<string>().ShouldBe("attribute"); // the existing scalar-property stamping already covers enums once IsClosedScalar recognizes them — no separate branch needed.
 	}
 
 	[Fact]
@@ -238,7 +258,14 @@ sealed class QuoteRequest
 	public Result<DateOnly> EffectiveDate { get; init; }
 	public Result<DateOnly>? ExpirationDate { get; init; }
 	public Result<int> LineCount { get; init; }
+	public Result<CoverageKind> Kind { get; init; }
 	public List<CoverageLine> Lines { get; init; } = [];
+}
+
+enum CoverageKind
+{
+	GeneralLiability,
+	PropertyDamage
 }
 
 [DataContract]
