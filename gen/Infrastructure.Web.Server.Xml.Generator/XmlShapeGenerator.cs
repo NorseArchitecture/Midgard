@@ -1,5 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+using Norse.Abstractions.Emit;
 
 namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 
@@ -7,9 +9,10 @@ namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 
 /// <summary>
 /// Discovers facade controllers (<c>GrpcControllerBase</c> descendants, spec §4) in the host
-/// compilation and enforces Futhark's XML shape law (NORSE022-028) over their request/response
-/// closures at build time. Diagnostics only in this slice — shape emission is a later increment,
-/// gated on the same discovery this generator already performs.
+/// compilation, enforces Futhark's XML shape law (NORSE022-028) over their request/response closures
+/// at build time, and — new as of Task 6 — emits the canonical writer (<see cref="WriterEmitter"/>)
+/// for every distinct reachable contract shape. Reader emission (a later task) will extend the same
+/// emitted classes; this generator does not yet make them fully functional, only fully compiling.
 /// </summary>
 /// <remarks>
 /// <b>Incremental pipeline shape is load-bearing (spec §2, plan Task 5):</b> there is no attribute to
@@ -42,11 +45,49 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 			.Select(static (result, _) => result!.Value)
 			.WithTrackingName(ControllerShapesTrackingName);
 
-		context.RegisterSourceOutput(controllerShapes.Collect(), static (productionContext, results) =>
+		// The host's root namespace, projected down to a single equatable string — a lighter touch
+		// than the sibling generator's full CompilationProvider.Select(Discover), and deliberately so:
+		// the incrementality guarantee this generator exists to prove (see the class remarks and
+		// IncrementalCachingTests) belongs to the ControllerShapes step above; this second, independent
+		// pipeline node only ever recomputes a cheap string, never re-runs the closure walk.
+		var rootNamespace = context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName ?? "Norse.Generated");
+
+		context.RegisterSourceOutput(controllerShapes.Collect().Combine(rootNamespace), static (productionContext, pair) =>
 		{
+			var (results, hostRootNamespace) = pair;
+
+			var hasErrors = false;
 			foreach (var result in results)
 				foreach (var diagnostic in result.Diagnostics)
+				{
 					productionContext.ReportDiagnostic(diagnostic.ToDiagnostic());
+					hasErrors = true;
+				}
+
+			// Every NORSE022-028 diagnostic is an error — "you cannot compile an exposure Futhark
+			// cannot round-trip" (spec §2.2). A shape built alongside a reported violation can carry
+			// null ScalarTypeName/ComplexTypeName on the offending member (ClosureWalker.ClassifyMember),
+			// which WriterEmitter has no defined behavior for — skip emission entirely rather than risk
+			// the generator crashing (CS8785) over a shape the build was already going to reject.
+			if (hasErrors)
+				return;
+
+			// One shape class per distinct contract type, globally — not per (controller, shape) pair.
+			// The same complex type is legitimately reachable from more than one controller's closure;
+			// emitting it once per controller would double-declare the same class name and fail the
+			// host build with CS0101. Content is expected to be identical for the same TypeName (it's
+			// the same CLR type observed twice), so last-write-wins (.Last()) is safe.
+			var distinctShapes = results
+				.SelectMany(static r => r.Shapes)
+				.GroupBy(static s => s.TypeName, StringComparer.Ordinal)
+				.Select(static g => g.Last())
+				.OrderBy(static s => s.TypeName, StringComparer.Ordinal);
+
+			foreach (var shape in distinctShapes)
+			{
+				var shortName = WriterEmitter.ShortName(shape.TypeName);
+				productionContext.AddSource($"{shortName}XmlShape.g.cs", SourceText.From(WriterEmitter.Emit(hostRootNamespace, shape), Utf8NoBom.Encoding));
+			}
 		});
 	}
 

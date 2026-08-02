@@ -8,5 +8,6 @@
 		</NorseRef>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
 		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj" />
+		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>

@@ -27,22 +27,33 @@ static class GeneratorTestHarness
 	public static readonly MetadataReference[] ExtraReferences =
 	[
 		MetadataReference.CreateFromFile(typeof(Norse.Primitives.Result<>).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Server.Xml.IXmlShape).Assembly.Location),
 		.. ReferenceAssemblies.Bcl,
 		.. ReferenceAssemblies.AspNetCore
 	];
+
+	/// <summary>
+	/// Preview lang version — required from Task 6 onward, not by Task 5's own fixtures (diagnostics-
+	/// only; never called a <c>Result&lt;T&gt;</c> member). <c>Result&lt;T&gt;</c>/<c>Success&lt;T&gt;</c>
+	/// carry the <c>[Union]</c> C# 15 preview attribute, and generator-emitted writer code (Task 6) calls
+	/// <c>Result&lt;T&gt;.TryGetValue(...)</c> directly — without this, the emitted source (parsed with
+	/// whatever parse options this fixture compilation carries) fails CS8652 ("the feature 'unions' is
+	/// currently in Preview") the moment it's added to the compilation, cascading into unrelated CS1061s.
+	/// </summary>
+	public static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Preview);
 
 	/// <summary>Builds the fixture compilation, stub base class included, unrun.</summary>
 	public static Compilation CreateCompilation(params string[] sources) =>
 		CSharpCompilation.Create(
 			"Norse.Hosting.Web.Server",
-			[.. new[] { StubGrpcControllerBase }.Concat(sources).Select(s => CSharpSyntaxTree.ParseText(s))],
+			[.. new[] { StubGrpcControllerBase }.Concat(sources).Select(s => CSharpSyntaxTree.ParseText(s, ParseOptions))],
 			ExtraReferences,
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
 	/// <summary>Runs the real generator once against fixture source, the stub base class included.</summary>
 	public static (ImmutableArray<Diagnostic> Diagnostics, Compilation OutputCompilation) Run(params string[] sources)
 	{
-		_ = CSharpGeneratorDriver.Create([new XmlShapeGenerator().AsSourceGenerator()])
+		_ = CSharpGeneratorDriver.Create([new XmlShapeGenerator().AsSourceGenerator()], parseOptions: ParseOptions)
 			.RunGeneratorsAndUpdateCompilation(CreateCompilation(sources), out var outputCompilation, out var diagnostics);
 		return (diagnostics, outputCompilation);
 	}
