@@ -112,6 +112,26 @@ public sealed class ResultSerializerTests
 	}
 
 	[Fact]
+	void Result_of_decimal_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(1234.56m);
+
+	[Fact]
+	void Result_of_DateTime_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new DateTime(2026, 7, 27, 12, 0, 0, DateTimeKind.Utc));
+
+	[Fact]
+	void Result_of_TimeSpan_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new TimeSpan(1, 2, 3, 4));
+
+	[Fact]
+	void Result_of_DateOnly_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new DateOnly(2026, 8, 1));
+
+	[Fact]
+	void Result_of_TimeOnly_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new TimeOnly(14, 30, 0));
+
+	[Fact]
 	void Round_trips_Result_of_bool() => AssertRoundTrips(true);
 
 	[Fact]
@@ -183,6 +203,24 @@ public sealed class ResultSerializerTests
 		back.Value.TryGetValue(out Success<T> success).ShouldBeTrue();
 		success.Value.ShouldBe(value);
 	}
+
+	// Mirrors IdentifierSerializersTests.Applies_level_300_semantics_per_member_without_touching_the_model_default:
+	// a fresh reference model with DefaultCompatibilityLevel pinned to Level300 is the platform's own
+	// yardstick for "what does a naked T field look like." Result<T>'s Success-cased wire bytes must be
+	// byte-identical to it — a self-consistent round trip against our own custom serializer alone would
+	// not catch a regression that broke Level300 cross-model compatibility while still round-tripping
+	// against itself.
+	static void AssertMatchesLevel300<T>(T value) where T : notnull
+	{
+		var reference = RuntimeTypeModel.Create();
+		reference.DefaultCompatibilityLevel = CompatibilityLevel.Level300;
+		var expected = TestModel.Serialize(reference, new PlainEnvelope<T> { Value = value });
+
+		var model = TestModel.Create();
+		var actual = TestModel.Serialize(model, new Envelope<T> { Value = new Success<T>(value) });
+
+		actual.ShouldBe(expected);
+	}
 }
 
 [ProtoContract]
@@ -190,6 +228,13 @@ public sealed class Envelope<T> where T : notnull
 {
 	[ProtoMember(1)]
 	public Result<T> Value { get; set; }
+}
+
+[ProtoContract]
+public sealed class PlainEnvelope<T> where T : notnull
+{
+	[ProtoMember(1)]
+	public T Value { get; set; } = default!;
 }
 
 [ProtoContract]
