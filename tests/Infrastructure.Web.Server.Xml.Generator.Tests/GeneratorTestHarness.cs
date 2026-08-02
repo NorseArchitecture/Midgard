@@ -42,13 +42,25 @@ static class GeneratorTestHarness
 	/// </summary>
 	public static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Preview);
 
-	/// <summary>Builds the fixture compilation, stub base class included, unrun.</summary>
+	/// <summary>
+	/// Builds the fixture compilation, stub base class included, unrun. <c>WithGeneralDiagnosticOption
+	/// (ReportDiagnostic.Error)</c> plus <c>WithWarningLevel(9999)</c> mirror
+	/// <c>TreatWarningsAsErrors</c>/<c>WarningLevel</c> from the platform's real root
+	/// <c>Directory.Build.props</c> — every real consuming project (a downstream <c>.csproj</c> like
+	/// Yggdrasil's) compiles generator output warnings-as-errors, so this harness must too, or a
+	/// generator that emits genuinely unreachable code (CS0162 among it) can pass here and still break
+	/// a real build. Without this, <c>Emit(...).Success</c> stays <see langword="true"/> even with
+	/// warning-severity diagnostics sitting unexamined in the emit result — exactly how the CS0162
+	/// regression this harness now guards against shipped past this project's own test suite once.
+	/// </summary>
 	public static Compilation CreateCompilation(params string[] sources) =>
 		CSharpCompilation.Create(
 			"Norse.Hosting.Web.Server",
 			[.. new[] { StubGrpcControllerBase }.Concat(sources).Select(s => CSharpSyntaxTree.ParseText(s, ParseOptions))],
 			ExtraReferences,
-			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+				.WithGeneralDiagnosticOption(ReportDiagnostic.Error)
+				.WithWarningLevel(9999));
 
 	/// <summary>Runs the real generator once against fixture source, the stub base class included.</summary>
 	public static (ImmutableArray<Diagnostic> Diagnostics, Compilation OutputCompilation) Run(params string[] sources)

@@ -111,6 +111,68 @@ public sealed class WriterEmissionTests
 		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
+	const string TruncationFixture = """
+		#nullable enable
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.WriterTruncation;
+
+		[DataContract]
+		public sealed record TruncationRequest
+		{
+			public Result<string> First { get; init; }
+			public Result<int> Second { get; init; }
+			public TruncationNested Nested { get; init; } = null!;
+		}
+
+		public sealed record TruncationNested
+		{
+			public Result<string> Value { get; init; }
+		}
+
+		public sealed record TruncationResponse
+		{
+			public string Status { get; init; } = "";
+		}
+
+		public sealed class TruncationController : GrpcControllerBase
+		{
+			public Task<ActionResult<TruncationResponse>> Do([FromBody] TruncationRequest request) =>
+				Task.FromResult(new ActionResult<TruncationResponse>(new TruncationResponse()));
+		}
+		""";
+
+	// Regression for the CS0162 bug (design spec review, Task 13): TruncationRequestXmlShape.g.cs's
+	// Write method has TWO required Result<T>-wrapped scalars (First, Second) in declaration order,
+	// plus a required complex member (Nested) after them. Before the fix, WriterEmitter kept emitting
+	// Second's throw, Nested's write, and the closing WriteEndElement — all genuinely unreachable the
+	// moment First's unconditional throw fires, and a strict compilation (GeneratorTestHarness now
+	// mirrors real-project TreatWarningsAsErrors) correctly refused to build it. CompiledFixture.Build's
+	// own `emitResult.Success.ShouldBeTrue()` — running through the harness's strict
+	// CSharpCompilationOptions — IS this test's regression assertion: this fixture would not have
+	// compiled before the fix. What follows additionally proves only the FIRST required member's throw
+	// is ever reached, whatever state the later members carry.
+	[Fact]
+	void A_request_with_two_required_Result_members_and_a_trailing_complex_member_compiles_clean_and_only_the_first_member_throws()
+	{
+		var compiled = CompiledFixture.Build(TruncationFixture);
+		var shape = compiled.Shape("TruncationRequest");
+
+		var request = compiled.CreateInstance("Norse.Fixtures.WriterTruncation.TruncationRequest",
+			("First", new Result<string>(new Success<string>("only-member-that-matters"))),
+			("Second", new Result<int>(new Success<int>(42))),
+			("Nested", compiled.CreateInstance("Norse.Fixtures.WriterTruncation.TruncationNested",
+				("Value", new Result<string>(new Success<string>("also-never-reached"))))));
+
+		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.SnakeCase));
+
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
+	}
+
 	const string ResponseFixture = """
 		#nullable enable
 		using System.Collections.Generic;
