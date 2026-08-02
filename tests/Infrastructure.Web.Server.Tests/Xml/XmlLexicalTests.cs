@@ -69,7 +69,7 @@ public sealed class XmlLexicalTests
 	[Fact]
 	void Format_char_throws_on_xml_illegal_control_character()
 	{
-		var exception = Should.Throw<InvalidOperationException>(() => XmlLexical.Format(''));
+		var exception = Should.Throw<InvalidOperationException>(() => XmlLexical.Format('\u0001'));
 		exception.Message.ShouldNotBeNullOrWhiteSpace();
 	}
 
