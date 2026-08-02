@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Norse.Primitives;
 using ProtoBuf;
@@ -6,141 +7,56 @@ using ProtoBuf.Serializers;
 namespace Norse.Infrastructure.Web.Grpc;
 
 /// <summary>
-/// Puts a scalar <see cref="Result{T}"/> on the wire as the naked <typeparamref name="T"/>,
-/// presence-tracked: a successful <see cref="Result{T}"/> writes <typeparamref name="T"/> directly,
-/// in whatever form protobuf-net already gives a plain <typeparamref name="T"/> field (or, for
-/// <see cref="Guid"/> and <see cref="DateTimeOffset"/> — types protobuf-net cannot natively
-/// represent or whose default representation this platform overrides — <see cref="GuidWire"/> /
-/// <see cref="DateTimeOffsetWire"/>); a failed or default <see cref="Result{T}"/> is illegal to
-/// write and throws. Reading only ever happens for a tag protobuf-net found on the wire, so a
-/// present field always resurrects as <see cref="Success{T}"/> — no parsing, the binary is already
-/// typed. <see cref="Result{T}"/>'s own dispatch over the closed <see cref="ISpanParsable{TSelf}"/>
+/// Puts a scalar <see cref="Result{T}"/> on the wire as a plain protobuf <c>string</c> field,
+/// presence-tracked: <see cref="Write"/> always throws — <see cref="Result{T}"/> is a
+/// deserialization-only type, and nothing downstream of a valid <typeparamref name="T"/> has
+/// legitimate business round-tripping it back through the type that exists to validate untrusted
+/// input in the first place. <see cref="Read"/> funnels the wire string through
+/// <see cref="Parser.ParseRequired{T}"/> — the same funnel the JSON and XML legs use — so a
+/// genuinely malformed string on the wire (e.g. a non-.NET producer sending <c>"2026-02-30"</c>)
+/// produces the platform's one typed <see cref="Failure"/>, never a structurally-unrepresentable
+/// native binary decode. A present field always parses; an absent field is protobuf-net's own
+/// <see cref="Nullable{T}"/>/default-on-missing-tag behavior and never reaches this type at all —
+/// <see cref="Read"/> is only ever invoked for a tag protobuf-net actually found on the wire.
+/// <see cref="Result{T}"/>'s own dispatch over the closed <see cref="ISpanParsable{TSelf}"/>
 /// taxonomy is <c>typeof</c>-branched and JIT-eliminated per closed generic instantiation, the same
 /// pattern <c>Norse.Primitives.Parser</c> itself uses — <see cref="Unsafe.As{TFrom,TTo}"/> is a sound
-/// identity reinterpret in each branch because <typeparamref name="T"/> is statically the branch's
-/// concrete type there, never a real layout coercion.
+/// identity reinterpret in the <see cref="string"/> branch because <typeparamref name="T"/> is
+/// statically <see cref="string"/> there, never a real layout coercion.
 /// </summary>
 /// <typeparam name="T">The validated value's type — one row of the platform's closed scalar taxonomy.</typeparam>
 sealed class ResultSerializer<T> : ISerializer<Result<T>>, ISerializer<Result<T>?> where T : notnull, ISpanParsable<T>
 {
 	public SerializerFeatures Features =>
-		SerializerFeatures.CategoryScalar | WireFeature();
+		SerializerFeatures.CategoryScalar | SerializerFeatures.WireTypeString;
 
-	public Result<T> Read(ref ProtoReader.State state, Result<T> value) =>
-		new Success<T>(ReadScalar(ref state));
-
-	public void Write(ref ProtoWriter.State state, Result<T> value)
+	public Result<T> Read(ref ProtoReader.State state, Result<T> value)
 	{
-		if (!value.TryGetValue(out Success<T> success))
-			throw new InvalidOperationException("a failed or default Result<T> is illegal to write");
-		WriteScalar(ref state, success.Value);
+		var text = state.ReadString(null) ?? string.Empty;
+
+		// Present is content, always — even an empty wire string is a present value, not "required
+		// missing" (there is no absent-vs-empty distinction to preserve here: an absent field never
+		// reaches this method at all, per the class remarks). string has nothing to parse — the wire
+		// text IS the domain value — so it bypasses Parser.ParseRequired<string> exactly the way the
+		// JSON and XML legs' own string carve-outs do; every other type in the taxonomy routes through
+		// the parser.
+		if (typeof(T) == typeof(string))
+		{
+			Result<string> routed = new Success<string>(text);
+			return Unsafe.As<Result<string>, Result<T>>(ref routed);
+		}
+
+		return Parser.ParseRequired<T>(text, CultureInfo.InvariantCulture);
 	}
+
+	/// <exception cref="InvalidOperationException">Always.</exception>
+	public void Write(ref ProtoWriter.State state, Result<T> value) =>
+		throw new InvalidOperationException("Result<T> is a deserialization-only type and must never be written");
 
 	Result<T>? ISerializer<Result<T>?>.Read(ref ProtoReader.State state, Result<T>? value) =>
 		Read(ref state, value.GetValueOrDefault());
 
+	/// <exception cref="InvalidOperationException">Always.</exception>
 	void ISerializer<Result<T>?>.Write(ref ProtoWriter.State state, Result<T>? value) =>
 		Write(ref state, value.GetValueOrDefault());
-
-	static SerializerFeatures WireFeature()
-	{
-		if (typeof(T) == typeof(float))
-			return SerializerFeatures.WireTypeFixed32;
-		if (typeof(T) == typeof(double))
-			return SerializerFeatures.WireTypeFixed64;
-		if (typeof(T) == typeof(string) || typeof(T) == typeof(decimal) || typeof(T) == typeof(Guid) ||
-			typeof(T) == typeof(DateTime) || typeof(T) == typeof(DateTimeOffset) || typeof(T) == typeof(TimeSpan))
-			return SerializerFeatures.WireTypeString;
-		return SerializerFeatures.WireTypeVarint;
-	}
-
-	static T ReadScalar(ref ProtoReader.State state)
-	{
-		if (typeof(T) == typeof(bool))
-		{ var v = state.ReadBoolean(); return Unsafe.As<bool, T>(ref v); }
-		if (typeof(T) == typeof(byte))
-		{ var v = state.ReadByte(); return Unsafe.As<byte, T>(ref v); }
-		if (typeof(T) == typeof(sbyte))
-		{ var v = state.ReadSByte(); return Unsafe.As<sbyte, T>(ref v); }
-		if (typeof(T) == typeof(short))
-		{ var v = state.ReadInt16(); return Unsafe.As<short, T>(ref v); }
-		if (typeof(T) == typeof(ushort))
-		{ var v = state.ReadUInt16(); return Unsafe.As<ushort, T>(ref v); }
-		if (typeof(T) == typeof(int))
-		{ var v = state.ReadInt32(); return Unsafe.As<int, T>(ref v); }
-		if (typeof(T) == typeof(uint))
-		{ var v = state.ReadUInt32(); return Unsafe.As<uint, T>(ref v); }
-		if (typeof(T) == typeof(long))
-		{ var v = state.ReadInt64(); return Unsafe.As<long, T>(ref v); }
-		if (typeof(T) == typeof(ulong))
-		{ var v = state.ReadUInt64(); return Unsafe.As<ulong, T>(ref v); }
-		if (typeof(T) == typeof(float))
-		{ var v = state.ReadSingle(); return Unsafe.As<float, T>(ref v); }
-		if (typeof(T) == typeof(double))
-		{ var v = state.ReadDouble(); return Unsafe.As<double, T>(ref v); }
-		if (typeof(T) == typeof(decimal))
-		{ var v = BclHelpers.ReadDecimalString(ref state); return Unsafe.As<decimal, T>(ref v); }
-		if (typeof(T) == typeof(char))
-		{ var v = (char)state.ReadUInt16(); return Unsafe.As<char, T>(ref v); }
-		if (typeof(T) == typeof(string))
-		{ var v = state.ReadString(null) ?? string.Empty; return Unsafe.As<string, T>(ref v); }
-		if (typeof(T) == typeof(Guid))
-		{ var v = GuidWire.Read(ref state); return Unsafe.As<Guid, T>(ref v); }
-		if (typeof(T) == typeof(DateOnly))
-		{ var v = BclHelpers.ReadDateOnly(ref state); return Unsafe.As<DateOnly, T>(ref v); }
-		if (typeof(T) == typeof(TimeOnly))
-		{ var v = BclHelpers.ReadTimeOnly(ref state); return Unsafe.As<TimeOnly, T>(ref v); }
-		if (typeof(T) == typeof(DateTime))
-		{ var v = BclHelpers.ReadTimestamp(ref state); return Unsafe.As<DateTime, T>(ref v); }
-		if (typeof(T) == typeof(DateTimeOffset))
-		{ var v = DateTimeOffsetWire.Read(ref state); return Unsafe.As<DateTimeOffset, T>(ref v); }
-		if (typeof(T) == typeof(TimeSpan))
-		{ var v = BclHelpers.ReadDuration(ref state); return Unsafe.As<TimeSpan, T>(ref v); }
-		throw new NotSupportedException($"No Result<{typeof(T).Name}> wire mapping registered.");
-	}
-
-	static void WriteScalar(ref ProtoWriter.State state, T value)
-	{
-		if (typeof(T) == typeof(bool))
-		{ state.WriteBoolean(Unsafe.As<T, bool>(ref value)); return; }
-		if (typeof(T) == typeof(byte))
-		{ state.WriteByte(Unsafe.As<T, byte>(ref value)); return; }
-		if (typeof(T) == typeof(sbyte))
-		{ state.WriteSByte(Unsafe.As<T, sbyte>(ref value)); return; }
-		if (typeof(T) == typeof(short))
-		{ state.WriteInt16(Unsafe.As<T, short>(ref value)); return; }
-		if (typeof(T) == typeof(ushort))
-		{ state.WriteUInt16(Unsafe.As<T, ushort>(ref value)); return; }
-		if (typeof(T) == typeof(int))
-		{ state.WriteInt32(Unsafe.As<T, int>(ref value)); return; }
-		if (typeof(T) == typeof(uint))
-		{ state.WriteUInt32(Unsafe.As<T, uint>(ref value)); return; }
-		if (typeof(T) == typeof(long))
-		{ state.WriteInt64(Unsafe.As<T, long>(ref value)); return; }
-		if (typeof(T) == typeof(ulong))
-		{ state.WriteUInt64(Unsafe.As<T, ulong>(ref value)); return; }
-		if (typeof(T) == typeof(float))
-		{ state.WriteSingle(Unsafe.As<T, float>(ref value)); return; }
-		if (typeof(T) == typeof(double))
-		{ state.WriteDouble(Unsafe.As<T, double>(ref value)); return; }
-		if (typeof(T) == typeof(decimal))
-		{ BclHelpers.WriteDecimalString(ref state, Unsafe.As<T, decimal>(ref value)); return; }
-		if (typeof(T) == typeof(char))
-		{ state.WriteUInt16(Unsafe.As<T, char>(ref value)); return; }
-		if (typeof(T) == typeof(string))
-		{ state.WriteString(Unsafe.As<T, string>(ref value), null); return; }
-		if (typeof(T) == typeof(Guid))
-		{ GuidWire.Write(ref state, Unsafe.As<T, Guid>(ref value)); return; }
-		if (typeof(T) == typeof(DateOnly))
-		{ BclHelpers.WriteDateOnly(ref state, Unsafe.As<T, DateOnly>(ref value)); return; }
-		if (typeof(T) == typeof(TimeOnly))
-		{ BclHelpers.WriteTimeOnly(ref state, Unsafe.As<T, TimeOnly>(ref value)); return; }
-		if (typeof(T) == typeof(DateTime))
-		{ BclHelpers.WriteTimestamp(ref state, Unsafe.As<T, DateTime>(ref value)); return; }
-		if (typeof(T) == typeof(DateTimeOffset))
-		{ DateTimeOffsetWire.Write(ref state, Unsafe.As<T, DateTimeOffset>(ref value)); return; }
-		if (typeof(T) == typeof(TimeSpan))
-		{ BclHelpers.WriteDuration(ref state, Unsafe.As<T, TimeSpan>(ref value)); return; }
-		throw new NotSupportedException($"No Result<{typeof(T).Name}> wire mapping registered.");
-	}
 }
