@@ -62,77 +62,120 @@ public sealed class WriterEmissionTests
 		}
 		""";
 
-	[Fact]
-	void QuoteRequest_writes_the_brief_literal_example_byte_exact_with_root_declaration()
+	// Result<T> is a deserialization-only type — Write always throws, for every state, success
+	// included. Matches the JSON leg's ResultJsonConverter<T> and the gRPC leg's ResultSerializer<T>
+	// wording exactly: one platform law, one message, regardless of channel.
+	const string DeserializationOnlyMessage = "Result<T> is a deserialization-only type and must never be written";
+
+	[Theory]
+	[MemberData(nameof(RequiredResultStates))]
+	void Writing_any_state_of_a_required_Result_wrapped_member_throws_and_writes_nothing_further(string label, Result<decimal> limit)
 	{
+		// QuoteRequest's only scalar member (Limit) is Result<decimal>-wrapped and required — every
+		// possible state throws before a single byte is written, so the brief's literal "writes the
+		// clean value" example no longer has a legal outbound form. Coverages left empty: whatever
+		// state Coverages' own CoverageLine.Code carried would be moot — Limit throws first (attributes
+		// write before children in declaration order).
 		var compiled = CompiledFixture.Build(QuoteFixture);
 		var shape = compiled.Shape("QuoteRequest");
 
-		var coverageLine = compiled.CreateInstance("Norse.Fixtures.WriterQuote.CoverageLine",
-			("Code", new Result<string>(new Success<string>("GL"))));
-		var coverages = compiled.CreateList("Norse.Fixtures.WriterQuote.CoverageLine", coverageLine);
-		// Effective left unset — Result<DateOnly>? defaults to null, the "omitted optional" case.
 		var quoteRequest = compiled.CreateInstance("Norse.Fixtures.WriterQuote.QuoteRequest",
-			("Limit", new Result<decimal>(new Success<decimal>(1234.56m))),
-			("Coverages", coverages));
+			("Limit", limit),
+			("Coverages", compiled.CreateList("Norse.Fixtures.WriterQuote.CoverageLine")));
 
-		var xml = WriteRoot(shape, quoteRequest, WireCaseStyle.SnakeCase);
+		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(shape, quoteRequest, WireCaseStyle.SnakeCase));
 
-		// Note: XmlWriter always renders a self-closing element as "<tag ... />" (space before "/>") —
-		// verified against real XmlWriter output (no XmlWriterSettings combination suppresses it; not
-		// an emitter choice). The brief's literal example text omits that space; this assertion follows
-		// verified runtime behavior over the brief's prose. Flagged in the task report.
-		xml.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><quote_request limit="1234.56"><coverage_line code="GL" /></quote_request>""");
+		exception.Message.ShouldBe(DeserializationOnlyMessage, label);
 	}
 
-	[Fact]
-	void An_empty_collection_writes_zero_child_elements()
+	public static TheoryData<string, Result<decimal>> RequiredResultStates() => new()
 	{
-		var compiled = CompiledFixture.Build(QuoteFixture);
-		var shape = compiled.Shape("QuoteRequest");
-
-		var emptyCoverages = compiled.CreateList("Norse.Fixtures.WriterQuote.CoverageLine");
-		var quoteRequest = compiled.CreateInstance("Norse.Fixtures.WriterQuote.QuoteRequest",
-			("Limit", new Result<decimal>(new Success<decimal>(1234.56m))),
-			("Coverages", emptyCoverages));
-
-		var xml = WriteRoot(shape, quoteRequest, WireCaseStyle.SnakeCase);
-
-		xml.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><quote_request limit="1234.56" />""");
-	}
+		{ "success", new Success<decimal>(1234.56m) },
+		{ "failure", new Failure(ParseFailure.Malformed, "nope", nameof(Decimal)) },
+		{ "default", default },
+	};
 
 	[Fact]
-	void A_nested_complex_member_written_directly_as_a_fragment_carries_no_declaration()
+	void A_nested_Result_wrapped_member_throws_the_same_way_a_root_level_one_does()
 	{
+		// CoverageLine's only member (Code) is Result<string>-wrapped — proves the law applies uniformly
+		// at any nesting depth, not just at the root the theory above already covers.
 		var compiled = CompiledFixture.Build(QuoteFixture);
 		var coverageShape = compiled.Shape("CoverageLine");
 
 		var coverageLine = compiled.CreateInstance("Norse.Fixtures.WriterQuote.CoverageLine",
 			("Code", new Result<string>(new Success<string>("GL"))));
 
-		var xml = WriteFragment(coverageShape, coverageLine, WireCaseStyle.SnakeCase);
+		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(coverageShape, coverageLine, WireCaseStyle.SnakeCase));
 
-		xml.ShouldBe("""<coverage_line code="GL" />""");
-		xml.ShouldNotContain("<?xml");
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
+	const string TruncationFixture = """
+		#nullable enable
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.WriterTruncation;
+
+		[DataContract]
+		public sealed record TruncationRequest
+		{
+			public Result<string> First { get; init; }
+			public Result<int> Second { get; init; }
+			public TruncationNested Nested { get; init; } = null!;
+		}
+
+		public sealed record TruncationNested
+		{
+			public Result<string> Value { get; init; }
+		}
+
+		public sealed record TruncationResponse
+		{
+			public string Status { get; init; } = "";
+		}
+
+		public sealed class TruncationController : GrpcControllerBase
+		{
+			public Task<ActionResult<TruncationResponse>> Do([FromBody] TruncationRequest request) =>
+				Task.FromResult(new ActionResult<TruncationResponse>(new TruncationResponse()));
+		}
+		""";
+
+	// Regression for the CS0162 bug (design spec review, Task 13): TruncationRequestXmlShape.g.cs's
+	// Write method has TWO required Result<T>-wrapped scalars (First, Second) in declaration order,
+	// plus a required complex member (Nested) after them. Before the fix, WriterEmitter kept emitting
+	// Second's throw, Nested's write, and the closing WriteEndElement — all genuinely unreachable the
+	// moment First's unconditional throw fires, and a strict compilation (GeneratorTestHarness now
+	// mirrors real-project TreatWarningsAsErrors) correctly refused to build it. CompiledFixture.Build's
+	// own `emitResult.Success.ShouldBeTrue()` — running through the harness's strict
+	// CSharpCompilationOptions — IS this test's regression assertion: this fixture would not have
+	// compiled before the fix. What follows additionally proves only the FIRST required member's throw
+	// is ever reached, whatever state the later members carry.
 	[Fact]
-	void A_failed_required_Result_throws_the_exact_message_and_writes_nothing_further()
+	void A_request_with_two_required_Result_members_and_a_trailing_complex_member_compiles_clean_and_only_the_first_member_throws()
 	{
-		var compiled = CompiledFixture.Build(QuoteFixture);
-		var shape = compiled.Shape("QuoteRequest");
+		var compiled = CompiledFixture.Build(TruncationFixture);
+		var shape = compiled.Shape("TruncationRequest");
 
-		var quoteRequest = compiled.CreateInstance("Norse.Fixtures.WriterQuote.QuoteRequest",
-			("Limit", default(Result<decimal>)),
-			("Coverages", compiled.CreateList("Norse.Fixtures.WriterQuote.CoverageLine")));
+		var request = compiled.CreateInstance("Norse.Fixtures.WriterTruncation.TruncationRequest",
+			("First", new Result<string>(new Success<string>("only-member-that-matters"))),
+			("Second", new Result<int>(new Success<int>(42))),
+			("Nested", compiled.CreateInstance("Norse.Fixtures.WriterTruncation.TruncationNested",
+				("Value", new Result<string>(new Success<string>("also-never-reached"))))));
 
-		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(shape, quoteRequest, WireCaseStyle.SnakeCase));
+		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.SnakeCase));
 
-		exception.Message.ShouldBe("a failed Result<T> is illegal to write");
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	const string ResponseFixture = """
 		#nullable enable
+		using System.Collections.Generic;
 		using System.Runtime.Serialization;
 		using System.Threading.Tasks;
 		using Microsoft.AspNetCore.Mvc;
@@ -152,11 +195,17 @@ public sealed class WriterEmissionTests
 			public string Note { get; init; } = "";
 		}
 
+		public sealed record Tag
+		{
+			public string Name { get; init; } = "";
+		}
+
 		public sealed record PingResponse
 		{
 			public int Code { get; init; }
 			public string? Note { get; init; }
 			public Extra? Detail { get; init; }
+			public List<Tag> Tags { get; init; } = new();
 		}
 
 		public sealed class PingController : GrpcControllerBase
@@ -195,6 +244,33 @@ public sealed class WriterEmissionTests
 		var withDetail = compiled.CreateInstance("Norse.Fixtures.WriterResponse.PingResponse", ("Code", 200), ("Detail", extra));
 		WriteRoot(shape, withDetail, WireCaseStyle.SnakeCase)
 			.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><ping_response code="200"><extra note="hi" /></ping_response>""");
+	}
+
+	[Fact]
+	void A_raw_collection_member_writes_zero_children_when_empty_and_one_per_item_when_populated()
+	{
+		// PingResponse's scalar/nested-complex members are all Result-free (response-side law), so this
+		// is the surviving coverage of the general collection-writing mechanic — empty foreach writes
+		// nothing, a populated list writes one child element per item, in order — now that QuoteRequest's
+		// own Coverages list can never write a single byte (its item type, CoverageLine, is Result-wrapped
+		// and always throws).
+		var compiled = CompiledFixture.Build(ResponseFixture);
+		var shape = compiled.Shape("PingResponse");
+
+		var withoutTags = compiled.CreateInstance("Norse.Fixtures.WriterResponse.PingResponse", ("Code", 200));
+		WriteRoot(shape, withoutTags, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><ping_response code="200" />""");
+
+		var tagA = compiled.CreateInstance("Norse.Fixtures.WriterResponse.Tag", ("Name", "a"));
+		var tagB = compiled.CreateInstance("Norse.Fixtures.WriterResponse.Tag", ("Name", "b"));
+		var tags = compiled.CreateList("Norse.Fixtures.WriterResponse.Tag", tagA, tagB);
+		var withTags = compiled.CreateInstance("Norse.Fixtures.WriterResponse.PingResponse", ("Code", 200), ("Tags", tags));
+
+		// Fragment form here also keeps "a fragment carries no XML declaration" covered — the only prior
+		// test of that fact (QuoteFixture's nested CoverageLine) is gone now that Result<T> can never
+		// write, and this member (Tag.Name) is raw, so it can actually reach WriteFragment successfully.
+		WriteFragment(shape, withTags, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<ping_response code="200"><tag name="a" /><tag name="b" /></ping_response>""");
 	}
 
 	const string FlagsFixture = """
@@ -237,6 +313,8 @@ public sealed class WriterEmissionTests
 		public sealed record FlagsResponse
 		{
 			public string Ok { get; init; } = "";
+			public Access Perm { get; init; }
+			public Status State { get; init; }
 		}
 
 		public sealed class AccessController : GrpcControllerBase
@@ -252,76 +330,103 @@ public sealed class WriterEmissionTests
 		}
 		""";
 
+	// AccessRequest.Perm/StatusRequest.State are Result<T>-wrapped (request-side shape law) and so can
+	// never write, whatever value they carry — the enum-specific formatting/decomposition logic below
+	// is therefore only reachable through a raw (non-Result) enum member, which shape law requires to
+	// live on the response side instead: FlagsResponse.Perm/State.
+
 	[Fact]
-	void An_exactly_defined_flags_combination_writes_its_own_name_not_the_decomposed_parts()
+	void Writing_a_Result_wrapped_enum_member_throws_the_same_way_any_other_scalar_does()
 	{
 		var compiled = CompiledFixture.Build(FlagsFixture);
 		var shape = compiled.Shape("AccessRequest");
 		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var readWrite = Enum.ToObject(accessType, 3); // Read (1) | Write (2) == the exactly-defined ReadWrite
+		var readWrite = Enum.ToObject(accessType, 3); // Read (1) | Write (2) == the exactly-defined ReadWrite — even a perfectly valid, defined value still throws.
 
 		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.AccessRequest",
 			("Perm", CompiledFixture.CreateResultSuccess(accessType, readWrite)));
 
-		WriteFragment(shape, request, WireCaseStyle.PascalCase).ShouldBe("""<AccessRequest Perm="ReadWrite" />""");
+		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.PascalCase));
+
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
+	}
+
+	[Fact]
+	void An_exactly_defined_flags_combination_writes_its_own_name_not_the_decomposed_parts()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("FlagsResponse");
+		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
+		var statusType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Status");
+		var readWrite = Enum.ToObject(accessType, 3); // Read (1) | Write (2) == the exactly-defined ReadWrite
+		var draft = Enum.ToObject(statusType, 1); // State must carry a defined value too, or it throws first.
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", readWrite), ("State", draft));
+
+		WriteFragment(shape, response, WireCaseStyle.PascalCase).ShouldBe("""<FlagsResponse Ok="" Perm="ReadWrite" State="Draft" />""");
 	}
 
 	[Fact]
 	void An_undecomposable_flags_combination_greedily_decomposes_descending_by_value()
 	{
 		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("AccessRequest");
+		var shape = compiled.Shape("FlagsResponse");
 		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
+		var statusType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Status");
 		var readExecute = Enum.ToObject(accessType, 5); // Read (1) | Execute (4) — no member defines 5 exactly
+		var draft = Enum.ToObject(statusType, 1); // State must carry a defined value too, or it throws first.
 
-		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.AccessRequest",
-			("Perm", CompiledFixture.CreateResultSuccess(accessType, readExecute)));
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", readExecute), ("State", draft));
 
 		// Descending by value among defined non-zero members (Execute=4, ReadWrite=3, Write=2, Read=1):
 		// Execute matches first (consumes 4), ReadWrite/Write don't fit the remaining 1 bit, Read matches last.
-		WriteFragment(shape, request, WireCaseStyle.PascalCase).ShouldBe("""<AccessRequest Perm="Execute Read" />""");
+		WriteFragment(shape, response, WireCaseStyle.PascalCase).ShouldBe("""<FlagsResponse Ok="" Perm="Execute Read" State="Draft" />""");
 	}
 
 	[Fact]
 	void A_flags_value_with_leftover_bits_after_decomposition_throws()
 	{
+		// Perm writes before State in declaration order, so an undefined Perm throws before State's own
+		// (also-unset, also-undefined) default value is ever reached — no need to give State a valid
+		// value here the way the two successful-write tests above do.
 		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("AccessRequest");
+		var shape = compiled.Shape("FlagsResponse");
 		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
 		var undefined = Enum.ToObject(accessType, 8); // no defined bit covers this
 
-		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.AccessRequest",
-			("Perm", CompiledFixture.CreateResultSuccess(accessType, undefined)));
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", undefined));
 
-		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.PascalCase));
+		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.PascalCase));
 	}
 
 	[Fact]
 	void A_default_flags_value_with_no_defined_zero_member_throws()
 	{
 		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("AccessRequest");
+		var shape = compiled.Shape("FlagsResponse");
 		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
 		var zero = Enum.ToObject(accessType, 0); // Access defines no zero member
 
-		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.AccessRequest",
-			("Perm", CompiledFixture.CreateResultSuccess(accessType, zero)));
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", zero));
 
-		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.PascalCase));
+		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.PascalCase));
 	}
 
 	[Fact]
 	void An_undefined_non_flags_enum_value_throws()
 	{
+		// Perm must carry a defined value here, or it throws first (declaration order) for the wrong
+		// reason — this test is specifically about State's own undefined-value throw.
 		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("StatusRequest");
+		var shape = compiled.Shape("FlagsResponse");
+		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
 		var statusType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Status");
+		var read = Enum.ToObject(accessType, 1);
 		var undefined = Enum.ToObject(statusType, 99);
 
-		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.StatusRequest",
-			("State", CompiledFixture.CreateResultSuccess(statusType, undefined)));
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", read), ("State", undefined));
 
-		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.PascalCase));
+		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.PascalCase));
 	}
 
 	const string SharedTypeFixture = """

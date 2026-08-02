@@ -6,7 +6,8 @@ namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 /// <summary>
 /// Emits the canonical Futhark XML writer for one contract shape (design spec §6): declaration-order
 /// attributes then declaration-order child elements, null scalars omitted, <c>Result&lt;T&gt;</c>
-/// unwrap-or-throw, enum name tables (<c>[Flags]</c>: exact-defined-match first, else greedy
+/// always-throw (a deserialization-only type has no legal outbound form, whatever state it carries),
+/// enum name tables (<c>[Flags]</c>: exact-defined-match first, else greedy
 /// decomposition descending by value), and recursion into nested/collection complex members via their
 /// own generated shape classes — never a second writer, one recursive projection reused as both "the
 /// root" and "a fragment," which is exactly why this method never calls <c>WriteStartDocument</c>: the
@@ -33,8 +34,17 @@ static class WriterEmitter
 		var className = $"{shortName}XmlShape";
 		Dictionary<string, EnumTable> enumTables = [];
 
-		var attributeWrites = WriteAttributes(shape, enumTables);
-		var childWrites = WriteChildren(rootNamespace, shape);
+		var (attributeWrites, writeIsAlwaysUnreachablePastHere) = WriteAttributes(shape, enumTables);
+		// A required (non-nullable) Result<T>-wrapped scalar member's write is an unconditional throw
+		// (Result<T> has no legal outbound form) — once one is reached in declaration order, every
+		// later statement in Write (remaining attributes, every child element, the closing
+		// WriteEndElement) is genuinely unreachable, and the compiler is right to say so (CS0162).
+		// Emitting honest generated code means not emitting any of it, not suppressing the diagnostic
+		// that catches it.
+		var childWrites = writeIsAlwaysUnreachablePastHere ? string.Empty : WriteChildren(rootNamespace, shape);
+		// Same reachability fact as childWrites above: once the throw fires, control never returns to
+		// close the element, so the close call itself is exactly as unreachable and stays unemitted.
+		var writeEndElement = writeIsAlwaysUnreachablePastHere ? string.Empty : "\t\twriter.WriteEndElement();";
 		var fieldDeclarations = FieldDeclarations(shape, enumTables);
 		var enumHelpers = EnumHelperMethods(enumTables);
 
@@ -75,7 +85,7 @@ static class WriterEmitter
 					writer.WriteStartElement(_rootNames[(int)style]);
 			{{attributeWrites}}
 			{{childWrites}}
-					writer.WriteEndElement();
+			{{writeEndElement}}
 				}
 
 			{{readMethod}}
@@ -170,47 +180,56 @@ static class WriterEmitter
 		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
 	}
 
-	static string WriteAttributes(ShapeModel shape, Dictionary<string, EnumTable> enumTables)
+	/// <summary>
+	/// Emits one line per scalar member, declaration order, and stops the moment it emits a required
+	/// (non-nullable) <c>Result&lt;T&gt;</c>-wrapped member's unconditional throw — that throw is the
+	/// last reachable statement in the enclosing <c>Write</c> method, so nothing textually after it
+	/// (later attributes here, and the caller's child writes / <c>WriteEndElement</c>) is emitted.
+	/// Only the FIRST such member truncates; any later required-<c>Result&lt;T&gt;</c> members would
+	/// have been equally unreachable and are correctly never reached by this loop at all. The nullable
+	/// case (<c>Result&lt;T&gt;?</c>) throws only behind an <c>if (value.X.HasValue)</c> gate, so it
+	/// never truncates.
+	/// </summary>
+	/// <returns>The emitted lines, and whether emission truncated on an unconditional throw.</returns>
+	static (string Code, bool Truncated) WriteAttributes(ShapeModel shape, Dictionary<string, EnumTable> enumTables)
 	{
 		List<string> lines = [];
 		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
+		{
 			lines.Add(WriteAttribute(member, enumTables));
+			if (member is { IsResultWrapped: true, IsNullable: false })
+				return (string.Join("\n", lines), true);
+		}
 
-		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
+		return (lines.Count == 0 ? string.Empty : string.Join("\n", lines), false);
 	}
 
 	static string WriteAttribute(MemberModel member, Dictionary<string, EnumTable> enumTables)
 	{
 		var attrNames = $"_{member.ClrName}AttrNames[(int)style]";
 
+		// Result<T> is a deserialization-only type (platform law, uniform across JSON/gRPC/XML) —
+		// Write always throws for a Result<T>-wrapped member, unconditionally, whatever state it
+		// carries (Success/Failure/absent). No unwrap-on-success branch: a caller that already holds a
+		// valid unwrapped value has no business round-tripping it back through the type that exists to
+		// validate untrusted input in the first place. attrNames/FormatExpression/enumTables above are
+		// unused by both throw branches below — kept as parameters/locals regardless, since every other
+		// scalar kind in this switch still needs them and the shared method signature stays uniform.
 		if (member is { IsResultWrapped: true, IsNullable: true })
 		{
-			var wrapperVar = $"{member.ClrName}Wrapper";
-			var successVar = $"{member.ClrName}Success";
-			// Explicit HasValue/.Value, not `is { } x` — a `Nullable<T>` not-null property pattern
-			// normally narrows to T, but against Result<T>?'s [Union]-marked T (C# 15 preview unions),
-			// the narrowed variable mistypes as `object` (verified: CS1061 on the very next line,
-			// TryGetValue not found on 'object'). HasValue/.Value are ordinary Nullable<T> members,
-			// untouched by union pattern-matching restrictions, and type wrapperVar correctly.
+			// Explicit HasValue, not `is { } x` — a `Nullable<T>` not-null property pattern normally
+			// narrows to T, but against Result<T>?'s [Union]-marked T (C# 15 preview unions), the
+			// narrowed variable mistypes as `object`. HasValue is an ordinary Nullable<T> member,
+			// untouched by union pattern-matching restrictions, so it stays the safe presence check even
+			// though nothing below needs the unwrapped value anymore.
 			return
-				$"\t\tif (value.{member.ClrName}.HasValue)\n" +
-				"\t\t{\n" +
-				$"\t\t\tvar {wrapperVar} = value.{member.ClrName}.Value;\n" +
-				$"\t\t\tif ({wrapperVar}.TryGetValue(out global::Norse.Primitives.Success<{member.ScalarTypeName}> {successVar}))\n" +
-				$"\t\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"{successVar}.Value", enumTables)});\n" +
-				"\t\t\telse\n" +
-				"\t\t\t\tthrow new global::System.InvalidOperationException(\"a failed Result<T> is illegal to write\");\n" +
-				"\t\t}";
+				"\t\tif (value." + member.ClrName + ".HasValue)\n" +
+				"\t\t\tthrow new global::System.InvalidOperationException(\"Result<T> is a deserialization-only type and must never be written\");";
 		}
 
 		if (member is { IsResultWrapped: true, IsNullable: false })
 		{
-			var successVar = $"{member.ClrName}Success";
-			return
-				$"\t\tif (value.{member.ClrName}.TryGetValue(out global::Norse.Primitives.Success<{member.ScalarTypeName}> {successVar}))\n" +
-				$"\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"{successVar}.Value", enumTables)});\n" +
-				"\t\telse\n" +
-				"\t\t\tthrow new global::System.InvalidOperationException(\"a failed Result<T> is illegal to write\");";
+			return "\t\tthrow new global::System.InvalidOperationException(\"Result<T> is a deserialization-only type and must never be written\");";
 		}
 
 		if (member is { IsResultWrapped: false, IsNullable: true })
