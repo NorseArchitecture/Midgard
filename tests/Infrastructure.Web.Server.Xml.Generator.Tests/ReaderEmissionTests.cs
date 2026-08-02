@@ -70,14 +70,11 @@ public sealed class ReaderEmissionTests
 		var compiled = CompiledFixture.Build(PersonFixture);
 		var shape = compiled.Shape("PersonRequest");
 
-		var request = compiled.CreateInstance("Norse.Fixtures.ReaderPerson.PersonRequest",
-			("Name", new Result<string>(new Success<string>(""))),
-			("Limit", new Result<decimal>(new Success<decimal>(1234.56m))),
-			("BirthDate", new Result<DateOnly>(new Success<DateOnly>(new DateOnly(2020, 1, 15)))),
-			("Age", new Result<int>(new Success<int>(42))),
-			("Tags", compiled.CreateList("Norse.Fixtures.ReaderPerson.Tag")));
-
-		var xml = WriteRoot(shape, request, WireCaseStyle.CamelCase);
+		// Hand-authored rather than built via the shape's own generated Write — Result<T> is a
+		// deserialization-only type now, so Write always throws for a Result<T>-wrapped member (every
+		// scalar on PersonRequest is one) and can no longer manufacture this fixture itself. Matches the
+		// idiom every other fact in this file already uses for its input XML.
+		var xml = """<personRequest name="" limit="1234.56" birthDate="2020-01-15" age="42" />""";
 
 		var (value, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
 
@@ -354,11 +351,11 @@ public sealed class ReaderEmissionTests
 		var shape = compiled.Shape("AccessRequest");
 		var accessType = compiled.ResolveType("Norse.Fixtures.ReaderFlags.Access");
 
-		// Canonical write form for Read|Write is the exact-match compound name "ReadWrite".
-		var readWrite = Enum.ToObject(accessType, 3);
-		var request = compiled.CreateInstance("Norse.Fixtures.ReaderFlags.AccessRequest",
-			("Perm", CompiledFixture.CreateResultSuccess(accessType, readWrite)));
-		var canonicalXml = WriteFragment(shape, request, WireCaseStyle.PascalCase);
+		// Canonical write form for Read|Write is the exact-match compound name "ReadWrite" (§7) —
+		// hand-authored, not built via the shape's own generated Write, for the same reason as
+		// Happy_path_round_trip_preserves_a_required_empty_string above: Perm is Result<Access>-wrapped,
+		// and Write always throws for a Result<T>-wrapped member now, whatever value it carries.
+		var canonicalXml = """<AccessRequest Perm="ReadWrite" />""";
 
 		var (canonicalValue, canonicalContext) = ReadFragment(shape, canonicalXml, "AccessRequest", WireCaseStyle.PascalCase);
 		canonicalContext.HasFailures.ShouldBeFalse();
@@ -403,26 +400,6 @@ public sealed class ReaderEmissionTests
 	{
 		var property = instance.GetType().GetProperty(name) ?? throw new InvalidOperationException($"Property '{name}' was not found on '{instance.GetType()}'.");
 		return property.GetValue(instance)!;
-	}
-
-	static string WriteRoot(IXmlShape shape, object value, WireCaseStyle style)
-	{
-		using MemoryStream stream = new();
-		var settings = new XmlWriterSettings { Encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), OmitXmlDeclaration = false, Indent = false };
-		using (var writer = XmlWriter.Create(stream, settings))
-			shape.WriteObject(writer, value, style);
-
-		return new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(stream.ToArray());
-	}
-
-	static string WriteFragment(IXmlShape shape, object value, WireCaseStyle style)
-	{
-		var sb = new System.Text.StringBuilder();
-		var settings = new XmlWriterSettings { ConformanceLevel = ConformanceLevel.Fragment, Indent = false };
-		using (var writer = XmlWriter.Create(sb, settings))
-			shape.WriteObject(writer, value, style);
-
-		return sb.ToString();
 	}
 
 	/// <summary>
@@ -489,38 +466,6 @@ public sealed class ReaderEmissionTests
 		{
 			var shapeType = ResolveType($"{_rootNamespace}.NorseXmlShapes.{contractShortName}XmlShape");
 			return (IXmlShape)Activator.CreateInstance(shapeType)!;
-		}
-
-		public object CreateInstance(string fullyQualifiedTypeName, params (string Property, object? Value)[] values)
-		{
-			var type = ResolveType(fullyQualifiedTypeName);
-			var instance = Activator.CreateInstance(type)!;
-			foreach (var (property, value) in values)
-			{
-				var propertyInfo = type.GetProperty(property) ?? throw new InvalidOperationException($"Property '{property}' was not found on '{fullyQualifiedTypeName}'.");
-				propertyInfo.SetValue(instance, value);
-			}
-
-			return instance;
-		}
-
-		public IList CreateList(string itemFullyQualifiedTypeName, params object[] items)
-		{
-			var itemType = ResolveType(itemFullyQualifiedTypeName);
-			var listType = typeof(List<>).MakeGenericType(itemType);
-			var list = (IList)Activator.CreateInstance(listType)!;
-			foreach (var item in items)
-				list.Add(item);
-
-			return list;
-		}
-
-		public static object CreateResultSuccess(Type enumType, object enumValue)
-		{
-			var successType = typeof(Success<>).MakeGenericType(enumType);
-			var success = Activator.CreateInstance(successType, enumValue)!;
-			var resultType = typeof(Result<>).MakeGenericType(enumType);
-			return Activator.CreateInstance(resultType, success)!;
 		}
 	}
 }

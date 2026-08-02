@@ -6,7 +6,8 @@ namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 /// <summary>
 /// Emits the canonical Futhark XML writer for one contract shape (design spec §6): declaration-order
 /// attributes then declaration-order child elements, null scalars omitted, <c>Result&lt;T&gt;</c>
-/// unwrap-or-throw, enum name tables (<c>[Flags]</c>: exact-defined-match first, else greedy
+/// always-throw (a deserialization-only type has no legal outbound form, whatever state it carries),
+/// enum name tables (<c>[Flags]</c>: exact-defined-match first, else greedy
 /// decomposition descending by value), and recursion into nested/collection complex members via their
 /// own generated shape classes — never a second writer, one recursive projection reused as both "the
 /// root" and "a fragment," which is exactly why this method never calls <c>WriteStartDocument</c>: the
@@ -183,34 +184,28 @@ static class WriterEmitter
 	{
 		var attrNames = $"_{member.ClrName}AttrNames[(int)style]";
 
+		// Result<T> is a deserialization-only type (platform law, uniform across JSON/gRPC/XML) —
+		// Write always throws for a Result<T>-wrapped member, unconditionally, whatever state it
+		// carries (Success/Failure/absent). No unwrap-on-success branch: a caller that already holds a
+		// valid unwrapped value has no business round-tripping it back through the type that exists to
+		// validate untrusted input in the first place. attrNames/FormatExpression/enumTables above are
+		// unused by both throw branches below — kept as parameters/locals regardless, since every other
+		// scalar kind in this switch still needs them and the shared method signature stays uniform.
 		if (member is { IsResultWrapped: true, IsNullable: true })
 		{
-			var wrapperVar = $"{member.ClrName}Wrapper";
-			var successVar = $"{member.ClrName}Success";
-			// Explicit HasValue/.Value, not `is { } x` — a `Nullable<T>` not-null property pattern
-			// normally narrows to T, but against Result<T>?'s [Union]-marked T (C# 15 preview unions),
-			// the narrowed variable mistypes as `object` (verified: CS1061 on the very next line,
-			// TryGetValue not found on 'object'). HasValue/.Value are ordinary Nullable<T> members,
-			// untouched by union pattern-matching restrictions, and type wrapperVar correctly.
+			// Explicit HasValue, not `is { } x` — a `Nullable<T>` not-null property pattern normally
+			// narrows to T, but against Result<T>?'s [Union]-marked T (C# 15 preview unions), the
+			// narrowed variable mistypes as `object`. HasValue is an ordinary Nullable<T> member,
+			// untouched by union pattern-matching restrictions, so it stays the safe presence check even
+			// though nothing below needs the unwrapped value anymore.
 			return
-				$"\t\tif (value.{member.ClrName}.HasValue)\n" +
-				"\t\t{\n" +
-				$"\t\t\tvar {wrapperVar} = value.{member.ClrName}.Value;\n" +
-				$"\t\t\tif ({wrapperVar}.TryGetValue(out global::Norse.Primitives.Success<{member.ScalarTypeName}> {successVar}))\n" +
-				$"\t\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"{successVar}.Value", enumTables)});\n" +
-				"\t\t\telse\n" +
-				"\t\t\t\tthrow new global::System.InvalidOperationException(\"a failed Result<T> is illegal to write\");\n" +
-				"\t\t}";
+				"\t\tif (value." + member.ClrName + ".HasValue)\n" +
+				"\t\t\tthrow new global::System.InvalidOperationException(\"Result<T> is a deserialization-only type and must never be written\");";
 		}
 
 		if (member is { IsResultWrapped: true, IsNullable: false })
 		{
-			var successVar = $"{member.ClrName}Success";
-			return
-				$"\t\tif (value.{member.ClrName}.TryGetValue(out global::Norse.Primitives.Success<{member.ScalarTypeName}> {successVar}))\n" +
-				$"\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"{successVar}.Value", enumTables)});\n" +
-				"\t\telse\n" +
-				"\t\t\tthrow new global::System.InvalidOperationException(\"a failed Result<T> is illegal to write\");";
+			return "\t\tthrow new global::System.InvalidOperationException(\"Result<T> is a deserialization-only type and must never be written\");";
 		}
 
 		if (member is { IsResultWrapped: false, IsNullable: true })
