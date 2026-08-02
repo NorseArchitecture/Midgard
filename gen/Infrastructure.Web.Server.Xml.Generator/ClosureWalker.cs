@@ -166,12 +166,33 @@ static class ClosureWalker
 					diagnostics.Add(DiagnosticInfo.Create(Diagnostics.MemberUniquenessViolation, duplicateProperty,
 						$"'{owner.ToDisplayString(_displayFormat)}' carries more than one member of complex type '{duplicateModel.ComplexTypeName}' ('{duplicateProperty.Name}' collides with an earlier member) — one member per complex type per contract, any arity"));
 
+		// One diagnostic per offending member, not one per colliding style: two names built from the
+		// same word list (e.g. "UserId"/"UserID") collide in every one of the five styles at once —
+		// reporting per-style would fire the same law five times over for a single naming mistake.
+		for (var i = 1; i < built.Count; i++)
+		{
+			var (currentProperty, currentModel) = built[i];
+			for (var earlier = 0; earlier < i; earlier++)
+			{
+				var (earlierProperty, earlierModel) = built[earlier];
+				var collidingStyle = FirstCollidingStyle(currentModel.WireNames, earlierModel.WireNames);
+				if (collidingStyle is null)
+					continue;
+
+				diagnostics.Add(DiagnosticInfo.Create(Diagnostics.MemberUniquenessViolation, currentProperty,
+					$"'{owner.ToDisplayString(_displayFormat)}' has a wire-name collision between '{earlierProperty.Name}' and '{currentProperty.Name}' once case-transformed to {collidingStyle} ('{currentModel.WireNames[(int)collidingStyle.Value]}') — two members produce the same wire name"));
+				break;
+			}
+		}
+	}
+
+	static XmlCaseStyle? FirstCollidingStyle(EquatableArray<string> left, EquatableArray<string> right)
+	{
 		for (var style = 0; style < 5; style++)
-			foreach (var group in built.GroupBy(b => b.Model.WireNames[style], StringComparer.Ordinal))
-				if (group.Count() > 1)
-					foreach (var (duplicateProperty, duplicateModel) in group.Skip(1))
-						diagnostics.Add(DiagnosticInfo.Create(Diagnostics.MemberUniquenessViolation, duplicateProperty,
-							$"'{owner.ToDisplayString(_displayFormat)}' has a wire-name collision on '{duplicateModel.WireNames[style]}' once case-transformed — two members produce the same wire name"));
+			if (StringComparer.Ordinal.Equals(left[style], right[style]))
+				return (XmlCaseStyle)style;
+
+		return null;
 	}
 
 	static void Walk(INamedTypeSymbol root, HashSet<INamedTypeSymbol> reachable, TaxonomyContext ctx)

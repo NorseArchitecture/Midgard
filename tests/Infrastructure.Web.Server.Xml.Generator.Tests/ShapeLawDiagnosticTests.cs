@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
 
@@ -171,6 +172,79 @@ public sealed class ShapeLawDiagnosticTests
 	}
 
 	[Fact]
+	void NORSE025_reports_cleanly_instead_of_crashing_on_a_referenced_assembly_type_with_no_source_location()
+	{
+		// ExternalThing lives in a genuinely separate compilation, referenced only as metadata — its
+		// ISymbol has no location with IsInSource, exactly the shape a shared-library DTO or any
+		// non-fixture-local type takes. It's deliberately non-sealed, so reaching it legitimately trips
+		// NORSE025. Reporting a diagnostic on such a symbol must not throw: LocationInfo.FromSymbol
+		// falls back to LocationInfo.None (empty-but-non-null FilePath), not default(LocationInfo)
+		// (null FilePath, which crashes Location.Create with ArgumentNullException).
+		var externalReference = CompileToMetadataReference("""
+			namespace Norse.Fixtures.External;
+
+			public class ExternalThing
+			{
+				public string Name { get; set; } = "";
+			}
+			""");
+
+		const string Fixture = """
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+			using Norse.Fixtures.External;
+
+			namespace Norse.Fixtures.N025Referenced;
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record BadResponse
+			{
+				public ExternalThing Item { get; init; } = null!;
+			}
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<BadResponse>(new BadResponse()));
+			}
+			""";
+
+		var compilation = GeneratorTestHarness.CreateCompilation(Fixture).AddReferences(externalReference);
+		_ = CSharpGeneratorDriver.Create([new XmlShapeGenerator().AsSourceGenerator()])
+			.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics, TestContext.Current.CancellationToken);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE025");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		diagnostic.Location.SourceTree.ShouldBeNull();
+		diagnostic.Location.SourceSpan.ShouldBe(default);
+	}
+
+	/// <summary>Compiles <paramref name="source"/> into an in-memory assembly and returns it as a metadata-only reference — a type from it resolves with no <c>IsInSource</c> location, exactly like a real shared-library dependency.</summary>
+	static MetadataReference CompileToMetadataReference(string source)
+	{
+		var compilation = CSharpCompilation.Create(
+			"Norse.Fixtures.ExternalLibrary",
+			[CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken)],
+			GeneratorTestHarness.ExtraReferences,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		using MemoryStream stream = new();
+		var result = compilation.Emit(stream, cancellationToken: TestContext.Current.CancellationToken);
+		result.Success.ShouldBeTrue(string.Join("\n", result.Diagnostics));
+		stream.Position = 0;
+		return MetadataReference.CreateFromStream(stream);
+	}
+
+	[Fact]
 	void NORSE026_fires_when_two_members_share_one_complex_type()
 	{
 		const string Fixture = """
@@ -212,6 +286,52 @@ public sealed class ShapeLawDiagnosticTests
 		diagnostic.Id.ShouldBe("NORSE026");
 		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
 		SourceAt(Fixture, diagnostic).ShouldBe("Mailing");
+	}
+
+	[Fact]
+	void NORSE026_fires_once_on_a_post_case_transform_name_collision_even_when_every_style_collides()
+	{
+		// UserId/UserID decompose to the same word list ("User"+"Id" vs "User"+"ID", differing only in
+		// the trailing letter's case) — they collide in all five casing styles simultaneously
+		// (camelCase "userId", PascalCase "UserId", snake_case "user_id", UPPERCASE "USERID",
+		// lowercase "userid" all match pairwise). This is the law's "or post-case-transform name
+		// collision in any style" trigger — untested until now. It also proves the collision is
+		// reported exactly once per offending member, not once per colliding style: five style hits
+		// from one naming mistake must not become five diagnostics.
+		const string Fixture = """
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N026NameCollision;
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record BadResponse
+			{
+				public string UserId { get; init; } = "";
+				public string UserID { get; init; } = "";
+			}
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<BadResponse>(new BadResponse()));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE026");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		SourceAt(Fixture, diagnostic).ShouldBe("UserID");
 	}
 
 	[Fact]

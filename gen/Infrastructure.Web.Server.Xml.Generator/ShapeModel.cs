@@ -79,15 +79,25 @@ readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IReadOnlyList
 /// </summary>
 readonly record struct LocationInfo(string FilePath, TextSpan Span, LinePositionSpan LineSpan)
 {
+	/// <summary>
+	/// The zero-width location at the empty path — <c>default(LocationInfo)</c> would otherwise carry
+	/// a <see langword="null"/> <see cref="FilePath"/> (the record's auto-generated parameterless
+	/// default), and <see cref="Location.Create(string, TextSpan, LinePositionSpan)"/> throws
+	/// <see cref="ArgumentNullException"/> on a null path — a real crash, not a theoretical one: any
+	/// reachable type from a referenced assembly (no in-source location) that trips a diagnostic hits
+	/// exactly this path in <see cref="FromSymbol"/>.
+	/// </summary>
+	public static readonly LocationInfo None = new(string.Empty, default, default);
+
 	public Location ToLocation() =>
-		Location.Create(FilePath, Span, LineSpan);
+		Location.Create(FilePath ?? string.Empty, Span, LineSpan);
 
 	public static LocationInfo FromLocation(Location location) =>
 		new(location.SourceTree?.FilePath ?? string.Empty, location.SourceSpan, location.GetLineSpan().Span);
 
-	/// <summary>The symbol's first source location, or a zero-width location at the empty path when the symbol has none in source (a referenced-assembly type).</summary>
+	/// <summary>The symbol's first source location, or <see cref="None"/> when the symbol has none in source (a referenced-assembly type).</summary>
 	public static LocationInfo FromSymbol(ISymbol symbol) =>
-		symbol.Locations.FirstOrDefault(l => l.IsInSource) is { } location ? FromLocation(location) : default;
+		symbol.Locations.FirstOrDefault(l => l.IsInSource) is { } location ? FromLocation(location) : None;
 }
 
 /// <summary>
