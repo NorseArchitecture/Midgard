@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
 		<PackageReference Include="Grpc.Core.Testing" Version="*" />
+		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>

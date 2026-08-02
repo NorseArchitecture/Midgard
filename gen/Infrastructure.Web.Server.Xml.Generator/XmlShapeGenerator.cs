@@ -81,13 +81,19 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 				.SelectMany(static r => r.Shapes)
 				.GroupBy(static s => s.TypeName, StringComparer.Ordinal)
 				.Select(static g => g.Last())
-				.OrderBy(static s => s.TypeName, StringComparer.Ordinal);
+				.OrderBy(static s => s.TypeName, StringComparer.Ordinal)
+				.ToList();
 
 			foreach (var shape in distinctShapes)
 			{
 				var shortName = WriterEmitter.ShortName(shape.TypeName);
 				productionContext.AddSource($"{shortName}XmlShape.g.cs", SourceText.From(WriterEmitter.Emit(hostRootNamespace, shape), Utf8NoBom.Encoding));
 			}
+
+			// Task 8: one registration summary per host compilation, listing every shape just emitted
+			// above — always produced, even with zero shapes, since the host calls
+			// AddNorseXml(style, NorseXmlShapeRegistration.Build()) unconditionally.
+			productionContext.AddSource("NorseXmlShapeRegistration.g.cs", SourceText.From(RegistrationEmitter.Emit(hostRootNamespace, distinctShapes), Utf8NoBom.Encoding));
 		});
 	}
 
