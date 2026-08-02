@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+	<ItemGroup>
+		<NorseRef Include="Primitives">
+			<Repo>Svartalfheim</Repo>
+		</NorseRef>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
+		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj" />
+	</ItemGroup>
+</Project>
