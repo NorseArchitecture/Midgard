@@ -56,6 +56,22 @@ public sealed class ResultJsonConverterTests
 	}
 
 	[Fact]
+	void Read_null_is_required_missing_for_required_string_result()
+	{
+		// The exact pairing the string-presence fix (commit 27ac9c0) was about: a required,
+		// non-nullable Result<string> reading JSON null must still fail as required-missing — the
+		// string carve-out only bypasses Parser.ParseRequired<string> for a *present* string token
+		// (even an empty one), never for the null branch, which stays routed through
+		// Parser.ParseRequired<string>(string.Empty, ...) for every type including string.
+		var options = NorseJsonTestOptions.Create();
+
+		var result = JsonSerializer.Deserialize<Result<string>>("null", options);
+
+		var failure = result.Value.ShouldBeOfType<Failure>();
+		failure.Reason.ShouldBe(ParseFailure.Empty);
+	}
+
+	[Fact]
 	void Read_object_token_is_skipped_whole_and_captured_as_a_typed_failure_not_thrown()
 	{
 		var options = NorseJsonTestOptions.Create();
