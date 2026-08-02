@@ -3,10 +3,6 @@
 		<Description>Norse.Infrastructure.Web.Server.Xml.Generator: walks facade-controller (GrpcControllerBase descendant) action closures in the host compilation — request closure from body-bound parameter types, response closure from ActionResult&lt;T&gt; payload types — and enforces Futhark's XML shape law at build time (NORSE022-028). Diagnostics only in this slice; shape emission lands in a later increment. Bundled into Infrastructure.Web.Server's package (analyzers/dotnet/cs/), never referenced or packed standalone.</Description>
 	</PropertyGroup>
 	<ItemGroup>
-		<!-- gen/Directory.Build.props carries no InternalsVisibleTo grant (that's a src/tests-only
-		     convention) — granted here, per-project, because the test project unit-tests NameCasing
-		     and reads XmlShapeGenerator.ControllerShapesTrackingName directly. -->
-		<InternalsVisibleTo Include="$(AssemblyName).Tests" />
 		<NorseRef Include="Abstractions.Emit">
 			<Repo>Asgard</Repo>
 		</NorseRef>
