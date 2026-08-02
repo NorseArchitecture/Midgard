@@ -1,6 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<!-- Microsoft.AspNetCore.OpenApi's bundled XML-doc-comment source generator (Task 11) emits
+		     interceptors; Microsoft.NET.Sdk.Web enables the interceptors feature for this namespace by
+		     convention, but this project is plain Microsoft.NET.Sdk (a test project, not a web host), so
+		     it needs the same opt-in explicitly. -->
+		<InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>
+	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="Grpc.Core.Testing" Version="*" />
+		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>

@@ -8,6 +8,7 @@ static class TestModel
 	{
 		var model = RuntimeTypeModel.Create();
 		IdentifierSerializers.Register(model);
+		ResultSerializers.Register(model);
 		return model;
 	}
 
