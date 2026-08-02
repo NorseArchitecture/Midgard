@@ -46,6 +46,23 @@ public sealed class AddNorseXmlTests
 	}
 
 	[Fact]
+	void AddNorseXml_registers_the_problem_xml_formatter_and_the_ModelState_problem_factory()
+	{
+		ServiceCollection services = new();
+		var builder = services.AddControllers();
+		var registry = new XmlShapeRegistry();
+
+		builder.AddNorseXml(XmlCaseStyle.SnakeCase, registry);
+
+		using var provider = services.BuildServiceProvider();
+		var mvcOptions = provider.GetRequiredService<IOptions<MvcOptions>>().Value;
+		mvcOptions.OutputFormatters.ShouldContain(f => f is ProblemXmlOutputFormatter);
+
+		var apiBehaviorOptions = provider.GetRequiredService<IOptions<ApiBehaviorOptions>>().Value;
+		apiBehaviorOptions.InvalidModelStateResponseFactory.ShouldBe(InvalidModelStateProblemFactory.Create);
+	}
+
+	[Fact]
 	void AddNorseXml_throws_on_a_null_registry()
 	{
 		ServiceCollection services = new();

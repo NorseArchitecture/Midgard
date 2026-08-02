@@ -6,13 +6,15 @@ namespace Norse.Infrastructure.Web.Server.Xml;
 /// Composition-root wiring for Futhark's XML leg: registers <see cref="NorseXmlOptions"/> and
 /// the caller-supplied <see cref="XmlShapeRegistry"/> singleton, constructs the
 /// <see cref="XmlContractInputFormatter"/>/<see cref="XmlContractOutputFormatter"/> pair against that
-/// same registry and options and inserts them into MVC's formatter list, and registers the
-/// library-controller tripwire
-/// (<see cref="XmlShapeTripwireStartupFilter"/>) — a startup-time, never-runtime, assertion that every
-/// facade controller's body-bound parameter and <c>ActionResult&lt;T&gt;</c> payload types carry a
-/// generated shape (spec §3, ratified 2026-08-02). The host calls this as
-/// <c>AddNorseXml(style, NorseXmlShapeRegistration.Build())</c> — the generated registration function
-/// this method's caller supplies, never built here.
+/// same registry and options and inserts them into MVC's formatter list, registers the
+/// <see cref="ProblemXmlOutputFormatter"/>/<see cref="InvalidModelStateProblemFactory"/> pair so
+/// <c>ModelState</c> 400s and <c>GrpcControllerBase.FoldAsync</c> failures negotiate to
+/// <c>application/problem+xml</c>/<c>application/problem+json</c> (spec §11), and registers the
+/// library-controller tripwire (<see cref="XmlShapeTripwireStartupFilter"/>) — a startup-time,
+/// never-runtime, assertion that every facade controller's body-bound parameter and
+/// <c>ActionResult&lt;T&gt;</c> payload types carry a generated shape (spec §3, ratified 2026-08-02).
+/// The host calls this as <c>AddNorseXml(style, NorseXmlShapeRegistration.Build())</c> — the generated
+/// registration function this method's caller supplies, never built here.
 /// </summary>
 public static class MvcBuilderExtensions
 {
@@ -33,7 +35,10 @@ public static class MvcBuilderExtensions
 			{
 				options.InputFormatters.Insert(0, new XmlContractInputFormatter(registry, xmlOptions));
 				options.OutputFormatters.Insert(0, new XmlContractOutputFormatter(registry, xmlOptions));
+				options.OutputFormatters.Insert(0, new ProblemXmlOutputFormatter());
 			});
+			builder.Services.Configure<ApiBehaviorOptions>(options =>
+				options.InvalidModelStateResponseFactory = InvalidModelStateProblemFactory.Create);
 
 			return builder;
 		}
