@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Norse.Primitives;
 using ProtoBuf.Meta;
@@ -39,17 +40,33 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// </remarks>
 public static class ResultSerializers
 {
+	// Result<T> is a deserialization-only type — Write always throws, for every state, success
+	// included, on every channel. One law, one message: ResultSerializer<T>, ResultEnumSerializer<TEnum>,
+	// and the JSON leg's ResultJsonConverter<T> all carry this exact wording.
+	internal const string DeserializationOnlyMessage = "Result<T> is a deserialization-only type and must never be written";
+
 	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = [];
 
 	/// <summary>
 	/// Registers <see cref="Result{T}"/> surrogates for every scalar type in the platform's closed
-	/// taxonomy on <paramref name="model"/>. Idempotent per model.
+	/// taxonomy on <paramref name="model"/>, the general wire law for bare
+	/// <see cref="DateTimeOffset"/> fields (<see cref="DateTimeOffsetSerializer"/> — response-side
+	/// scalars never wrap, spec §5.4, so the bare type needs its own registration), and the
+	/// discovery hook that gives <c>Result&lt;TEnum&gt;</c> members a wire law
+	/// (<see cref="ResultEnumSerializer{TEnum}"/>): enums are user-declared, so the set is open and
+	/// cannot be enumerated here — instead every contract type entering the model after this call is
+	/// swept for <c>Result&lt;TEnum&gt;</c>/<c>Result&lt;TEnum&gt;?</c> members, each registered on
+	/// first sight, the same must-run-before-contract-types contract
+	/// <see cref="IdentifierSerializers.Register"/> documents. Idempotent per model.
 	/// </summary>
 	public static void Register(RuntimeTypeModel model)
 	{
 		ArgumentNullException.ThrowIfNull(model);
 		if (!_registered.TryAdd(model, model))
 			return;
+
+		model.AfterApplyDefaultBehaviour += (_, e) => RegisterEnumResults(model, e);
+		model.Add(typeof(DateTimeOffset), applyDefaultBehaviour: false).SerializerType = typeof(DateTimeOffsetSerializer);
 
 		RegisterScalar<bool>(model);
 		RegisterScalar<byte>(model);
@@ -75,4 +92,21 @@ public static class ResultSerializers
 
 	static void RegisterScalar<T>(RuntimeTypeModel model) where T : notnull, ISpanParsable<T> =>
 		model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>);
+
+	[UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "ResultEnumSerializer<TEnum> is fully generic over enum types with no member dependencies beyond the enum itself; contract types that reach this sweep are already rooted by the model registration that triggered it.")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Same posture as ResultJsonConverterFactory: the enum set is contract-declared and discovery-driven; AOT source-generation for it is a future increment.")]
+	static void RegisterEnumResults(RuntimeTypeModel model, TypeAddedEventArgs e)
+	{
+		foreach (var field in e.MetaType.GetFields())
+		{
+			var memberType = Nullable.GetUnderlyingType(field.MemberType) ?? field.MemberType;
+			if (!memberType.IsGenericType || memberType.GetGenericTypeDefinition() != typeof(Result<>))
+				continue;
+			var valueType = memberType.GetGenericArguments()[0];
+			if (!valueType.IsEnum || model.IsDefined(memberType))
+				continue;
+			model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
+				typeof(ResultEnumSerializer<>).MakeGenericType(valueType);
+		}
+	}
 }

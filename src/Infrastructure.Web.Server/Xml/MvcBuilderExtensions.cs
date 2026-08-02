@@ -36,6 +36,13 @@ public static class MvcBuilderExtensions
 				options.InputFormatters.Insert(0, new XmlContractInputFormatter(registry, xmlOptions));
 				options.OutputFormatters.Insert(0, new XmlContractOutputFormatter(registry, xmlOptions));
 				options.OutputFormatters.Insert(0, new ProblemXmlOutputFormatter());
+				// Required-ness on Futhark contracts is carried by Result<T> presence semantics (spec
+				// §8.2) plus the pipeline's ResultRules validation — never by MVC's DataAnnotations
+				// layer. Without this switch, [ApiController]'s implicit [Required] on the non-nullable
+				// [FromBody] parameter double-fires whenever an input formatter returns Failure (the
+				// parameter binds null), layering a "The request field is required" ModelState entry
+				// under the parameter's own name on top of the formatter's real accumulated failures.
+				options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
 			});
 			builder.Services.Configure<ApiBehaviorOptions>(options =>
 				options.InvalidModelStateResponseFactory = InvalidModelStateProblemFactory.Create);

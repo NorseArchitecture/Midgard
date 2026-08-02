@@ -63,6 +63,25 @@ public sealed class AddNorseXmlTests
 	}
 
 	[Fact]
+	void AddNorseXml_suppresses_the_implicit_NRT_required_attribute()
+	{
+		// Required-ness on Futhark contracts is carried by Result<T> presence semantics plus
+		// FluentValidation's ResultRules — never by MVC's DataAnnotations layer. Without this switch,
+		// [ApiController]'s implicit [Required] on the non-nullable [FromBody] parameter double-fires
+		// whenever the XML input formatter returns Failure (the parameter binds null), layering a
+		// "The request field is required" ModelState entry on top of the formatter's real accumulated
+		// failures — the Task 13 payload-asymmetry finding.
+		ServiceCollection services = new();
+		var builder = services.AddControllers();
+
+		builder.AddNorseXml(XmlCaseStyle.CamelCase, new XmlShapeRegistry());
+
+		using var provider = services.BuildServiceProvider();
+		provider.GetRequiredService<IOptions<MvcOptions>>().Value
+			.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes.ShouldBeTrue();
+	}
+
+	[Fact]
 	void AddNorseXml_throws_on_a_null_registry()
 	{
 		ServiceCollection services = new();

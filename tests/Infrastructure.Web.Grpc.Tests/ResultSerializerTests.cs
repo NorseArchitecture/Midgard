@@ -10,15 +10,15 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 /// XML legs: <see cref="ResultSerializer{T}.Write"/> always throws, for every state — success,
 /// failure, and default alike — so no test here can manufacture fixture wire bytes by constructing a
 /// <see cref="Result{T}"/>-populated envelope and serializing it through the normal model. Every
-/// read-path fixture below is instead built one of two ways: for every type with native protobuf-net
-/// support, by serializing a <em>plain</em> field of that type (never a <see cref="Result{T}"/> one)
-/// through a mirror envelope type on the same model, then feeding those bytes into the real
-/// <see cref="Result{T}"/>-typed envelope's <c>Deserialize</c> — proving <see cref="ResultSerializer{T}"/>'s
-/// <c>Read</c> decodes exactly what a real client's plain field would produce. <see cref="DateTimeOffset"/>
-/// is the one exception (protobuf-net has no native encoding for it at all): its fixture bytes are
-/// hand-built at the wire level via <see cref="WireBytes"/>, the same low-level
-/// <see cref="ProtoWriter.State"/> technique <c>InputFormatterTests</c>/<c>SecurityCorpusTests</c>
-/// already use for hand-authored XML fixtures, adapted to protobuf.
+/// read-path fixture below is instead built by serializing a <em>plain</em> field of the same type
+/// (never a <see cref="Result{T}"/> one) through a mirror envelope type on the same model, then feeding
+/// those bytes into the real <see cref="Result{T}"/>-typed envelope's <c>Deserialize</c> — proving
+/// <see cref="ResultSerializer{T}"/>'s <c>Read</c> decodes exactly what a real client's plain field
+/// would produce. That now covers <see cref="DateTimeOffset"/> too: <c>DateTimeOffsetSerializer</c>
+/// gives the bare type a registered wire law (the §7 "O" string), so its fixtures ride the same
+/// plain-field mirror as every other row; <see cref="WireBytes"/>'s hand-built payloads remain only
+/// where the wire text itself is the fixture (the malformed-string case and the byte-level
+/// wire-form pin).
 /// </summary>
 public sealed class ResultSerializerTests
 {
@@ -231,24 +231,105 @@ public sealed class ResultSerializerTests
 
 	[Fact]
 	void Round_trips_Result_of_DateTimeOffset() =>
-		AssertDateTimeOffsetRoundTrips(new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5)));
+		AssertRoundTrips(new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5)));
 
 	[Fact]
 	void Round_trips_Result_of_TimeSpan() => AssertRoundTrips(new TimeSpan(3, 4, 5, 6));
 
-	/// <summary>
-	/// DateTimeOffset alone has no native protobuf-net encoding — its fixture is hand-built as a wire
-	/// string (§7's "O" lexical form) rather than via a <see cref="PlainEnvelope{T}"/>, which would
-	/// itself throw ("No serializer defined for type: System.DateTimeOffset") on this one type.
-	/// </summary>
-	static void AssertDateTimeOffsetRoundTrips(DateTimeOffset value)
+	[Fact]
+	void Round_trips_Result_of_an_enum() => AssertRoundTrips(WireStatus.Inactive);
+
+	[Fact]
+	void Round_trips_Result_of_a_flags_enum_composite() => AssertRoundTrips(WireAccess.Read | WireAccess.Write);
+
+	[Fact]
+	void An_absent_enum_field_deserializes_to_a_default_Result()
 	{
-		var payload = WireBytes.StringFields((1, value.ToString("O", CultureInfo.InvariantCulture)));
+		var back = TestModel.Deserialize<Envelope<WireStatus>>(TestModel.Create(), []);
 
-		var back = TestModel.Deserialize<Envelope<DateTimeOffset>>(TestModel.Create(), payload);
+		back.Value.TryGetValue(out Success<WireStatus> _).ShouldBeFalse();
+		back.Value.TryGetValue(out Failure _).ShouldBeFalse();
+	}
 
-		back.Value.TryGetValue(out Success<DateTimeOffset> success).ShouldBeTrue();
-		success.Value.ShouldBe(value);
+	[Fact]
+	void An_absent_optional_enum_field_deserializes_to_null()
+	{
+		var back = TestModel.Deserialize<OptionalEnumEnvelope>(TestModel.Create(), []);
+
+		back.Value.ShouldBeNull();
+	}
+
+	[Fact]
+	void An_undefined_enum_value_reads_as_a_typed_failure_not_a_throw()
+	{
+		// The binary channel's counterpart to the text channels' undefined-enum-name accumulable (spec
+		// §6.5/§8.1): a varint carrying no defined member is representable on the wire, so it funnels to
+		// the platform's one typed Failure exactly like a malformed DateTimeOffset wire string does.
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new PlainEnvelope<int> { Value = 99 });
+
+		var back = TestModel.Deserialize<Envelope<WireStatus>>(model, payload);
+
+		var failure = back.Value.Value.ShouldBeOfType<Failure>();
+		failure.Reason.ShouldBe(ParseFailure.Malformed);
+		failure.Input.ShouldBe("99");
+		failure.ExpectedType.ShouldBe(nameof(WireStatus));
+	}
+
+	[Fact]
+	void A_flags_enum_value_with_leftover_bits_reads_as_a_typed_failure_not_a_throw()
+	{
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new PlainEnvelope<int> { Value = 8 });
+
+		var back = TestModel.Deserialize<Envelope<WireAccess>>(model, payload);
+
+		var failure = back.Value.Value.ShouldBeOfType<Failure>();
+		failure.Reason.ShouldBe(ParseFailure.Malformed);
+	}
+
+	[Fact]
+	void Writing_a_Result_of_an_enum_throws_like_every_other_row()
+	{
+		var model = TestModel.Create();
+
+		var exception = Should.Throw<InvalidOperationException>(() =>
+			TestModel.Serialize(model, new Envelope<WireStatus> { Value = new Success<WireStatus>(WireStatus.Active) }));
+
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
+	}
+
+	[Fact]
+	void Round_trips_a_bare_DateTimeOffset_field()
+	{
+		// The general (non-Result-wrapped) DateTimeOffset wire law — spec §7's row on the response side,
+		// where scalars never wrap (§5.4). Before DateTimeOffsetSerializer, a bare [ProtoMember]
+		// DateTimeOffset threw "No serializer defined for type: System.DateTimeOffset" on any registered
+		// model, and the tri-protocol swoop had to carry a test-local stopgap serializer.
+		var value = new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5));
+		var model = TestModel.Create();
+
+		var payload = TestModel.Serialize(model, new PlainEnvelope<DateTimeOffset> { Value = value });
+		var back = TestModel.Deserialize<PlainEnvelope<DateTimeOffset>>(model, payload);
+
+		back.Value.ShouldBe(value);
+	}
+
+	[Fact]
+	void A_bare_DateTimeOffset_write_and_a_Result_read_share_one_wire_form_by_construction()
+	{
+		// The wire-compatibility guarantee the swoop's mirror-contract technique depends on, structurally
+		// guarded here instead of by registration order in a test fixture: the bytes a bare
+		// DateTimeOffset field writes are exactly what ResultSerializer<DateTimeOffset>.Read consumes.
+		// AssertRoundTrips above already proves it end-to-end; this pins the wire text itself so a future
+		// format drift on either side fails a byte-level assertion, not just a parse.
+		var value = new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5));
+		var model = TestModel.Create();
+
+		var bare = TestModel.Serialize(model, new PlainEnvelope<DateTimeOffset> { Value = value });
+		var handBuilt = WireBytes.StringFields((1, value.ToString("O", CultureInfo.InvariantCulture)));
+
+		bare.ShouldBe(handBuilt);
 	}
 
 	/// <summary>
@@ -256,8 +337,9 @@ public sealed class ResultSerializerTests
 	/// <typeparamref name="T"/> field (<see cref="PlainEnvelope{T}"/> — never a <see cref="Result{T}"/>
 	/// one, since <see cref="ResultSerializer{T}.Write"/> always throws) on the same model, then proves
 	/// <see cref="ResultSerializer{T}.Read"/> decodes those exact bytes back to <paramref name="value"/>
-	/// through the <see cref="Result{T}"/>-typed <see cref="Envelope{T}"/>. Not valid for
-	/// <see cref="DateTimeOffset"/> — see <see cref="AssertDateTimeOffsetRoundTrips"/>.
+	/// through the <see cref="Result{T}"/>-typed <see cref="Envelope{T}"/>. Valid for every §7 row —
+	/// <see cref="DateTimeOffset"/> included, now that <c>DateTimeOffsetSerializer</c> gives the bare
+	/// type a registered wire law — and for enums, whose plain fields ride protobuf-net's native varint.
 	/// </summary>
 	static void AssertRoundTrips<T>(T value) where T : notnull
 	{
@@ -290,8 +372,8 @@ public sealed class ResultSerializerTests
 
 /// <summary>
 /// Hand-constructs protobuf wire bytes field-by-field via the low-level <see cref="ProtoWriter.State"/>
-/// API — needed only for <see cref="DateTimeOffset"/> fixtures now, since every other type in the
-/// taxonomy has native protobuf-net support and can be built via a plain field on the model instead
+/// API — needed only where the wire text itself is the fixture (a malformed <see cref="DateTimeOffset"/>
+/// string, the byte-level wire-form pin); everything else builds via a plain field on the model
 /// (<see cref="PlainEnvelope{T}"/>). Verified byte-identical to protobuf-net's own encoding of a plain
 /// <c>string</c> field at the same field number (spiked against a reference <see cref="RuntimeTypeModel"/>
 /// before this technique was adopted here).
@@ -368,4 +450,27 @@ public sealed class OptionalIntEnvelope
 {
 	[ProtoMember(1)]
 	public Result<int>? Value { get; set; }
+}
+
+[ProtoContract]
+public sealed class OptionalEnumEnvelope
+{
+	[ProtoMember(1)]
+	public Result<WireStatus>? Value { get; set; }
+}
+
+/// <summary>§7's enum row on the gRPC leg — explicit values per platform enum convention.</summary>
+public enum WireStatus
+{
+	Active = 1,
+	Inactive = 2
+}
+
+/// <summary>The flags variant — composite values and leftover-bit rejection both need coverage (spec §6.5).</summary>
+[Flags]
+public enum WireAccess
+{
+	None = 0,
+	Read = 1,
+	Write = 2
 }
