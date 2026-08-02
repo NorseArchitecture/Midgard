@@ -12,10 +12,10 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// field would use, no parsing, the binary is already typed. <see cref="Guid"/> is the platform's own
 /// raw-bytes convention (<see cref="GuidWire"/>), unrelated to this type. <see cref="DateTimeOffset"/>
 /// is the one genuine exception: protobuf-net has zero native support for it at any compatibility
-/// level (a bare <c>[ProtoMember] DateTimeOffset</c> throws <see cref="InvalidOperationException"/>,
-/// "No serializer defined for type: System.DateTimeOffset"), so it falls back to a plain wire
-/// <c>string</c> carrying the exact §7 lexical form ("O" round-trip) the JSON and XML legs already
-/// write, funneled through <see cref="Parser.ParseRequired{T}"/> — the platform's one parsing door —
+/// level, so it rides a plain wire <c>string</c> carrying the exact §7 lexical form ("O" round-trip)
+/// the JSON and XML legs already write — the same form <see cref="DateTimeOffsetSerializer"/> (the
+/// bare type's registered wire law) emits, one wire form by construction —
+/// funneled through <see cref="Parser.ParseRequired{T}"/> — the platform's one parsing door —
 /// so a malformed value on this one type produces the platform's typed <see cref="Failure"/> rather
 /// than either a thrown exception or an unrepresentable byte pattern. <see cref="Write"/> always
 /// throws <see cref="InvalidOperationException"/>: <see cref="Result{T}"/> is a deserialization-only
@@ -49,7 +49,7 @@ sealed class ResultSerializer<T> : ISerializer<Result<T>>, ISerializer<Result<T>
 
 	/// <exception cref="InvalidOperationException">Always.</exception>
 	public void Write(ref ProtoWriter.State state, Result<T> value) =>
-		throw new InvalidOperationException("Result<T> is a deserialization-only type and must never be written");
+		throw new InvalidOperationException(ResultSerializers.DeserializationOnlyMessage);
 
 	Result<T>? ISerializer<Result<T>?>.Read(ref ProtoReader.State state, Result<T>? value) =>
 		Read(ref state, value.GetValueOrDefault());
