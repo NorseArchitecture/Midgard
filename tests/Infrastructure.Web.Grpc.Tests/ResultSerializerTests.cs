@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Xml;
 using Norse.Primitives;
 using ProtoBuf;
 using ProtoBuf.Meta;
@@ -11,11 +10,15 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 /// XML legs: <see cref="ResultSerializer{T}.Write"/> always throws, for every state — success,
 /// failure, and default alike — so no test here can manufacture fixture wire bytes by constructing a
 /// <see cref="Result{T}"/>-populated envelope and serializing it through the normal model. Every
-/// read-path fixture below is instead hand-built at the wire level via <see cref="WireBytes"/>, the
-/// same low-level <see cref="ProtoWriter.State"/> technique <c>InputFormatterTests</c>/
-/// <c>SecurityCorpusTests</c> already use for hand-authored XML fixtures, adapted to protobuf — write
-/// a field header plus a raw string payload directly, bypassing the model (and therefore
-/// <see cref="ResultSerializer{T}"/>'s own <c>Write</c>) entirely.
+/// read-path fixture below is instead built one of two ways: for every type with native protobuf-net
+/// support, by serializing a <em>plain</em> field of that type (never a <see cref="Result{T}"/> one)
+/// through a mirror envelope type on the same model, then feeding those bytes into the real
+/// <see cref="Result{T}"/>-typed envelope's <c>Deserialize</c> — proving <see cref="ResultSerializer{T}"/>'s
+/// <c>Read</c> decodes exactly what a real client's plain field would produce. <see cref="DateTimeOffset"/>
+/// is the one exception (protobuf-net has no native encoding for it at all): its fixture bytes are
+/// hand-built at the wire level via <see cref="WireBytes"/>, the same low-level
+/// <see cref="ProtoWriter.State"/> technique <c>InputFormatterTests</c>/<c>SecurityCorpusTests</c>
+/// already use for hand-authored XML fixtures, adapted to protobuf.
 /// </summary>
 public sealed class ResultSerializerTests
 {
@@ -27,9 +30,10 @@ public sealed class ResultSerializerTests
 	[Fact]
 	void Round_trips_a_success_Result_of_DateOnly_and_a_null_optional_Result_of_string()
 	{
-		var payload = WireBytes.StringFields((1, "2026-08-01"));
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new PlainResultEnvelope { When = new DateOnly(2026, 8, 1) });
 
-		var back = TestModel.Deserialize<ResultEnvelope>(TestModel.Create(), payload);
+		var back = TestModel.Deserialize<ResultEnvelope>(model, payload);
 
 		back.When.TryGetValue(out Success<DateOnly> when).ShouldBeTrue();
 		when.Value.ShouldBe(new DateOnly(2026, 8, 1));
@@ -39,9 +43,10 @@ public sealed class ResultSerializerTests
 	[Fact]
 	void Round_trips_a_present_optional_Result_of_string()
 	{
-		var payload = WireBytes.StringFields((1, "2026-08-01"), (2, "Bifrost"));
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new PlainResultEnvelope { When = new DateOnly(2026, 8, 1), Name = "Bifrost" });
 
-		var back = TestModel.Deserialize<ResultEnvelope>(TestModel.Create(), payload);
+		var back = TestModel.Deserialize<ResultEnvelope>(model, payload);
 
 		back.Name!.Value.TryGetValue(out Success<string> name).ShouldBeTrue();
 		name.Value.ShouldBe("Bifrost");
@@ -114,130 +119,182 @@ public sealed class ResultSerializerTests
 	}
 
 	[Fact]
-	void A_malformed_wire_string_reads_as_a_typed_failure_not_a_throw()
+	void A_malformed_DateTimeOffset_wire_string_reads_as_a_typed_failure_not_a_throw()
 	{
-		// The whole point of the string wire form (spec directive): a value that is structurally
-		// unrepresentable as a valid native binary decode — an invalid calendar date — is perfectly
-		// representable as a string, and Read funnels it through Parser.ParseRequired<T> exactly like
-		// the JSON and XML legs, producing the platform's one typed Failure rather than either a thrown
-		// exception or a silently-wrong decoded value.
-		var payload = WireBytes.StringFields((1, "2026-02-30"));
+		// DateTimeOffset is the one type in the taxonomy where a malformed value is genuinely
+		// representable on the wire — protobuf-net has no native encoding for it at all, so it falls
+		// back to a plain string funneled through Parser.ParseRequired<DateTimeOffset>, producing the
+		// platform's one typed Failure rather than a thrown exception. Every other type in the taxonomy
+		// reads its own native binary encoding directly — there is no invalid byte pattern for, say, a
+		// malformed DateOnly; it just decodes to some valid date, per spec §9.3 — so this failure mode
+		// is specific to DateTimeOffset alone.
+		var payload = WireBytes.StringFields((1, "2026-02-30T00:00:00.0000000+00:00"));
 
-		var back = TestModel.Deserialize<Envelope<DateOnly>>(TestModel.Create(), payload);
+		var back = TestModel.Deserialize<Envelope<DateTimeOffset>>(TestModel.Create(), payload);
 
 		var failure = back.Value.Value.ShouldBeOfType<Failure>();
 		failure.Reason.ShouldBe(ParseFailure.Malformed);
 	}
 
 	[Fact]
-	void Round_trips_Result_of_bool() => AssertRoundTrips(true, "true");
-
-	[Fact]
-	void Round_trips_Result_of_byte() => AssertRoundTrips((byte)200, "200");
-
-	[Fact]
-	void Round_trips_Result_of_sbyte() => AssertRoundTrips((sbyte)-100, "-100");
-
-	[Fact]
-	void Round_trips_Result_of_short() => AssertRoundTrips((short)-12345, "-12345");
-
-	[Fact]
-	void Round_trips_Result_of_ushort() => AssertRoundTrips((ushort)54321, "54321");
-
-	[Fact]
-	void Round_trips_Result_of_int() => AssertRoundTrips(-123456, "-123456");
-
-	[Fact]
-	void Round_trips_Result_of_uint() => AssertRoundTrips(3000000000U, "3000000000");
-
-	[Fact]
-	void Round_trips_Result_of_long() => AssertRoundTrips(-123456789012345L, "-123456789012345");
-
-	[Fact]
-	void Round_trips_Result_of_ulong() => AssertRoundTrips(18000000000000000000UL, "18000000000000000000");
-
-	[Fact]
-	void Round_trips_Result_of_float() => AssertRoundTrips(3.14f, 3.14f.ToString(CultureInfo.InvariantCulture));
-
-	[Fact]
-	void Round_trips_Result_of_double() => AssertRoundTrips(2.71828182845, 2.71828182845.ToString(CultureInfo.InvariantCulture));
-
-	[Fact]
-	void Round_trips_Result_of_decimal() => AssertRoundTrips(1234.56m, "1234.56");
-
-	[Fact]
-	void Round_trips_Result_of_char() => AssertRoundTrips('Z', "Z");
-
-	[Fact]
-	void Round_trips_Result_of_string() => AssertRoundTrips("hello, Norse!", "hello, Norse!");
-
-	[Fact]
-	void Round_trips_Result_of_an_empty_string() => AssertRoundTrips("", "");
-
-	[Fact]
-	void Round_trips_Result_of_Guid()
+	void Result_of_Guid_matches_the_platforms_rfc_9562_wire_law_bit_for_bit()
 	{
-		var value = Guid.NewGuid();
-		AssertRoundTrips(value, value.ToString("D", CultureInfo.InvariantCulture));
+		// Same known GUID/hex pair IdentifierSerializersTests uses for a naked Guid member —
+		// Result<Guid> must land on the identical wire bytes, proving the two independently-implemented
+		// conventions (IdentifierSerializers' DataFormat.FixedSize sweep for a naked field, GuidWire for
+		// ResultSerializer<Guid>) agree bit-for-bit.
+		var knownGuid = new Guid("12345678-9abc-def0-1234-56789abcdef0");
+		const string KnownWireHex = "0A10123456789ABCDEF0123456789ABCDEF0";
+
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new PlainEnvelope<Guid> { Value = knownGuid });
+
+		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
 	}
 
 	[Fact]
-	void Round_trips_Result_of_DateOnly() => AssertRoundTrips(new DateOnly(2026, 8, 2), "2026-08-02");
+	void Result_of_decimal_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(1234.56m);
 
 	[Fact]
-	void Round_trips_Result_of_TimeOnly()
-	{
-		var value = new TimeOnly(23, 59, 59, 999);
-		AssertRoundTrips(value, value.ToString("O", CultureInfo.InvariantCulture));
-	}
+	void Result_of_DateTime_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new DateTime(2026, 7, 27, 12, 0, 0, DateTimeKind.Utc));
 
 	[Fact]
-	void Round_trips_Result_of_DateTime()
-	{
-		var value = new DateTime(2026, 8, 2, 1, 2, 3, DateTimeKind.Utc);
-		AssertRoundTrips(value, value.ToString("O", CultureInfo.InvariantCulture));
-	}
+	void Result_of_TimeSpan_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new TimeSpan(1, 2, 3, 4));
 
 	[Fact]
-	void Round_trips_Result_of_DateTimeOffset()
-	{
-		var value = new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5));
-		AssertRoundTrips(value, value.ToString("O", CultureInfo.InvariantCulture));
-	}
+	void Result_of_DateOnly_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new DateOnly(2026, 8, 1));
 
 	[Fact]
-	void Round_trips_Result_of_TimeSpan()
+	void Result_of_TimeOnly_matches_the_platforms_level_300_wire_law_bit_for_bit() =>
+		AssertMatchesLevel300(new TimeOnly(14, 30, 0));
+
+	[Fact]
+	void Round_trips_Result_of_bool() => AssertRoundTrips(true);
+
+	[Fact]
+	void Round_trips_Result_of_byte() => AssertRoundTrips((byte)200);
+
+	[Fact]
+	void Round_trips_Result_of_sbyte() => AssertRoundTrips((sbyte)-100);
+
+	[Fact]
+	void Round_trips_Result_of_short() => AssertRoundTrips((short)-12345);
+
+	[Fact]
+	void Round_trips_Result_of_ushort() => AssertRoundTrips((ushort)54321);
+
+	[Fact]
+	void Round_trips_Result_of_int() => AssertRoundTrips(-123456);
+
+	[Fact]
+	void Round_trips_Result_of_uint() => AssertRoundTrips(3000000000U);
+
+	[Fact]
+	void Round_trips_Result_of_long() => AssertRoundTrips(-123456789012345L);
+
+	[Fact]
+	void Round_trips_Result_of_ulong() => AssertRoundTrips(18000000000000000000UL);
+
+	[Fact]
+	void Round_trips_Result_of_float() => AssertRoundTrips(3.14f);
+
+	[Fact]
+	void Round_trips_Result_of_double() => AssertRoundTrips(2.71828182845);
+
+	[Fact]
+	void Round_trips_Result_of_decimal() => AssertRoundTrips(1234.56m);
+
+	[Fact]
+	void Round_trips_Result_of_char() => AssertRoundTrips('Z');
+
+	[Fact]
+	void Round_trips_Result_of_string() => AssertRoundTrips("hello, Norse!");
+
+	[Fact]
+	void Round_trips_Result_of_an_empty_string() => AssertRoundTrips("");
+
+	[Fact]
+	void Round_trips_Result_of_Guid() => AssertRoundTrips(Guid.NewGuid());
+
+	[Fact]
+	void Round_trips_Result_of_DateOnly() => AssertRoundTrips(new DateOnly(2026, 8, 2));
+
+	[Fact]
+	void Round_trips_Result_of_TimeOnly() => AssertRoundTrips(new TimeOnly(23, 59, 59, 999));
+
+	[Fact]
+	void Round_trips_Result_of_DateTime() => AssertRoundTrips(new DateTime(2026, 8, 2, 1, 2, 3, DateTimeKind.Utc));
+
+	[Fact]
+	void Round_trips_Result_of_DateTimeOffset() =>
+		AssertDateTimeOffsetRoundTrips(new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5)));
+
+	[Fact]
+	void Round_trips_Result_of_TimeSpan() => AssertRoundTrips(new TimeSpan(3, 4, 5, 6));
+
+	/// <summary>
+	/// DateTimeOffset alone has no native protobuf-net encoding — its fixture is hand-built as a wire
+	/// string (§7's "O" lexical form) rather than via a <see cref="PlainEnvelope{T}"/>, which would
+	/// itself throw ("No serializer defined for type: System.DateTimeOffset") on this one type.
+	/// </summary>
+	static void AssertDateTimeOffsetRoundTrips(DateTimeOffset value)
 	{
-		var value = new TimeSpan(3, 4, 5, 6);
-		AssertRoundTrips(value, XmlConvert.ToString(value));
+		var payload = WireBytes.StringFields((1, value.ToString("O", CultureInfo.InvariantCulture)));
+
+		var back = TestModel.Deserialize<Envelope<DateTimeOffset>>(TestModel.Create(), payload);
+
+		back.Value.TryGetValue(out Success<DateTimeOffset> success).ShouldBeTrue();
+		success.Value.ShouldBe(value);
 	}
 
 	/// <summary>
-	/// Hand-builds a one-field message carrying <paramref name="wireText"/> — the exact §7 lexical
-	/// string the JSON and XML legs would also write for <typeparamref name="T"/> — and proves
-	/// <see cref="ResultSerializer{T}.Read"/> funnels it through <see cref="Parser.ParseRequired{T}"/>
-	/// back to <paramref name="value"/>. This is the read-path replacement for the old byte-exactness
-	/// assertions: a plain string field's encoding is unambiguous (UTF-8 bytes, length-prefixed), so
-	/// there is no separate "does it match Level300's native binary form" question left to ask — the
-	/// only question worth asking is "does the canonical lexical text parse back correctly," which this
-	/// proves directly.
+	/// Builds a fixture by serializing <paramref name="value"/> through a <em>plain</em>
+	/// <typeparamref name="T"/> field (<see cref="PlainEnvelope{T}"/> — never a <see cref="Result{T}"/>
+	/// one, since <see cref="ResultSerializer{T}.Write"/> always throws) on the same model, then proves
+	/// <see cref="ResultSerializer{T}.Read"/> decodes those exact bytes back to <paramref name="value"/>
+	/// through the <see cref="Result{T}"/>-typed <see cref="Envelope{T}"/>. Not valid for
+	/// <see cref="DateTimeOffset"/> — see <see cref="AssertDateTimeOffsetRoundTrips"/>.
 	/// </summary>
-	static void AssertRoundTrips<T>(T value, string wireText) where T : notnull
+	static void AssertRoundTrips<T>(T value) where T : notnull
 	{
-		var payload = WireBytes.StringFields((1, wireText));
-		var back = TestModel.Deserialize<Envelope<T>>(TestModel.Create(), payload);
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new PlainEnvelope<T> { Value = value });
+		var back = TestModel.Deserialize<Envelope<T>>(model, payload);
 		back.Value.TryGetValue(out Success<T> success).ShouldBeTrue();
 		success.Value.ShouldBe(value);
+	}
+
+	// Mirrors IdentifierSerializersTests.Applies_level_300_semantics_per_member_without_touching_the_model_default:
+	// a fresh reference model with DefaultCompatibilityLevel pinned to Level300 is the platform's own
+	// yardstick for "what does a naked T field look like." The production model's per-field Level300
+	// sweep (IdentifierSerializers.ApplyWireLaw) must land on byte-identical output for a plain T field
+	// — the exact same bytes ResultSerializer<T>.Read consumes — or a real external Level300 producer
+	// and this platform's own reader would silently disagree despite every self-consistent round-trip
+	// test above still passing.
+	static void AssertMatchesLevel300<T>(T value) where T : notnull
+	{
+		var reference = RuntimeTypeModel.Create();
+		reference.DefaultCompatibilityLevel = CompatibilityLevel.Level300;
+		var expected = TestModel.Serialize(reference, new PlainEnvelope<T> { Value = value });
+
+		var model = TestModel.Create();
+		var actual = TestModel.Serialize(model, new PlainEnvelope<T> { Value = value });
+
+		actual.ShouldBe(expected);
 	}
 }
 
 /// <summary>
 /// Hand-constructs protobuf wire bytes field-by-field via the low-level <see cref="ProtoWriter.State"/>
-/// API — the technique every read-path fixture in <see cref="ResultSerializerTests"/> uses now that
-/// <see cref="ResultSerializer{T}.Write"/> always throws and a <see cref="Result{T}"/>-populated
-/// envelope can no longer be serialized through the normal model. Verified byte-identical to
-/// protobuf-net's own encoding of a plain <c>string</c> field at the same field number (spiked against
-/// a reference <see cref="RuntimeTypeModel"/> before this technique was adopted here).
+/// API — needed only for <see cref="DateTimeOffset"/> fixtures now, since every other type in the
+/// taxonomy has native protobuf-net support and can be built via a plain field on the model instead
+/// (<see cref="PlainEnvelope{T}"/>). Verified byte-identical to protobuf-net's own encoding of a plain
+/// <c>string</c> field at the same field number (spiked against a reference <see cref="RuntimeTypeModel"/>
+/// before this technique was adopted here).
 /// </summary>
 static class WireBytes
 {
@@ -270,6 +327,14 @@ public sealed class Envelope<T> where T : notnull
 	public Result<T> Value { get; set; }
 }
 
+/// <summary>The plain-field mirror of <see cref="Envelope{T}"/> — same field number, raw <typeparamref name="T"/> instead of <c>Result&lt;T&gt;</c>, so it can actually serialize (Write always throws on the Result-wrapped side).</summary>
+[ProtoContract]
+public sealed class PlainEnvelope<T> where T : notnull
+{
+	[ProtoMember(1)]
+	public T Value { get; set; } = default!;
+}
+
 [ProtoContract]
 public sealed class ResultEnvelope
 {
@@ -278,6 +343,17 @@ public sealed class ResultEnvelope
 
 	[ProtoMember(2)]
 	public Result<string>? Name { get; set; }
+}
+
+/// <summary>The plain-field mirror of <see cref="ResultEnvelope"/> — same field numbers, raw types.</summary>
+[ProtoContract]
+public sealed class PlainResultEnvelope
+{
+	[ProtoMember(1)]
+	public DateOnly When { get; set; }
+
+	[ProtoMember(2)]
+	public string? Name { get; set; }
 }
 
 [ProtoContract]
