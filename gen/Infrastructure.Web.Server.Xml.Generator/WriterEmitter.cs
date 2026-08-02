@@ -14,11 +14,14 @@ namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 /// not something a per-type <c>Write</c> method can know about itself.
 /// </summary>
 /// <remarks>
-/// <b>Reader emission is a later task.</b> <c>IXmlShape&lt;T&gt;</c> declares <c>Read</c>/
-/// <c>ReadObject</c> too, and the brief commits the emitted class to <c>: IXmlShape&lt;T&gt;</c>
-/// starting now — so this emitter closes out the interface with inert
-/// <see cref="NotSupportedException"/> shells, mirroring the platform's own established idiom for
-/// exactly this situation (Task 8's formatter classes start the same way, per the plan).
+/// <b>Reader emission is composed here too, as of Task 7.</b> <c>IXmlShape&lt;T&gt;</c> declares
+/// <c>Read</c>/<c>ReadObject</c> alongside <c>Write</c>/<c>WriteObject</c>, and <see cref="Emit"/>
+/// produces the single class implementing all four: the writer body stays exactly as this type builds
+/// it below, while the presence-aware, accumulating reader body (design spec §8) comes from
+/// <see cref="ReaderEmitter"/> — sharing this type's per-member wire-name arrays and enum tables
+/// (<see cref="EnumTable"/>, <see cref="GetOrAddEnumTable"/>) rather than building a second copy of
+/// either. One emitted file, one class, both directions — never a second writer and never a second
+/// reader.
 /// </remarks>
 static class WriterEmitter
 {
