@@ -87,6 +87,21 @@ public sealed class TransformerTests
 	}
 
 	[Fact]
+	async Task Collection_item_elements_are_named_from_the_item_types_own_case_styled_schema_name()
+	{
+		var document = await BuildDocumentAsync();
+
+		// Item element names come from the item type's own [DataContract] schema (spec §6.3) — proven
+		// here against the real generated document, not merely eyeballed against a throwaway probe.
+		document["components"]!["schemas"]!["CoverageLine"]!["xml"]!["name"]!.GetValue<string>().ShouldBe("coverage_line");
+
+		// No literal "wrapped" keyword exists in this OpenApi package version's xml vocabulary — see
+		// XmlMetadataTransformer's remarks. The array property itself carries no stray xml stamp; the
+		// vocabulary's own unwrapped-by-default behavior already matches Futhark's law.
+		document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["lines"]!.AsObject().ContainsKey("xml").ShouldBeFalse();
+	}
+
+	[Fact]
 	async Task The_wired_pipeline_never_leaks_Result_or_Outcome_by_name()
 	{
 		var document = await BuildDocumentAsync();
@@ -223,6 +238,13 @@ sealed class QuoteRequest
 	public Result<DateOnly> EffectiveDate { get; init; }
 	public Result<DateOnly>? ExpirationDate { get; init; }
 	public Result<int> LineCount { get; init; }
+	public List<CoverageLine> Lines { get; init; } = [];
+}
+
+[DataContract]
+sealed class CoverageLine
+{
+	public Result<string> Code { get; init; }
 }
 
 [DataContract]
