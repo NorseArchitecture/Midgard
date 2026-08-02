@@ -17,6 +17,15 @@ namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 /// <see cref="WebApplication"/> host to prove it fails at genuine startup, not merely from a validator
 /// method returning false.
 /// </summary>
+/// <remarks>
+/// <see cref="BuildHost"/> registers the whole test assembly as one application part, so every
+/// tripwire-scanned fixture controller (<see cref="TripwireController"/> and
+/// <see cref="ImplicitBodyController"/>) is discovered in every host-based test below, regardless of
+/// which one a given test is actually about. Each test therefore builds a registry that fully
+/// satisfies every OTHER scanned controller's types and leaves only the one type under test missing —
+/// otherwise the thrown exception's controller/type names would depend on
+/// <c>ApplicationPartManager</c>'s unspecified enumeration order instead of the test's own intent.
+/// </remarks>
 public sealed class AddNorseXmlTests
 {
 	[Fact]
@@ -67,7 +76,13 @@ public sealed class AddNorseXmlTests
 	[Fact]
 	async Task Tripwire_fails_startup_with_the_exact_named_error_when_a_facade_controller_exposes_an_unregistered_type()
 	{
-		await using var app = BuildHost(new XmlShapeRegistry());
+		// Every other scanned controller's types are satisfied — only TripwireController's own
+		// [FromBody] TripwireRequest is missing — so the thrown message is deterministically about it.
+		var registry = new XmlShapeRegistry();
+		registry.Add(new FakeXmlShape<TripwireResponse>());
+		registry.Add(new FakeXmlShape<ImplicitBodyPayload>());
+
+		await using var app = BuildHost(registry);
 
 		var exception = await Should.ThrowAsync<InvalidOperationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
 
@@ -76,11 +91,31 @@ public sealed class AddNorseXmlTests
 	}
 
 	[Fact]
+	async Task Tripwire_fails_startup_with_the_exact_named_error_for_the_implicit_single_parameter_body_binding_convention()
+	{
+		// ImplicitBodyController.Do(ImplicitBodyPayload payload) carries no [FromBody] — it relies on
+		// MVC's implicit single-non-scalar-parameter convention, the same one ClosureWalker.Analyze
+		// treats as body-bound (spec §4.1) when generating shapes. Every other scanned controller's
+		// types are satisfied here, so only this one is deterministically missing.
+		var registry = new XmlShapeRegistry();
+		registry.Add(new FakeXmlShape<TripwireRequest>());
+		registry.Add(new FakeXmlShape<TripwireResponse>());
+
+		await using var app = BuildHost(registry);
+
+		var exception = await Should.ThrowAsync<InvalidOperationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+
+		exception.Message.ShouldBe(
+			"facade controllers are host-compilation source — 'ImplicitBodyController' exposes 'ImplicitBodyPayload' with no generated shape; controllers shipped in referenced assemblies generate nothing");
+	}
+
+	[Fact]
 	async Task Tripwire_starts_up_cleanly_when_every_exposed_type_has_a_registered_shape()
 	{
 		var registry = new XmlShapeRegistry();
 		registry.Add(new FakeXmlShape<TripwireRequest>());
 		registry.Add(new FakeXmlShape<TripwireResponse>());
+		registry.Add(new FakeXmlShape<ImplicitBodyPayload>());
 
 		await using var app = BuildHost(registry);
 
@@ -91,12 +126,14 @@ public sealed class AddNorseXmlTests
 	async Task Tripwire_ignores_a_controller_that_does_not_derive_from_GrpcControllerBase()
 	{
 		// PlainMvcController (also discovered — same application part) exposes UnregisteredPayload
-		// with no registered shape. Only TripwireController's own types are registered here; if the
-		// tripwire scanned every discovered controller instead of only GrpcControllerBase descendants,
-		// PlainMvcController's unregistered payload would still fail startup.
+		// with no registered shape. Every GrpcControllerBase-descended controller's types are
+		// registered here; if the tripwire scanned every discovered controller instead of only
+		// GrpcControllerBase descendants, PlainMvcController's unregistered payload would still fail
+		// startup.
 		var registry = new XmlShapeRegistry();
 		registry.Add(new FakeXmlShape<TripwireRequest>());
 		registry.Add(new FakeXmlShape<TripwireResponse>());
+		registry.Add(new FakeXmlShape<ImplicitBodyPayload>());
 
 		await using var app = BuildHost(registry);
 

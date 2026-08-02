@@ -41,6 +41,20 @@ namespace Norse.Infrastructure.Web.Server.Tests.Xml.TripwireFixtures
 		public string Value { get; init; } = "";
 	}
 
+	/// <summary>The implicit-body-binding payload: no <c>[FromBody]</c>, but it's the action's only parameter and a non-scalar type — the same convention <c>ClosureWalker</c> treats as body-bound (spec §4.1) that <see cref="XmlShapeTripwireStartupFilter"/> must catch too.</summary>
+	public sealed class ImplicitBodyPayload
+	{
+		public string Value { get; init; } = "";
+	}
+
+	public sealed class ImplicitBodyController : Norse.Abstractions.Web.Server.Facade.GrpcControllerBase
+	{
+#pragma warning disable CA1822 // See TripwireController's identical suppression above.
+		public ActionResult<TripwireResponse> Do(ImplicitBodyPayload payload) =>
+			new TripwireResponse { Status = payload.Value };
+#pragma warning restore CA1822
+	}
+
 	/// <summary>Derives from plain <see cref="ControllerBase"/>, never <c>GrpcControllerBase</c> — the tripwire must never scan this.</summary>
 	public sealed class PlainMvcController : ControllerBase
 	{

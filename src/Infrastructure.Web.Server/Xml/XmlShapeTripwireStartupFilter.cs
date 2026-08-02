@@ -40,7 +40,7 @@ sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 		next(app);
 	};
 
-	[UnconditionalSuppressMessage("AotAnalysis", "IL2075", Justification = "Controller types come from ApplicationPartManager's own ControllerFeature over the host's compiled assemblies — MVC's controller-discovery machinery already requires those types (and their public action methods) survive trimming, or MVC itself couldn't route to them; reflecting over the same types to enforce this tripwire adds no new trim risk.")]
+	[UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Controller types come from ApplicationPartManager's own ControllerFeature over the host's compiled assemblies — MVC's controller-discovery machinery already requires those types (and their public action methods) survive trimming, or MVC itself couldn't route to them; reflecting over the same types to enforce this tripwire adds no new trim risk.")]
 	void Validate(IServiceProvider services)
 	{
 		var partManager = services.GetRequiredService<ApplicationPartManager>();
@@ -57,14 +57,57 @@ sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 				if (method.IsSpecialName || method.GetCustomAttribute<NonActionAttribute>() is not null)
 					continue;
 
-				foreach (var parameter in method.GetParameters())
-					if (parameter.GetCustomAttribute<FromBodyAttribute>() is not null)
+				var parameters = method.GetParameters();
+				foreach (var parameter in parameters)
+					if (IsBodyBound(parameter, parameters.Length))
 						EnsureShape(controllerType, parameter.ParameterType);
 
 				if (TryGetActionResultPayload(method.ReturnType) is { } payloadType)
 					EnsureShape(controllerType, payloadType);
 			}
 		}
+	}
+
+	/// <summary>
+	/// Mirrors <c>ClosureWalker.Analyze</c>'s own request-root rule (Task 5/6,
+	/// <c>Xml.Generator/ClosureWalker.cs</c>, the parameter loop feeding <c>requestRoots.Add</c>) at
+	/// the runtime/reflection layer: a parameter is body-bound if it carries an explicit
+	/// <c>[FromBody]</c>, OR — the implicit-binding convention MVC itself supports and the generator
+	/// already treats as body-bound — it carries none of the other explicit binding-source attributes,
+	/// is the method's only parameter, and its type falls outside the closed scalar taxonomy.
+	/// Independently maintained by design (compile-time Roslyn symbols vs. runtime reflection — no
+	/// code can be shared between the two), but the RULE must track <c>ClosureWalker</c>'s exactly: a
+	/// change there needs its mirror updated here too, the same discipline
+	/// <see cref="DerivesFromGrpcControllerBase"/> already applies to the metadata-name string match.
+	/// </summary>
+	static bool IsBodyBound(ParameterInfo parameter, int parameterCount)
+	{
+		if (parameter.GetCustomAttribute<FromBodyAttribute>() is not null)
+			return true;
+
+		var hasExplicitOtherSource =
+			parameter.GetCustomAttribute<FromRouteAttribute>() is not null ||
+			parameter.GetCustomAttribute<FromQueryAttribute>() is not null ||
+			parameter.GetCustomAttribute<FromHeaderAttribute>() is not null ||
+			parameter.GetCustomAttribute<FromServicesAttribute>() is not null;
+
+		return !hasExplicitOtherSource && parameterCount == 1 && !IsSupportedScalar(parameter.ParameterType);
+	}
+
+	/// <summary>Mirrors <c>ClosureWalker.IsSupportedScalar</c>/<c>IsKnownScalarStruct</c> — the same closed taxonomy, checked reflectively instead of via <c>ITypeSymbol</c>.</summary>
+	static bool IsSupportedScalar(Type type)
+	{
+		if (type.IsEnum)
+			return true;
+
+		if (type == typeof(bool) || type == typeof(sbyte) || type == typeof(byte) ||
+			type == typeof(short) || type == typeof(ushort) || type == typeof(int) || type == typeof(uint) ||
+			type == typeof(long) || type == typeof(ulong) || type == typeof(decimal) ||
+			type == typeof(float) || type == typeof(double) || type == typeof(char) || type == typeof(string))
+			return true;
+
+		return type == typeof(Guid) || type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+			type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan);
 	}
 
 	void EnsureShape(TypeInfo controllerType, Type memberType)
