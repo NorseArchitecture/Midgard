@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.TestHost;
@@ -11,7 +10,7 @@ namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
 /// Tests <see cref="MvcBuilderExtensions.AddNorseXml"/>'s composition seam: the ordinary DI wiring
-/// (registry singleton, <see cref="NorseXmlOptions"/>, both formatter shell types) via a plain
+/// (registry singleton, <see cref="NorseXmlOptions"/>, both formatter types) via a plain
 /// <see cref="ServiceCollection"/> — mirroring the sibling <c>Json/MvcBuilderExtensionsTests.cs</c>
 /// idiom — plus the library-controller tripwire (spec §3, ratified 2026-08-02), which needs a real
 /// <see cref="WebApplication"/> host to prove it fails at genuine startup, not merely from a validator
@@ -55,23 +54,10 @@ public sealed class AddNorseXmlTests
 		Should.Throw<ArgumentNullException>(() => builder.AddNorseXml(XmlCaseStyle.CamelCase, null!));
 	}
 
-	[Fact]
-	async Task XmlContractInputFormatter_ReadRequestBodyAsync_throws_NotSupportedException()
-	{
-		var formatter = new XmlContractInputFormatter();
-
-		// The shell has no defined context-shaped behavior yet (Task 9) — it throws unconditionally,
-		// before ever touching its arguments, so a null-forgiving stand-in context is sufficient here.
-		await Should.ThrowAsync<NotSupportedException>(() => formatter.ReadRequestBodyAsync(null!, Encoding.UTF8));
-	}
-
-	[Fact]
-	async Task XmlContractOutputFormatter_WriteResponseBodyAsync_throws_NotSupportedException()
-	{
-		var formatter = new XmlContractOutputFormatter();
-
-		await Should.ThrowAsync<NotSupportedException>(() => formatter.WriteResponseBodyAsync(null!, Encoding.UTF8));
-	}
+	// XmlContractInputFormatter/XmlContractOutputFormatter's real ReadRequestBodyAsync/WriteResponseBodyAsync
+	// behavior (Task 9) is covered by InputFormatterTests.cs, OutputFormatterTests.cs, and
+	// SecurityCorpusTests.cs — the shell-era "throws NotSupportedException unconditionally" tests that
+	// used to live here were replaced wholesale, not merely edited, since that behavior no longer exists.
 
 	[Fact]
 	async Task Tripwire_fails_startup_with_the_exact_named_error_when_a_facade_controller_exposes_an_unregistered_type()

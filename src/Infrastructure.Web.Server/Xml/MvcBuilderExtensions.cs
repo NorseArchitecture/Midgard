@@ -3,10 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace Norse.Infrastructure.Web.Server.Xml;
 
 /// <summary>
-/// Composition-root wiring for Futhark's XML leg (Task 8): registers <see cref="NorseXmlOptions"/> and
-/// the caller-supplied <see cref="XmlShapeRegistry"/> singleton, inserts the (currently shell)
-/// <see cref="XmlContractInputFormatter"/>/<see cref="XmlContractOutputFormatter"/> pair into MVC's
-/// formatter list, and registers the library-controller tripwire
+/// Composition-root wiring for Futhark's XML leg: registers <see cref="NorseXmlOptions"/> and
+/// the caller-supplied <see cref="XmlShapeRegistry"/> singleton, constructs the
+/// <see cref="XmlContractInputFormatter"/>/<see cref="XmlContractOutputFormatter"/> pair against that
+/// same registry and options and inserts them into MVC's formatter list, and registers the
+/// library-controller tripwire
 /// (<see cref="XmlShapeTripwireStartupFilter"/>) — a startup-time, never-runtime, assertion that every
 /// facade controller's body-bound parameter and <c>ActionResult&lt;T&gt;</c> payload types carry a
 /// generated shape (spec §3, ratified 2026-08-02). The host calls this as
@@ -24,13 +25,14 @@ public static class MvcBuilderExtensions
 		{
 			ArgumentNullException.ThrowIfNull(registry);
 
+			var xmlOptions = new NorseXmlOptions { CaseStyle = caseStyle };
 			builder.Services.AddSingleton(registry);
-			builder.Services.AddSingleton(new NorseXmlOptions { CaseStyle = caseStyle });
+			builder.Services.AddSingleton(xmlOptions);
 			builder.Services.AddSingleton<IStartupFilter, XmlShapeTripwireStartupFilter>();
 			builder.Services.Configure<MvcOptions>(options =>
 			{
-				options.InputFormatters.Insert(0, new XmlContractInputFormatter());
-				options.OutputFormatters.Insert(0, new XmlContractOutputFormatter());
+				options.InputFormatters.Insert(0, new XmlContractInputFormatter(registry, xmlOptions));
+				options.OutputFormatters.Insert(0, new XmlContractOutputFormatter(registry, xmlOptions));
 			});
 
 			return builder;
