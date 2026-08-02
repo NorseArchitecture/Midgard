@@ -119,22 +119,30 @@ public sealed class ResultJsonConverterTests
 		absent.ShouldBeNull();
 	}
 
+	// Result<T> is a deserialization-only type — Write always throws, for every state, success
+	// included. There is no "unwraps and writes the clean value" branch anymore: a caller that already
+	// holds a valid T should serialize T directly, never round-trip it back through the type that
+	// exists to validate untrusted input in the first place.
+	const string DeserializationOnlyMessage = "Result<T> is a deserialization-only type and must never be written";
+
 	[Fact]
-	void Write_success_unwraps_the_clean_value()
+	void Write_success_throws()
 	{
 		var options = NorseJsonTestOptions.Create();
 		Result<int> result = new Success<int>(42);
 
-		JsonSerializer.Serialize(result, options).ShouldBe("42");
+		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	[Fact]
-	void Write_success_string_unwraps_the_clean_value()
+	void Write_success_string_throws()
 	{
 		var options = NorseJsonTestOptions.Create();
 		Result<string> result = new Success<string>("hello");
 
-		JsonSerializer.Serialize(result, options).ShouldBe("\"hello\"");
+		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	[Fact]
@@ -144,7 +152,7 @@ public sealed class ResultJsonConverterTests
 		Result<int> result = new Failure(ParseFailure.Malformed, "nope", nameof(Int32));
 
 		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe("a failed Result<T> is illegal to write");
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	[Fact]
@@ -153,15 +161,27 @@ public sealed class ResultJsonConverterTests
 		var options = NorseJsonTestOptions.Create();
 
 		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(default(Result<int>), options));
-		exception.Message.ShouldBe("a failed Result<T> is illegal to write");
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	[Fact]
 	void Write_null_optional_result_emits_json_null()
 	{
+		// The null (absent-optional) case is orthogonal to writing a Result<T> value — nothing to
+		// deserialize-only-guard against, since there is no Result<T> here at all, just its absence.
 		var options = NorseJsonTestOptions.Create();
 
 		JsonSerializer.Serialize((Result<int>?)null, options).ShouldBe("null");
+	}
+
+	[Fact]
+	void Write_present_optional_success_throws()
+	{
+		var options = NorseJsonTestOptions.Create();
+		Result<int>? result = new Success<int>(42);
+
+		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	[Fact]
@@ -171,7 +191,7 @@ public sealed class ResultJsonConverterTests
 		Result<int>? result = new Failure(ParseFailure.Malformed, "nope", nameof(Int32));
 
 		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe("a failed Result<T> is illegal to write");
+		exception.Message.ShouldBe(DeserializationOnlyMessage);
 	}
 
 	[Theory]
