@@ -77,15 +77,31 @@ public sealed class ResultJsonConverterTests
 		failure.Reason.ShouldBe(ParseFailure.Malformed);
 	}
 
-	// NOTE: spec §8.2/§9.1 states a present-empty string succeeds ("Required Result<string> carrying
-	// "" round-trips"). As shipped, Parser.ParseRequired<string>("") returns Failure(Empty) — the
-	// generic-fallback path treats any trimmed-empty span as the "required missing" failure before
-	// ever reaching string's ISpanParsable.TryParse, with no type-specific carve-out. This converter
-	// funnels every present string token through Parser.ParseRequired uniformly (per §9.1: "so every
-	// failure message comes from one place"), so it inherits that behavior rather than special-casing
-	// string here — a per-converter carve-out would be a second way to fund the same content the
-	// ethos (§1.2) rejects. Flagged in the task report as a cross-repo gap for Svartálfheim/Task 0 or
-	// a future increment to resolve, not patched here.
+	[Fact]
+	void Read_present_empty_string_succeeds_for_required_string_result()
+	{
+		// Presence is carried entirely by which JSON token was seen, not by routing content through
+		// Parser — a present string token (§7: string's wire form is "verbatim"), empty or not, is
+		// content, distinct from the null branch's synthesized required-missing failure.
+		var options = NorseJsonTestOptions.Create();
+
+		var result = JsonSerializer.Deserialize<Result<string>>("\"\"", options);
+
+		result.Value.ShouldBeOfType<Success<string>>().Value.ShouldBe(string.Empty);
+	}
+
+	[Fact]
+	void Read_present_empty_string_succeeds_for_optional_string_result_distinct_from_null()
+	{
+		var options = NorseJsonTestOptions.Create();
+
+		var presentEmpty = JsonSerializer.Deserialize<Result<string>?>("\"\"", options);
+		var absent = JsonSerializer.Deserialize<Result<string>?>("null", options);
+
+		presentEmpty.ShouldNotBeNull();
+		presentEmpty.Value.Value.ShouldBeOfType<Success<string>>().Value.ShouldBe(string.Empty);
+		absent.ShouldBeNull();
+	}
 
 	[Fact]
 	void Write_success_unwraps_the_clean_value()
