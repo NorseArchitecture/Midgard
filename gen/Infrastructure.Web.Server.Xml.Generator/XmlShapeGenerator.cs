@@ -94,6 +94,12 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 			// above — always produced, even with zero shapes, since the host calls
 			// AddNorseXml(style, NorseXmlShapeRegistration.Build()) unconditionally.
 			productionContext.AddSource("NorseXmlShapeRegistration.g.cs", SourceText.From(RegistrationEmitter.Emit(hostRootNamespace, distinctShapes), Utf8NoBom.Encoding));
+
+			// Task 8: the sibling enum name/value registration -- one EnumNameTable per distinct enum
+			// type reachable from any emitted shape's members, always produced (even with zero enums),
+			// since every generated shape's Write/Read may reference NorseEnumNameRegistration.*Table
+			// fields for its own enum-typed members.
+			productionContext.AddSource("NorseEnumNameRegistration.g.cs", SourceText.From(RegistrationEmitter.EmitEnumRegistration(hostRootNamespace, distinctShapes), Utf8NoBom.Encoding));
 		});
 	}
 

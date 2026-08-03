@@ -22,11 +22,13 @@ public sealed class IncrementalCachingTests
 		[DataContract]
 		public sealed record Req
 		{
+			[DataMember]
 			public Result<string> Value { get; init; }
 		}
 
 		public sealed record Resp
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 

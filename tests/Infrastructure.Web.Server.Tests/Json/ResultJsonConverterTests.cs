@@ -119,30 +119,31 @@ public sealed class ResultJsonConverterTests
 		absent.ShouldBeNull();
 	}
 
-	// Result<T> is a deserialization-only type — Write always throws, for every state, success
-	// included. There is no "unwraps and writes the clean value" branch anymore: a caller that already
-	// holds a valid T should serialize T directly, never round-trip it back through the type that
-	// exists to validate untrusted input in the first place.
-	const string DeserializationOnlyMessage = "Result<T> is a deserialization-only type and must never be written";
+	// A failed or default Result<T> is illegal to write; a success unwraps to the plain scalar value
+	// instead — the same one-law wording the gRPC serializers and generated XML writer throw, so the
+	// message never diverges by channel.
+	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	[Fact]
-	void Write_success_throws()
+	void Write_success_emits_the_clean_unwrapped_value()
 	{
 		var options = NorseJsonTestOptions.Create();
-		Result<int> result = new Success<int>(42);
+		Result<TimeSpan> result = new Success<TimeSpan>(new TimeSpan(1, 2, 3, 4));
 
-		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		JsonSerializer.Serialize(result, options).ShouldBe("\"P1DT2H3M4S\"");
 	}
 
 	[Fact]
-	void Write_success_string_throws()
+	void Write_success_string_round_trips_through_the_wrapped_type()
 	{
 		var options = NorseJsonTestOptions.Create();
-		Result<string> result = new Success<string>("hello");
+		Result<string> result = "Bifrost";
 
-		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		var json = JsonSerializer.Serialize(result, options);
+
+		json.ShouldBe("\"Bifrost\"");
+		JsonSerializer.Deserialize<Result<string>>(json, options).Value
+			.ShouldBeOfType<Success<string>>().Value.ShouldBe("Bifrost");
 	}
 
 	[Fact]
@@ -152,36 +153,36 @@ public sealed class ResultJsonConverterTests
 		Result<int> result = new Failure(ParseFailure.Malformed, "nope", nameof(Int32));
 
 		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
 
 	[Fact]
-	void Write_default_result_throws()
+	void Write_default_result_throws_the_illegal_write_law()
 	{
 		var options = NorseJsonTestOptions.Create();
 
-		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(default(Result<int>), options));
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		var exception = Should.Throw<InvalidOperationException>(() =>
+			JsonSerializer.Serialize(default(Result<int>), options));
+		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
 
 	[Fact]
 	void Write_null_optional_result_emits_json_null()
 	{
 		// The null (absent-optional) case is orthogonal to writing a Result<T> value — nothing to
-		// deserialize-only-guard against, since there is no Result<T> here at all, just its absence.
+		// illegal-write-guard against, since there is no Result<T> here at all, just its absence.
 		var options = NorseJsonTestOptions.Create();
 
 		JsonSerializer.Serialize((Result<int>?)null, options).ShouldBe("null");
 	}
 
 	[Fact]
-	void Write_present_optional_success_throws()
+	void Write_present_optional_success_emits_the_clean_unwrapped_value()
 	{
 		var options = NorseJsonTestOptions.Create();
 		Result<int>? result = new Success<int>(42);
 
-		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		JsonSerializer.Serialize(result, options).ShouldBe("42");
 	}
 
 	[Fact]
@@ -191,7 +192,7 @@ public sealed class ResultJsonConverterTests
 		Result<int>? result = new Failure(ParseFailure.Malformed, "nope", nameof(Int32));
 
 		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, options));
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
 
 	[Theory]
@@ -212,28 +213,4 @@ public sealed class ResultJsonConverterTests
 		result.ShouldNotBeNull();
 		resultType.GetProperty(nameof(Result<>.HasValue))!.GetValue(result).ShouldBe(true);
 	}
-
-	[Fact]
-	void Result_of_an_enum_refuses_loudly_with_the_named_gap_never_a_constraint_violation()
-	{
-		// Result<TEnum> has no JSON wire law yet: ResultJsonConverter<T> is constrained to
-		// ISpanParsable<T>, which no enum satisfies — the factory's CanConvert says yes for any
-		// Result<T>, so without this guard MakeGenericType would throw a bare ArgumentException about
-		// generic constraints at first serialization. The gap gets a named refusal instead; the fix is
-		// an open design (the enum name tables live in the generated XML shapes, and the JSON channel
-		// has no equivalent yet — see the Futhark postmortem).
-		var options = NorseJsonTestOptions.Create();
-
-		var exception = Should.Throw<NotSupportedException>(() =>
-			JsonSerializer.Deserialize<Result<GapStatus>>("\"active\"", options));
-
-		exception.Message.ShouldBe(
-			"Result<GapStatus> has no JSON wire law — enums parse through the generated XML shapes' name tables, and the JSON channel has no equivalent mechanism yet");
-	}
-}
-
-/// <summary>Fixture enum for the named-refusal test — explicit values per platform enum convention.</summary>
-public enum GapStatus
-{
-	Active = 1
 }

@@ -33,27 +33,37 @@ public sealed class ReaderEmissionTests
 		[DataContract]
 		public sealed record PersonRequest
 		{
+			[DataMember]
 			public Result<string> Name { get; init; }
+			[DataMember]
 			public Result<decimal> Limit { get; init; }
+			[DataMember]
 			public Result<DateOnly> BirthDate { get; init; }
+			[DataMember]
 			public Result<int> Age { get; init; }
+			[DataMember]
 			public Result<int>? Score { get; init; }
+			[DataMember]
 			public Extra? Detail { get; init; }
+			[DataMember]
 			public List<Tag> Tags { get; init; } = new();
 		}
 
 		public sealed record Extra
 		{
+			[DataMember]
 			public Result<string> Note { get; init; }
 		}
 
 		public sealed record Tag
 		{
+			[DataMember]
 			public Result<string> Value { get; init; }
 		}
 
 		public sealed record PersonResponse
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 
@@ -259,17 +269,21 @@ public sealed class ReaderEmissionTests
 		[DataContract]
 		public sealed record OrderRequest
 		{
+			[DataMember]
 			public Result<Status> State { get; init; }
+			[DataMember]
 			public Payment Payment { get; init; } = null!;
 		}
 
 		public sealed record Payment
 		{
+			[DataMember]
 			public Result<decimal> Amount { get; init; }
 		}
 
 		public sealed record OrderResponse
 		{
+			[DataMember]
 			public string Ok { get; init; } = "";
 		}
 
@@ -307,93 +321,35 @@ public sealed class ReaderEmissionTests
 		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse 'Cancelled' as Status"));
 	}
 
-	const string FlagsFixture = """
-		using System;
-		using System.Runtime.Serialization;
-		using System.Threading.Tasks;
-		using Microsoft.AspNetCore.Mvc;
-		using Norse.Primitives;
-		using Norse.Abstractions.Web.Server.Facade;
-
-		namespace Norse.Fixtures.ReaderFlags;
-
-		[Flags]
-		public enum Access
-		{
-			Read = 1,
-			Write = 2,
-			Execute = 4,
-			ReadWrite = Read | Write
-		}
-
-		[DataContract]
-		public sealed record AccessRequest
-		{
-			public Result<Access> Perm { get; init; }
-		}
-
-		public sealed record FlagsResponse
-		{
-			public string Ok { get; init; } = "";
-		}
-
-		public sealed class AccessController : GrpcControllerBase
-		{
-			public Task<ActionResult<FlagsResponse>> Do([FromBody] AccessRequest request) =>
-				Task.FromResult(new ActionResult<FlagsResponse>(new FlagsResponse()));
-		}
-		""";
-
 	[Fact]
-	void A_flags_value_written_canonically_and_a_space_separated_decomposition_both_read_back_correctly()
+	void An_entirely_absent_required_enum_attribute_yields_required_value_missing_distinct_from_present_empty()
 	{
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("AccessRequest");
-		var accessType = compiled.ResolveType("Norse.Fixtures.ReaderFlags.Access");
+		var compiled = CompiledFixture.Build(RequiredNestedFixture);
+		var shape = compiled.Shape("OrderRequest");
 
-		// Canonical write form for Read|Write is the exact-match compound name "ReadWrite" (§7) —
-		// hand-authored, not built via the shape's own generated Write, for the same reason as
-		// Happy_path_round_trip_preserves_a_required_empty_string above: Perm is Result<Access>-wrapped,
-		// and Write always throws for a Result<T>-wrapped member now, whatever value it carries.
-		var canonicalXml = """<AccessRequest Perm="ReadWrite" />""";
+		// State never appears on the element at all (spec §8.2 presence law) — must yield the
+		// required-missing failure, never routed through EnumLexical.Parse (which would report
+		// "cannot parse '' as Status", a Malformed failure, since it treats "" as content, never absence).
+		var xml = """<OrderRequest><Payment Amount="1.00" /></OrderRequest>""";
 
-		var (canonicalValue, canonicalContext) = ReadFragment(shape, canonicalXml, "AccessRequest", WireCaseStyle.PascalCase);
-		canonicalContext.HasFailures.ShouldBeFalse();
+		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
 
-		// A hand-written space-separated decomposition of the same value must read back identically —
-		// the reader accepts both forms even though the writer only ever emits the canonical one (§7).
-		var decomposedXml = """<AccessRequest Perm="Read Write" />""";
-		var (decomposedValue, decomposedContext) = ReadFragment(shape, decomposedXml, "AccessRequest", WireCaseStyle.PascalCase);
-		decomposedContext.HasFailures.ShouldBeFalse();
-
-		var canonicalBits = EnumBits(GetProperty(canonicalValue!, "Perm"), accessType);
-		var decomposedBits = EnumBits(GetProperty(decomposedValue!, "Perm"), accessType);
-		decomposedBits.ShouldBe(canonicalBits);
-		decomposedBits.ShouldBe(3);
+		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "required value missing"));
 	}
 
 	[Fact]
-	void A_duplicate_flags_token_is_accumulated_as_its_own_failure()
+	void A_present_empty_required_enum_attribute_is_malformed_not_required_missing()
 	{
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("AccessRequest");
+		var compiled = CompiledFixture.Build(RequiredNestedFixture);
+		var shape = compiled.Shape("OrderRequest");
 
-		var xml = """<AccessRequest Perm="Read Read" />""";
+		// State is present with empty content — distinct from entire absence above: this is Malformed
+		// (EnumLexical.Parse sees "" as unrecognized content), never the required-missing failure.
+		var xml = """<OrderRequest State=""><Payment Amount="1.00" /></OrderRequest>""";
 
-		var (_, context) = ReadFragment(shape, xml, "AccessRequest", WireCaseStyle.PascalCase);
+		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
 
-		context.Failures.ShouldContain(f => f.Path == "AccessRequest/@Perm" && f.Detail == "duplicate flags token 'Read'");
-	}
-
-	static long EnumBits(object? boxedResult, Type enumType)
-	{
-		var resultType = typeof(Result<>).MakeGenericType(enumType);
-		var successType = typeof(Success<>).MakeGenericType(enumType);
-		var tryGetValue = resultType.GetMethod("TryGetValue", [successType.MakeByRefType()])!;
-		var args = new object?[] { null };
-		tryGetValue.Invoke(boxedResult, args).ShouldBe(true);
-		var value = successType.GetProperty("Value")!.GetValue(args[0]);
-		return Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse '' as Status"));
 	}
 
 	static object GetProperty(object instance, string name)

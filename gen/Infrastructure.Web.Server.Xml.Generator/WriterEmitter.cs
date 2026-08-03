@@ -6,23 +6,24 @@ namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 /// <summary>
 /// Emits the canonical Futhark XML writer for one contract shape (design spec §6): declaration-order
 /// attributes then declaration-order child elements, null scalars omitted, <c>Result&lt;T&gt;</c>
-/// always-throw (a deserialization-only type has no legal outbound form, whatever state it carries),
-/// enum name tables (<c>[Flags]</c>: exact-defined-match first, else greedy
-/// decomposition descending by value), and recursion into nested/collection complex members via their
-/// own generated shape classes — never a second writer, one recursive projection reused as both "the
-/// root" and "a fragment," which is exactly why this method never calls <c>WriteStartDocument</c>: the
-/// XML declaration is a whole-document fact the caller's <c>XmlWriterSettings</c> controls (Task 9),
-/// not something a per-type <c>Write</c> method can know about itself.
+/// unwrap-on-success (a failed or default <c>Result&lt;T&gt;</c> throws — the same platform-wide
+/// wording the JSON and gRPC legs use), enum values rendered through the shared runtime
+/// <c>EnumLexical.Format</c>/<c>EnumNameTable</c> mechanism (Task 8) — never a per-shape switch — and
+/// recursion into nested/collection complex members via their own generated shape classes — never a
+/// second writer, one recursive projection reused as both "the root" and "a fragment," which is
+/// exactly why this method never calls <c>WriteStartDocument</c>: the XML declaration is a
+/// whole-document fact the caller's <c>XmlWriterSettings</c> controls (Task 9), not something a
+/// per-type <c>Write</c> method can know about itself.
 /// </summary>
 /// <remarks>
 /// <b>Reader emission is composed here too, as of Task 7.</b> <c>IXmlShape&lt;T&gt;</c> declares
 /// <c>Read</c>/<c>ReadObject</c> alongside <c>Write</c>/<c>WriteObject</c>, and <see cref="Emit"/>
 /// produces the single class implementing all four: the writer body stays exactly as this type builds
 /// it below, while the presence-aware, accumulating reader body (design spec §8) comes from
-/// <see cref="ReaderEmitter"/> — sharing this type's per-member wire-name arrays and enum tables
-/// (<see cref="EnumTable"/>, <see cref="GetOrAddEnumTable"/>) rather than building a second copy of
-/// either. One emitted file, one class, both directions — never a second writer and never a second
-/// reader.
+/// <see cref="ReaderEmitter"/> — sharing this type's per-member wire-name arrays and, as of Task 8,
+/// the same <see cref="EnumTableReference"/> into the generated <c>NorseEnumNameRegistration</c> class
+/// rather than either emitter building a table of its own. One emitted file, one class, both
+/// directions — never a second writer and never a second reader.
 /// </remarks>
 static class WriterEmitter
 {
@@ -32,29 +33,13 @@ static class WriterEmitter
 	{
 		var shortName = ShortName(shape.TypeName);
 		var className = $"{shortName}XmlShape";
-		Dictionary<string, EnumTable> enumTables = [];
 
-		var (attributeWrites, writeIsAlwaysUnreachablePastHere) = WriteAttributes(shape, enumTables);
-		// A required (non-nullable) Result<T>-wrapped scalar member's write is an unconditional throw
-		// (Result<T> has no legal outbound form) — once one is reached in declaration order, every
-		// later statement in Write (remaining attributes, every child element, the closing
-		// WriteEndElement) is genuinely unreachable, and the compiler is right to say so (CS0162).
-		// Emitting honest generated code means not emitting any of it, not suppressing the diagnostic
-		// that catches it.
-		var childWrites = writeIsAlwaysUnreachablePastHere ? string.Empty : WriteChildren(rootNamespace, shape);
-		// Same reachability fact as childWrites above: once the throw fires, control never returns to
-		// close the element, so the close call itself is exactly as unreachable and stays unemitted.
-		var writeEndElement = writeIsAlwaysUnreachablePastHere ? string.Empty : "\t\twriter.WriteEndElement();";
-		var fieldDeclarations = FieldDeclarations(shape, enumTables);
-		var enumHelpers = EnumHelperMethods(enumTables);
+		var attributeWrites = WriteAttributes(shape, rootNamespace);
+		var childWrites = WriteChildren(rootNamespace, shape);
+		var fieldDeclarations = FieldDeclarations(shape);
 
-		// Reader emission (Task 7) shares this same enumTables dictionary — by this point every
-		// enum-typed scalar member's table is already populated (FieldDeclarations above forces it),
-		// so the reader's name->value lookups scan the exact same _{SafeName}Names arrays the writer
-		// declares, never a second table.
 		var readerFieldDeclarations = ReaderEmitter.FieldDeclarations(shape);
-		var readMethod = ReaderEmitter.ReadMethod(rootNamespace, shape, enumTables);
-		var readerEnumHelpers = ReaderEmitter.EnumHelperMethods(enumTables);
+		var readMethod = ReaderEmitter.ReadMethod(rootNamespace, shape);
 
 		StringBuilder sb = new();
 		sb.AppendCSharp(
@@ -85,15 +70,13 @@ static class WriterEmitter
 					writer.WriteStartElement(_rootNames[(int)style]);
 			{{attributeWrites}}
 			{{childWrites}}
-			{{writeEndElement}}
+					writer.WriteEndElement();
 				}
 
 			{{readMethod}}
 
 				public object? ReadObject(global::System.Xml.XmlReader reader, {{XmlNs}}.XmlCaseStyle style, {{XmlNs}}.XmlReadContext context) =>
 					Read(reader, style, context);
-			{{enumHelpers}}
-			{{readerEnumHelpers}}
 			}
 			#pragma warning restore CS1591
 			""");
@@ -108,10 +91,10 @@ static class WriterEmitter
 	/// <c>global::</c> prefix; every other scalar type (<c>Guid</c>/<c>DateTime</c>/<c>DateOnly</c>/
 	/// <c>TimeOnly</c>/<c>TimeSpan</c>/<c>DateTimeOffset</c>/enums) renders fully <c>global::</c>-qualified.
 	/// </summary>
-	static string FormatExpression(MemberModel member, string valueExpression, Dictionary<string, EnumTable> enumTables)
+	static string FormatExpression(MemberModel member, string valueExpression, string rootNamespace)
 	{
 		if (member.EnumValues.Count > 0)
-			return EnumFormatCall(member, valueExpression, enumTables);
+			return EnumFormatCall(member, valueExpression, rootNamespace);
 
 		return member.ScalarTypeName switch
 		{
@@ -132,104 +115,80 @@ static class WriterEmitter
 		};
 	}
 
-	static string EnumFormatCall(MemberModel member, string valueExpression, Dictionary<string, EnumTable> enumTables)
-	{
-		var table = GetOrAddEnumTable(member, enumTables);
-		var method = member.IsFlagsEnum ? $"{table.SafeName}FlagsName" : $"{table.SafeName}Name";
-		return $"{method}({valueExpression}, (int)style)";
-	}
+	/// <summary>
+	/// Renders an enum member's write through the shared runtime mechanism — <c>EnumLexical.Format</c>
+	/// against the one <see cref="EnumTableReference"/> the generated <c>NorseEnumNameRegistration</c>
+	/// class declares for this enum type, generic-inferred from <paramref name="valueExpression"/>'s
+	/// own type (never an explicit type argument — <c>Format</c>'s <c>TEnum value</c> parameter makes
+	/// inference unambiguous, unlike <see cref="ReaderEmitter"/>'s <c>Parse</c> call, which has no
+	/// parameter of type <c>TEnum</c> and must specify one).
+	/// </summary>
+	static string EnumFormatCall(MemberModel member, string valueExpression, string rootNamespace) =>
+		$"{XmlNs}.EnumLexical.Format({EnumTableReference(rootNamespace, member.ScalarTypeName!)}, {valueExpression}, (int)style)";
 
-	internal static EnumTable GetOrAddEnumTable(MemberModel member, Dictionary<string, EnumTable> enumTables)
-	{
-		var enumType = member.ScalarTypeName!;
-		if (enumTables.TryGetValue(enumType, out var existing))
-			return existing;
+	/// <summary>
+	/// The fully-qualified reference to one enum type's shared <c>EnumNameTable</c> field on the
+	/// generated <c>NorseEnumNameRegistration</c> class (<see cref="RegistrationEmitter"/>) — the one
+	/// place per host compilation each enum's table is declared, so every shape referencing the same
+	/// enum type (and the registry <see cref="RegistrationEmitter"/> builds for the JSON/OpenAPI legs)
+	/// all read the exact same instance, never a per-shape copy.
+	/// </summary>
+	internal static string EnumTableReference(string rootNamespace, string enumTypeName) =>
+		$"global::{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration.{SafeIdentifier(enumTypeName)}Table";
 
-		// First-declared alias wins when two enum members share one underlying value (e.g. Red = 1,
-		// Crimson = 1) — otherwise two switch arms sharing an identical case-label constant would be a
-		// duplicate-case compile error (CS0152) in the emitted code.
-		var distinctByValue = member.EnumValues
-			.GroupBy(v => v.Value)
-			.Select(g => g.First())
-			.ToList();
-
-		var table = new EnumTable(SafeIdentifier(enumType), enumType, distinctByValue, member.IsFlagsEnum);
-		enumTables.Add(enumType, table);
-		return table;
-	}
-
-	static string FieldDeclarations(ShapeModel shape, Dictionary<string, EnumTable> enumTables)
+	static string FieldDeclarations(ShapeModel shape)
 	{
 		List<string> lines = [];
 		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
-		{
 			lines.Add($"\tstatic readonly string[] _{member.ClrName}AttrNames = {NamesLiteral(member.WireNames)};");
-			if (member.EnumValues.Count > 0)
-				GetOrAddEnumTable(member, enumTables);
-		}
-
-		foreach (var table in enumTables.Values)
-		{
-			lines.Add($"\tstatic readonly string[][] _{table.SafeName}Names =");
-			lines.Add("\t[");
-			foreach (var value in table.Values)
-				lines.Add($"\t\t{NamesLiteral(value.WireNames)},");
-			lines.Add("\t];");
-		}
 
 		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
 	}
 
-	/// <summary>
-	/// Emits one line per scalar member, declaration order, and stops the moment it emits a required
-	/// (non-nullable) <c>Result&lt;T&gt;</c>-wrapped member's unconditional throw — that throw is the
-	/// last reachable statement in the enclosing <c>Write</c> method, so nothing textually after it
-	/// (later attributes here, and the caller's child writes / <c>WriteEndElement</c>) is emitted.
-	/// Only the FIRST such member truncates; any later required-<c>Result&lt;T&gt;</c> members would
-	/// have been equally unreachable and are correctly never reached by this loop at all. The nullable
-	/// case (<c>Result&lt;T&gt;?</c>) throws only behind an <c>if (value.X.HasValue)</c> gate, so it
-	/// never truncates.
-	/// </summary>
-	/// <returns>The emitted lines, and whether emission truncated on an unconditional throw.</returns>
-	static (string Code, bool Truncated) WriteAttributes(ShapeModel shape, Dictionary<string, EnumTable> enumTables)
+	static string WriteAttributes(ShapeModel shape, string rootNamespace)
 	{
 		List<string> lines = [];
 		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
-		{
-			lines.Add(WriteAttribute(member, enumTables));
-			if (member is { IsResultWrapped: true, IsNullable: false })
-				return (string.Join("\n", lines), true);
-		}
+			lines.Add(WriteAttribute(member, rootNamespace));
 
-		return (lines.Count == 0 ? string.Empty : string.Join("\n", lines), false);
+		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
 	}
 
-	static string WriteAttribute(MemberModel member, Dictionary<string, EnumTable> enumTables)
+	static string WriteAttribute(MemberModel member, string rootNamespace)
 	{
 		var attrNames = $"_{member.ClrName}AttrNames[(int)style]";
 
-		// Result<T> is a deserialization-only type (platform law, uniform across JSON/gRPC/XML) —
-		// Write always throws for a Result<T>-wrapped member, unconditionally, whatever state it
-		// carries (Success/Failure/absent). No unwrap-on-success branch: a caller that already holds a
-		// valid unwrapped value has no business round-tripping it back through the type that exists to
-		// validate untrusted input in the first place. attrNames/FormatExpression/enumTables above are
-		// unused by both throw branches below — kept as parameters/locals regardless, since every other
-		// scalar kind in this switch still needs them and the shared method signature stays uniform.
+		// Result<T> unwraps on success — the only illegal outbound state is a failure or a defaulted
+		// value (TryGetValue(out Success<T>) returns false for both, in one check), matching the
+		// pinned platform-wide wording (ResultSerializers.IllegalWriteMessage, the JSON converters'
+		// own literal). No truncation concern here (contrast the old always-throw shape this restores
+		// over): the throw sits behind a conditional, so every later statement in Write stays reachable
+		// regardless of which member throws.
 		if (member is { IsResultWrapped: true, IsNullable: true })
 		{
-			// Explicit HasValue, not `is { } x` — a `Nullable<T>` not-null property pattern normally
-			// narrows to T, but against Result<T>?'s [Union]-marked T (C# 15 preview unions), the
-			// narrowed variable mistypes as `object`. HasValue is an ordinary Nullable<T> member,
-			// untouched by union pattern-matching restrictions, so it stays the safe presence check even
-			// though nothing below needs the unwrapped value anymore.
+			// Explicit HasValue/.Value, not `is { } x` — a `Nullable<T>` not-null property pattern
+			// normally narrows to T, but against Result<T>?'s [Union]-marked T (C# 15 preview unions),
+			// the narrowed variable mistypes as `object`. HasValue/.Value are ordinary Nullable<T>
+			// members, untouched by union pattern-matching restrictions.
+			var wrapperVar = $"{member.ClrName}Wrapper";
+			var unwrapVar = UnwrapVar(member);
 			return
-				"\t\tif (value." + member.ClrName + ".HasValue)\n" +
-				"\t\t\tthrow new global::System.InvalidOperationException(\"Result<T> is a deserialization-only type and must never be written\");";
+				$"\t\tif (value.{member.ClrName}.HasValue)\n" +
+				"\t\t{\n" +
+				$"\t\t\tvar {wrapperVar} = value.{member.ClrName}.Value;\n" +
+				$"\t\t\tif (!{wrapperVar}.TryGetValue(out global::Norse.Primitives.Success<{member.ScalarTypeName}> {unwrapVar}))\n" +
+				"\t\t\t\tthrow new global::System.InvalidOperationException(\"a failed or default Result<T> is illegal to write\");\n" +
+				$"\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"{unwrapVar}.Value", rootNamespace)});\n" +
+				"\t\t}";
 		}
 
 		if (member is { IsResultWrapped: true, IsNullable: false })
 		{
-			return "\t\tthrow new global::System.InvalidOperationException(\"Result<T> is a deserialization-only type and must never be written\");";
+			var unwrapVar = UnwrapVar(member);
+			return
+				$"\t\tif (!value.{member.ClrName}.TryGetValue(out global::Norse.Primitives.Success<{member.ScalarTypeName}> {unwrapVar}))\n" +
+				"\t\t\tthrow new global::System.InvalidOperationException(\"a failed or default Result<T> is illegal to write\");\n" +
+				$"\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"{unwrapVar}.Value", rootNamespace)});";
 		}
 
 		if (member is { IsResultWrapped: false, IsNullable: true })
@@ -237,11 +196,15 @@ static class WriterEmitter
 			var rawVar = $"{member.ClrName}Raw";
 			return
 				$"\t\tif (value.{member.ClrName} is {{ }} {rawVar})\n" +
-				$"\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, rawVar, enumTables)});";
+				$"\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, rawVar, rootNamespace)});";
 		}
 
-		return $"\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"value.{member.ClrName}", enumTables)});";
+		return $"\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"value.{member.ClrName}", rootNamespace)});";
 	}
+
+	/// <summary>The local that captures a Result-wrapped member's unwrapped success case — <c>__{camelClrName}</c>, e.g. <c>__limit</c> for a member named <c>Limit</c>.</summary>
+	static string UnwrapVar(MemberModel member) =>
+		$"__{char.ToLowerInvariant(member.ClrName[0])}{member.ClrName.Substring(1)}";
 
 	static string WriteChildren(string rootNamespace, ShapeModel shape)
 	{
@@ -278,66 +241,6 @@ static class WriterEmitter
 		return $"\t\t{memberShape}.Instance.Write(writer, value.{member.ClrName}, style);";
 	}
 
-	/// <summary>
-	/// One name-lookup helper per distinct enum type referenced in this shape. Non-flags: a switch
-	/// over the defined constants, exact match only — an unmatched value is undefined and throws.
-	/// Flags (spec §6.5): the same exact-match switch first (so an explicitly-defined combination like
-	/// <c>ReadWrite</c> renders as <c>"ReadWrite"</c>, never <c>"Read Write"</c>), then greedy
-	/// decomposition descending by value over the remaining defined non-zero members; leftover bits
-	/// after decomposition, or a zero value with no defined zero member, are both undefined and throw.
-	/// </summary>
-	static string EnumHelperMethods(Dictionary<string, EnumTable> enumTables)
-	{
-		List<string> methods = [];
-		foreach (var table in enumTables.Values)
-			methods.Add(table.IsFlags ? FlagsMethod(table) : ExactMatchMethod(table));
-
-		return methods.Count == 0 ? string.Empty : "\n" + string.Join("\n\n", methods);
-	}
-
-	static string ExactMatchMethod(EnumTable table)
-	{
-		// table.EnumTypeName is ScalarTypeName, already global::-qualified (FullyQualifiedFormat) —
-		// no second global:: prefix here.
-		StringBuilder sb = new();
-		sb.Append($"\tstatic string {table.SafeName}Name({table.EnumTypeName} value, int styleIndex)\n\t{{\n\t\tswitch (value)\n\t\t{{\n");
-		for (var i = 0; i < table.Values.Count; i++)
-			sb.Append($"\t\t\tcase {table.EnumTypeName}.{table.Values[i].ClrName}: return _{table.SafeName}Names[{i}][styleIndex];\n");
-		sb.Append("\t\t\tdefault:\n");
-		sb.Append($"\t\t\t\tthrow new global::System.InvalidOperationException($\"'{{value}}' is an undefined value of '{{typeof({table.EnumTypeName})}}' and is illegal to write.\");\n");
-		sb.Append("\t\t}\n\t}");
-		return sb.ToString();
-	}
-
-	static string FlagsMethod(EnumTable table)
-	{
-		var nonZero = table.Values.Where(v => v.Value != 0).OrderByDescending(v => v.Value).ToList();
-
-		// table.EnumTypeName is ScalarTypeName, already global::-qualified (FullyQualifiedFormat) —
-		// no second global:: prefix here.
-		StringBuilder sb = new();
-		sb.Append($"\tstatic string {table.SafeName}FlagsName({table.EnumTypeName} value, int styleIndex)\n\t{{\n\t\tswitch (value)\n\t\t{{\n");
-		for (var i = 0; i < table.Values.Count; i++)
-			sb.Append($"\t\t\tcase {table.EnumTypeName}.{table.Values[i].ClrName}: return _{table.SafeName}Names[{i}][styleIndex];\n");
-		sb.Append("\t\t}\n\n");
-		sb.Append("\t\tvar remaining = (long)value;\n");
-		sb.Append("\t\tglobal::System.Collections.Generic.List<string> parts = [];\n");
-		foreach (var flag in nonZero)
-		{
-			var index = table.Values.IndexOf(flag);
-			sb.Append(
-				$"\t\tif ((remaining & {flag.Value}L) == {flag.Value}L)\n" +
-				"\t\t{\n" +
-				$"\t\t\tparts.Add(_{table.SafeName}Names[{index}][styleIndex]);\n" +
-				$"\t\t\tremaining &= ~{flag.Value}L;\n" +
-				"\t\t}\n");
-		}
-		sb.Append("\t\tif (remaining != 0 || parts.Count == 0)\n");
-		sb.Append($"\t\t\tthrow new global::System.InvalidOperationException($\"'{{value}}' is an undefined flags value of '{{typeof({table.EnumTypeName})}}' and is illegal to write.\");\n\n");
-		sb.Append("\t\treturn string.Join(\" \", parts);\n\t}");
-		return sb.ToString();
-	}
-
 	/// <summary>The unqualified type name a fully-qualified <c>global::</c>-prefixed name ends with — also the generated class's <c>{ShortName}XmlShape</c> prefix and the source-hint-name base <see cref="XmlShapeGenerator"/> uses.</summary>
 	internal static string ShortName(string fullyQualifiedName)
 	{
@@ -348,7 +251,8 @@ static class WriterEmitter
 		return lastDot < 0 ? withoutPrefix : withoutPrefix.Substring(lastDot + 1);
 	}
 
-	static string SafeIdentifier(string fullyQualifiedName)
+	/// <summary>A fully-qualified name, flattened into a legal C# identifier fragment — the shared naming scheme both this emitter's <see cref="EnumTableReference"/> and <see cref="RegistrationEmitter"/>'s field declarations use, so the two sides always agree on one enum type's field name without either coordinating with the other beyond calling this same method.</summary>
+	internal static string SafeIdentifier(string fullyQualifiedName)
 	{
 		var withoutPrefix = fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
 			? fullyQualifiedName.Substring("global::".Length)
@@ -366,6 +270,4 @@ static class WriterEmitter
 
 	internal static string Quote(string value) =>
 		"\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
-
-	internal sealed record EnumTable(string SafeName, string EnumTypeName, List<EnumValueModel> Values, bool IsFlags);
 }

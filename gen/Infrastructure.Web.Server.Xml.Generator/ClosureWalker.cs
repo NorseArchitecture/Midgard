@@ -22,7 +22,8 @@ static class ClosureWalker
 			compilation.GetTypeByMetadataName("System.Collections.Generic.IEnumerable`1"),
 			compilation.GetTypeByMetadataName("System.Collections.Generic.IDictionary`2"),
 			compilation.GetTypeByMetadataName("System.Collections.Generic.IReadOnlyDictionary`2"),
-			compilation.GetTypeByMetadataName("System.FlagsAttribute"));
+			compilation.GetTypeByMetadataName("System.FlagsAttribute"),
+			compilation.GetTypeByMetadataName("System.Runtime.Serialization.DataMemberAttribute"));
 
 		var dataContractAttribute = compilation.GetTypeByMetadataName("System.Runtime.Serialization.DataContractAttribute");
 		var fromBodyAttribute = compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Mvc.FromBodyAttribute");
@@ -108,7 +109,7 @@ static class ClosureWalker
 			var isRequestSide = !isCross && requestReachable.Contains(type);
 
 			List<(IPropertySymbol Property, MemberModel Model)> built = [];
-			foreach (var property in GetInstanceProperties(type))
+			foreach (var property in GetInstanceProperties(type, ctx))
 				built.Add((property, ClassifyMember(property, type, isCross, isRequestSide, ctx, diagnostics)));
 
 			ReportUniquenessViolations(type, built, diagnostics);
@@ -145,6 +146,11 @@ static class ClosureWalker
 		var isFlags = isEnum && ctx.FlagsAttribute is not null &&
 			((INamedTypeSymbol)classification.ScalarType!).GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, ctx.FlagsAttribute));
 		var enumValues = isEnum ? BuildEnumTable((INamedTypeSymbol)classification.ScalarType!) : EquatableArray<EnumValueModel>.Empty;
+
+		// Flags are interior compression — banned from the facade closure outright (design spec
+		// 2026-08-02-futhark-enum-wire-law-design.md §2.2): plain or Result-wrapped, either closure.
+		if (isFlags)
+			diagnostics.Add(DiagnosticInfo.Create(Diagnostics.FlagsEnumInClosure, property, property.Name, owner.ToDisplayString(_displayFormat)));
 
 		return new MemberModel(
 			property.Name,
@@ -204,7 +210,7 @@ static class ClosureWalker
 		while (queue.Count > 0)
 		{
 			var current = queue.Dequeue();
-			foreach (var property in GetInstanceProperties(current))
+			foreach (var property in GetInstanceProperties(current, ctx))
 			{
 				var next = Classify(property.Type, ctx).ComplexType;
 				if (next is not null && reachable.Add(next))
@@ -213,8 +219,12 @@ static class ClosureWalker
 		}
 	}
 
-	static IEnumerable<IPropertySymbol> GetInstanceProperties(INamedTypeSymbol type) =>
-		type.GetMembers().OfType<IPropertySymbol>().Where(p => p is { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public });
+	// [DataMember] is an opt-in membership law (design spec §4b, plan Task 7): a property that never
+	// carries the attribute does not exist to Futhark at all — no closure entry, no shape, no
+	// diagnostic — mirroring the same law Midgard's JSON leg enforces via OptInContractModifier.
+	static IEnumerable<IPropertySymbol> GetInstanceProperties(INamedTypeSymbol type, TaxonomyContext ctx) =>
+		type.GetMembers().OfType<IPropertySymbol>().Where(p =>
+			p is { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public } && HasAttribute(p, ctx.DataMemberAttribute));
 
 	static bool HasAttribute(ISymbol symbol, INamedTypeSymbol? attribute) =>
 		attribute is not null && symbol.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attribute));
@@ -367,7 +377,8 @@ static class ClosureWalker
 		INamedTypeSymbol? EnumerableOpen,
 		INamedTypeSymbol? DictionaryOpen,
 		INamedTypeSymbol? ReadOnlyDictionaryOpen,
-		INamedTypeSymbol? FlagsAttribute);
+		INamedTypeSymbol? FlagsAttribute,
+		INamedTypeSymbol? DataMemberAttribute);
 
 	readonly record struct MemberClassification(MemberKind Kind, bool IsResultWrapped, bool IsNullable, ITypeSymbol? ScalarType, INamedTypeSymbol? ComplexType, TaxonomyProblem Problem);
 

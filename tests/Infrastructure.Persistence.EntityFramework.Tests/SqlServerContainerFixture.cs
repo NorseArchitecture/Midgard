@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Norse.Persistence.EntityFramework;
@@ -22,17 +23,25 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime
 	readonly MsSqlContainer _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2025-latest").Build();
 
 	/// <summary>
+	/// SQL Server's Linux container image is x86_64-only. Discovered live on this task's own arm64
+	/// dev host: both the 2022 and 2025 images reproducibly segfault under Docker Desktop's qemu
+	/// emulation there (verified via a direct `docker run`, outside this fixture — not a guess). Real
+	/// x86_64 CI runners hit neither path. This is a control-flow gate, not a try/catch-and-hope:
+	/// checked in <see cref="InitializeAsync"/> before <c>StartAsync</c> is ever called, so an arm64
+	/// host never attempts to pull the (multi-gigabyte) image only to watch it die — skip by knowing,
+	/// not by downloading first and catching the failure.
+	/// </summary>
+	public static bool IsSupportedArchitecture { get; } = RuntimeInformation.ProcessArchitecture == Architecture.X64;
+
+	/// <summary>
 	/// True once a real, usable container is up. False when Docker was not available at
-	/// <see cref="InitializeAsync"/> time, or when the container process itself failed to come up —
-	/// discovered live on this task's own arm64 dev host: the SQL Server Linux image is x86_64-only,
-	/// and both the 2022 and 2025 images reproducibly segfault under Docker Desktop's qemu emulation
-	/// there (verified via a direct `docker run`, outside this fixture, before writing this catch —
-	/// not a guess). That is an environment limitation, not a code defect: real x86_64 CI runners hit
-	/// neither path. Every dependent test checks this (never a null factory) and calls
+	/// <see cref="InitializeAsync"/> time, the host architecture is unsupported (see
+	/// <see cref="IsSupportedArchitecture"/>), or the container process itself failed to come up for
+	/// some other reason. Every dependent test checks this (never a null factory) and calls
 	/// <c>Assert.Skip</c> itself — a collection fixture's <c>InitializeAsync</c> throwing fails every
 	/// test in the collection before any test body runs, so the <c>[Fact(SkipUnless = ...)]</c>
-	/// pre-flight gate (Docker-reachable) alone cannot cover a container that starts creating but
-	/// then dies.
+	/// pre-flight gate (Docker-reachable + architecture-supported) alone cannot cover a container that
+	/// starts creating but then dies for an unrelated reason.
 	/// </summary>
 	public bool Available { get; private set; }
 
@@ -58,6 +67,12 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime
 	{
 		if (!DockerAvailability.IsAvailable)
 			return;
+
+		if (!IsSupportedArchitecture)
+		{
+			UnavailableReason = $"SQL Server's Linux image is x86_64-only; this host reports {RuntimeInformation.ProcessArchitecture}.";
+			return;
+		}
 
 		try
 		{

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -71,17 +72,30 @@ public sealed class ResultJsonConverter<T> : JsonConverter<Result<T>> where T : 
 	}
 
 	/// <summary>
-	/// Always throws. <see cref="Result{T}"/> is a deserialization-only type — it exists to carry an
-	/// inbound value's parse outcome across the boundary between untrusted wire text and validated
-	/// domain data, and nothing downstream of that boundary has legitimate business turning a
-	/// <see cref="Result{T}"/> back into wire bytes. This holds for every state: a <see cref="Success{T}"/>
-	/// caller already holds the clean value and should serialize <typeparamref name="T"/> directly, never
-	/// round-trip it back through the type that exists to validate it in the first place; a
-	/// <see cref="Failure"/> or defaulted value was never fit to ship regardless.
+	/// Unwraps a <see cref="Success{T}"/> to <typeparamref name="T"/>'s own wire form; a
+	/// <see cref="Failure"/> or defaulted value throws. The path is legal everywhere and exercised by
+	/// this converter's own round-trip suites — it is not gated to any one channel — but production
+	/// gRPC clients never reach it: gRPC carries the binary wire law directly, so this JSON leg's actual
+	/// consumers are strangers to that contract (spec §1.3) probing the text channel, not the platform's
+	/// own clients.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Always.</exception>
+	/// <exception cref="InvalidOperationException"><paramref name="value"/> is a <see cref="Failure"/> or defaulted.</exception>
 	public override void Write(Utf8JsonWriter writer, Result<T> value, JsonSerializerOptions options) =>
-		throw new InvalidOperationException("Result<T> is a deserialization-only type and must never be written");
+		WritePresent(writer, value, options);
+
+	/// <summary>
+	/// Unwraps a present <see cref="Result{T}"/> for writing. Shared with
+	/// <see cref="NullableResultJsonConverter{T}"/>, which handles the <c>null</c> branch itself
+	/// (absent-optional, never reaching this method) before delegating here for a present value.
+	/// </summary>
+	[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Same finite scalar taxonomy as ResultJsonConverterFactory.CreateConverter (spec §7, ~13 types, all ISpanParsable<T>); no unbounded reflection surface to trim.")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Same posture as ResultJsonConverterFactory.CreateConverter: the closed scalar taxonomy is doctrinally finite; AOT source-generation for it is a future increment.")]
+	internal static void WritePresent(Utf8JsonWriter writer, Result<T> value, JsonSerializerOptions options)
+	{
+		if (!value.TryGetValue(out Success<T> success))
+			throw new InvalidOperationException("a failed or default Result<T> is illegal to write");
+		JsonSerializer.Serialize(writer, success.Value, options);
+	}
 }
 
 /// <summary>
@@ -101,10 +115,13 @@ public sealed class NullableResultJsonConverter<T> : JsonConverter<Result<T>?> w
 	/// <see cref="Result{T}"/> value, the same reason protobuf-net's own <see cref="Nullable{T}"/>
 	/// handling never even reaches the gRPC leg's serializer for an absent field, and the same reason
 	/// the generated XML writer omits an absent optional attribute rather than throwing for it. A
-	/// present value — <see cref="Success{T}"/> or <see cref="Failure"/> alike — always throws, for the
-	/// same reason as <see cref="ResultJsonConverter{T}.Write"/>; see its remarks for the full accounting.
+	/// present value delegates to <see cref="ResultJsonConverter{T}.WritePresent"/>'s unwrap-or-throw
+	/// law: a present <see cref="Success{T}"/> unwraps to <typeparamref name="T"/>'s own wire form,
+	/// legal everywhere and exercised by this converter's own round-trip suites — production gRPC
+	/// clients simply never reach it, gRPC carrying the binary wire law directly; a present
+	/// <see cref="Failure"/> or defaulted value throws.
 	/// </summary>
-	/// <exception cref="InvalidOperationException"><paramref name="value"/> is present (<see cref="Nullable{T}.HasValue"/> is <see langword="true"/>).</exception>
+	/// <exception cref="InvalidOperationException"><paramref name="value"/> is present and holds a <see cref="Failure"/> or defaulted <see cref="Result{T}"/>.</exception>
 	public override void Write(Utf8JsonWriter writer, Result<T>? value, JsonSerializerOptions options)
 	{
 		if (!value.HasValue)
@@ -112,6 +129,6 @@ public sealed class NullableResultJsonConverter<T> : JsonConverter<Result<T>?> w
 			writer.WriteNullValue();
 			return;
 		}
-		throw new InvalidOperationException("Result<T> is a deserialization-only type and must never be written");
+		ResultJsonConverter<T>.WritePresent(writer, value.GetValueOrDefault(), options);
 	}
 }
