@@ -9,7 +9,8 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 /// <see cref="ResultSerializer{T}.Write"/> unwraps a success <see cref="Result{T}"/> to the scalar's
 /// own wire form — the union never rides the wire — and throws <see cref="InvalidOperationException"/>
 /// only for the two illegal states, failure and default; <see cref="ResultEnumSerializer{TEnum}"/>
-/// still throws unconditionally for every state (its own success branch is a later increment). Most
+/// mirrors it — a defined success unwraps to the enum's own varint, an undefined success or a
+/// failure/default both throw. Most
 /// read-path fixtures below are still built by serializing a <em>plain</em> field of the same type
 /// (never a <see cref="Result{T}"/> one) through a mirror envelope type on the same model, then feeding
 /// those bytes into the real <see cref="Result{T}"/>-typed envelope's <c>Deserialize</c> — proving
@@ -343,13 +344,27 @@ public sealed class ResultSerializerTests
 	}
 
 	[Fact]
-	void Writing_a_Result_of_an_enum_throws_like_every_other_row()
+	void Writing_a_success_enum_emits_the_plain_fields_exact_wire_bytes()
 	{
 		var model = TestModel.Create();
+		var wrapped = TestModel.Serialize(model, new Envelope<WireStatus> { Value = new Success<WireStatus>(WireStatus.Inactive) });
+		var plain = TestModel.Serialize(model, new PlainEnvelope<WireStatus> { Value = WireStatus.Inactive });
+		wrapped.ShouldBe(plain);
+	}
 
+	[Fact]
+	void Writing_an_undefined_enum_success_throws_the_illegal_write_law()
+	{
 		var exception = Should.Throw<InvalidOperationException>(() =>
-			TestModel.Serialize(model, new Envelope<WireStatus> { Value = new Success<WireStatus>(WireStatus.Active) }));
+			TestModel.Serialize(TestModel.Create(), new Envelope<WireStatus> { Value = new Success<WireStatus>((WireStatus)99) }));
+		exception.Message.ShouldBe($"'{(WireStatus)99}' is an undefined value of '{typeof(WireStatus)}' and is illegal to write.");
+	}
 
+	[Fact]
+	void Writing_a_failed_enum_Result_still_throws()
+	{
+		var exception = Should.Throw<InvalidOperationException>(() =>
+			TestModel.Serialize(TestModel.Create(), new Envelope<WireStatus> { Value = new Failure(ParseFailure.Malformed, "x", nameof(WireStatus)) }));
 		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
 
