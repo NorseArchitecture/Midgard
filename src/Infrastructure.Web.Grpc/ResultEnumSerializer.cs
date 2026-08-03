@@ -88,7 +88,7 @@ sealed class ResultEnumSerializer<TEnum> : ISerializer<Result<TEnum>>, ISerializ
 	// Unsafe.As identity reinterprets between the enum and its underlying integral — sound per branch
 	// because Unsafe.SizeOf<TEnum> is a JIT constant, the same closed-dispatch pattern
 	// ResultSerializer<T> uses. Unsigned widening keeps flag masks bit-faithful regardless of the
-	// underlying type's signedness.
+	// underlying type's signedness. Deliberately twinned with EnumLexical.ToBits/FromBits (Infrastructure.Web.Server, Xml/) — separate assemblies, no sharing; keep edits in lockstep.
 	static long ToBits(TEnum value) => Unsafe.SizeOf<TEnum>() switch
 	{
 		1 => Unsafe.As<TEnum, byte>(ref value),
