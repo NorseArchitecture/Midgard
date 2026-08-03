@@ -18,7 +18,7 @@ public static class OptInContractModifier
 	/// Removes every property of <paramref name="typeInfo"/> whose <see cref="JsonPropertyInfo.AttributeProvider"/>
 	/// lacks <see cref="DataMemberAttribute"/>, when <paramref name="typeInfo"/>'s CLR type carries
 	/// <see cref="DataContractAttribute"/>. Registered via <c>WithAddedModifier</c> on the resolver
-	/// chain in <see cref="MvcBuilderExtensions.AddNorseJson"/>.
+	/// chain in <c>AddNorseJson</c>.
 	/// </summary>
 	public static void Apply(JsonTypeInfo typeInfo)
 	{

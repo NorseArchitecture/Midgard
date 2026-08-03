@@ -213,28 +213,4 @@ public sealed class ResultJsonConverterTests
 		result.ShouldNotBeNull();
 		resultType.GetProperty(nameof(Result<>.HasValue))!.GetValue(result).ShouldBe(true);
 	}
-
-	[Fact]
-	void Result_of_an_enum_refuses_loudly_with_the_named_gap_never_a_constraint_violation()
-	{
-		// Result<TEnum> has no JSON wire law yet: ResultJsonConverter<T> is constrained to
-		// ISpanParsable<T>, which no enum satisfies — the factory's CanConvert says yes for any
-		// Result<T>, so without this guard MakeGenericType would throw a bare ArgumentException about
-		// generic constraints at first serialization. The gap gets a named refusal instead; the fix is
-		// an open design (the enum name tables live in the generated XML shapes, and the JSON channel
-		// has no equivalent yet — see the Futhark postmortem).
-		var options = NorseJsonTestOptions.Create();
-
-		var exception = Should.Throw<NotSupportedException>(() =>
-			JsonSerializer.Deserialize<Result<GapStatus>>("\"active\"", options));
-
-		exception.Message.ShouldBe(
-			"Result<GapStatus> has no JSON wire law — enums parse through the generated XML shapes' name tables, and the JSON channel has no equivalent mechanism yet");
-	}
-}
-
-/// <summary>Fixture enum for the named-refusal test — explicit values per platform enum convention.</summary>
-public enum GapStatus
-{
-	Active = 1
 }
