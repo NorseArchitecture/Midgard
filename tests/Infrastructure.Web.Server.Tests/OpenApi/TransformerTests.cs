@@ -131,6 +131,89 @@ public sealed class TransformerTests
 	}
 
 	[Fact]
+	async Task Plain_enum_member_renders_as_governed_string_list_under_a_camel_case_host()
+	{
+		var document = await BuildDocumentAsync(caseStyle: XmlCaseStyle.CamelCase);
+
+		// A raw (non-Result) enum member is left as the framework's own $ref to the shared component
+		// schema for the enum type — ResultSchemaTransformer never touches it (that inline-override
+		// mechanism is reserved for the Result<TEnum> branch, where the union leak forces a full
+		// replacement); EnumSchemaTransformer governs the referenced component directly instead.
+		document["components"]!["schemas"]!["QuoteReport"]!["properties"]!["status"]!["$ref"]!.GetValue<string>()
+			.ShouldBe("#/components/schemas/TableStatus");
+
+		var status = document["components"]!["schemas"]!["TableStatus"]!;
+		status["type"]!.GetValue<string>().ShouldBe("string");
+
+		var members = status["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+		members.ShouldBe(["active", "inactive"]);
+	}
+
+	[Fact]
+	async Task Result_wrapped_TableStatus_member_renders_the_identical_governed_string_list_under_a_camel_case_host()
+	{
+		var document = await BuildDocumentAsync(caseStyle: XmlCaseStyle.CamelCase);
+
+		var statusResult = document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["statusResult"]!;
+		statusResult["type"]!.GetValue<string>().ShouldBe("string");
+
+		var members = statusResult["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+		members.ShouldBe(["active", "inactive"]);
+	}
+
+	[Fact]
+	async Task An_enum_with_no_registered_table_throws_the_named_gap_from_EnumSchemaTransformer()
+	{
+		// The same impossible-by-construction tripwire EnumLexicalJsonConverterFactory already holds for
+		// the JSON channel (EnumLexicalJsonConverterTests.Read_plain_enum_unregistered_type_throws_the_named_gap),
+		// proven here for the OpenAPI channel against a real generated document, not a hand-built context.
+		// Unlike UnionLeakGuardTransformer's document-transformer throw (caught by the framework and
+		// surfaced as a 500 response — see BuildRawDocumentAsync's re-throw), a schema-transformer
+		// exception during MapOpenApi's synchronous document build propagates straight through the
+		// in-process TestServer call, uncaught — the raw NotSupportedException, not a wrapped 500.
+		var exception = await Should.ThrowAsync<NotSupportedException>(BuildDocumentWithUngovernedEnumAsync);
+
+		exception.Message.ShouldContain("no generated name table for enum 'UngovernedKind'");
+	}
+
+	static async Task BuildDocumentWithUngovernedEnumAsync()
+	{
+		var builder = WebApplication.CreateBuilder();
+		builder.WebHost.UseTestServer();
+		builder.Services.AddControllers()
+			.ConfigureApplicationPartManager(manager =>
+			{
+				for (var i = manager.FeatureProviders.Count - 1; i >= 0; i--)
+					if (manager.FeatureProviders[i] is ControllerFeatureProvider)
+						manager.FeatureProviders.RemoveAt(i);
+
+				manager.FeatureProviders.Add(new OnlyUngovernedControllerFeatureProvider());
+			});
+		builder.Services.AddSingleton(new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		builder.Services.AddSingleton(new EnumNameRegistry()); // deliberately empty — UngovernedKind carries no table.
+		builder.Services.AddOpenApi(options =>
+		{
+			options.AddSchemaTransformer<ResultSchemaTransformer>();
+			options.AddSchemaTransformer<EnumSchemaTransformer>();
+			options.AddSchemaTransformer<XmlMetadataTransformer>();
+			options.AddDocumentTransformer<UnionLeakGuardTransformer>();
+		});
+
+		await using var app = builder.Build();
+		app.MapOpenApi();
+		app.MapControllers();
+
+		await app.StartAsync(TestContext.Current.CancellationToken);
+		using var client = app.GetTestClient();
+		var response = await client.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative), TestContext.Current.CancellationToken);
+		var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+		await app.StopAsync(TestContext.Current.CancellationToken);
+
+		if (!response.IsSuccessStatusCode)
+			throw new InvalidOperationException(json);
+	}
+
+	[Fact]
 	async Task Removing_ResultSchemaTransformer_from_the_registration_makes_the_leak_guard_fail_the_build()
 	{
 		// The "wired not just designed" proof (spec §10.4): the guard is not a fixture-only unit test —
@@ -181,13 +264,42 @@ public sealed class TransformerTests
 
 	static readonly IServiceProvider _emptyServiceProvider = new ServiceCollection().BuildServiceProvider();
 
-	static async Task<JsonNode> BuildDocumentAsync()
+	static async Task<JsonNode> BuildDocumentAsync(XmlCaseStyle caseStyle = XmlCaseStyle.SnakeCase)
 	{
-		var json = await BuildRawDocumentAsync(registerResultTransformer: true);
+		var json = await BuildRawDocumentAsync(registerResultTransformer: true, caseStyle);
 		return JsonNode.Parse(json)!;
 	}
 
-	static async Task<string> BuildRawDocumentAsync(bool registerResultTransformer)
+	/// <summary>
+	/// Columns follow <see cref="XmlCaseStyle"/>'s declared order (Camel/Pascal/Snake/Upper/Lower) — the
+	/// same hand-built idiom <c>EnumLexicalJsonConverterTests</c> uses. Both fixture enums this test
+	/// file's contracts reference (<see cref="CoverageKind"/>, <see cref="TableStatus"/>) get a table
+	/// here — <see cref="ResultSchemaTransformer"/> and <see cref="EnumSchemaTransformer"/> both throw on
+	/// an unregistered enum, so every enum the fixture types reference must carry one.
+	/// </summary>
+	static EnumNameRegistry BuildEnumRegistry()
+	{
+		EnumNameRegistry registry = new();
+		registry.Add(new EnumNameTable(
+			typeof(CoverageKind),
+			nameof(CoverageKind),
+			[
+				["generalLiability", "GeneralLiability", "general_liability", "GENERALLIABILITY", "generalliability"],
+				["propertyDamage", "PropertyDamage", "property_damage", "PROPERTYDAMAGE", "propertydamage"]
+			],
+			[0, 1]));
+		registry.Add(new EnumNameTable(
+			typeof(TableStatus),
+			nameof(TableStatus),
+			[
+				["active", "Active", "active", "ACTIVE", "active"],
+				["inactive", "Inactive", "inactive", "INACTIVE", "inactive"]
+			],
+			[0, 1]));
+		return registry;
+	}
+
+	static async Task<string> BuildRawDocumentAsync(bool registerResultTransformer, XmlCaseStyle caseStyle = XmlCaseStyle.SnakeCase)
 	{
 		var builder = WebApplication.CreateBuilder();
 		builder.WebHost.UseTestServer();
@@ -205,11 +317,13 @@ public sealed class TransformerTests
 
 				manager.FeatureProviders.Add(new OnlyQuotesControllerFeatureProvider());
 			});
-		builder.Services.AddSingleton(new NorseXmlOptions { CaseStyle = XmlCaseStyle.SnakeCase });
+		builder.Services.AddSingleton(new NorseXmlOptions { CaseStyle = caseStyle });
+		builder.Services.AddSingleton(BuildEnumRegistry());
 		builder.Services.AddOpenApi(options =>
 		{
 			if (registerResultTransformer)
 				options.AddSchemaTransformer<ResultSchemaTransformer>();
+			options.AddSchemaTransformer<EnumSchemaTransformer>();
 			options.AddSchemaTransformer<XmlMetadataTransformer>();
 			options.AddDocumentTransformer<UnionLeakGuardTransformer>();
 		});
@@ -259,6 +373,7 @@ sealed class QuoteRequest
 	public Result<DateOnly>? ExpirationDate { get; init; }
 	public Result<int> LineCount { get; init; }
 	public Result<CoverageKind> Kind { get; init; }
+	public Result<TableStatus> StatusResult { get; init; }
 	public List<CoverageLine> Lines { get; init; } = [];
 }
 
@@ -266,6 +381,13 @@ enum CoverageKind
 {
 	GeneralLiability,
 	PropertyDamage
+}
+
+/// <summary>The plain-member fixture enum for Task 9's governed <c>enum:</c> list coverage — mirrors the <c>EnumLexicalJsonConverterTests</c> fixture by name and shape.</summary>
+enum TableStatus
+{
+	Active,
+	Inactive
 }
 
 [DataContract]
@@ -278,4 +400,35 @@ sealed class CoverageLine
 sealed class QuoteReport
 {
 	public string PolicyStatus { get; init; } = "";
+	public TableStatus Status { get; init; }
+}
+
+/// <summary>Restricts controller discovery to <see cref="UngovernedController"/> alone — the tripwire fixture for the registry-miss throw test.</summary>
+sealed class OnlyUngovernedControllerFeatureProvider : ControllerFeatureProvider
+{
+	protected override bool IsController(TypeInfo typeInfo) =>
+		typeInfo == typeof(UngovernedController).GetTypeInfo();
+}
+
+[ApiController]
+[Route("ungoverned")]
+sealed class UngovernedController : ControllerBase
+{
+#pragma warning disable CA1822 // ASP.NET Core actions must be instance methods — see the identical suppression in TripwireFixtures.cs.
+	[HttpGet]
+	public ActionResult<UngovernedReport> Get() => new UngovernedReport();
+#pragma warning restore CA1822
+}
+
+/// <summary>Carries a raw enum with deliberately no table in the registry the host wires — the registry-miss tripwire fixture.</summary>
+enum UngovernedKind
+{
+	First,
+	Second
+}
+
+[DataContract]
+sealed class UngovernedReport
+{
+	public UngovernedKind Kind { get; init; }
 }

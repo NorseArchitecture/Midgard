@@ -1,7 +1,5 @@
 using System.Runtime.Serialization;
-using System.Text.Json.Nodes;
 using Microsoft.OpenApi;
-using Norse.Infrastructure.Web.Server.Xml;
 using Norse.Primitives;
 
 namespace Norse.Infrastructure.Web.Server.OpenApi;
@@ -17,12 +15,13 @@ namespace Norse.Infrastructure.Web.Server.OpenApi;
 /// </summary>
 /// <remarks>
 /// Enums are §7's twentieth row and are fully in scope — the BCL table above cannot key an
-/// open-ended CLR type by construction, so enums are handled by a separate, generic branch
-/// (<see cref="TryBuildEnumSchema"/>) mirroring how the Xml.Generator's own
-/// <c>ClosureWalker.Classify</c> (Task 5) resolves enums: a <c>type.IsEnum</c> check plus a reflected
-/// member table, never an enumeration of concrete enum types. (An earlier revision of this file
-/// wrongly treated enums as out of scope — corrected in the same fix round that added
-/// <see cref="TryBuildEnumSchema"/>.)
+/// open-ended CLR type by construction, so <see cref="IsClosedScalar"/> recognizes any enum via
+/// <c>type.IsEnum</c> rather than an enumeration of concrete enum types. Building an enum's actual
+/// governed schema is no longer this static table's job: <see cref="ResultSchemaTransformer"/> and
+/// <see cref="EnumSchemaTransformer"/> resolve an enum's name list from the generated
+/// <see cref="Xml.EnumNameRegistry"/> via <see cref="EnumSchemaTransformer.ApplyGovernedList"/>
+/// instead of a reflection-driven casing algorithm — the earlier <c>TryBuildEnumSchema</c> that lived
+/// here is retired in the same round that introduced the registry-backed mechanism.
 /// </remarks>
 static class ScalarTaxonomy
 {
@@ -94,8 +93,9 @@ static class ScalarTaxonomy
 	/// Builds a fresh, clean schema for a fixed-BCL-row scalar type — a new instance every call,
 	/// deliberately: two properties sharing one mutable <see cref="OpenApiSchema"/> instance would
 	/// alias each other's later <c>Xml</c>/<c>ReadOnly</c>/<c>WriteOnly</c> stamps.
-	/// <see langword="false"/> outside the closed BCL set — including an enum, which is
-	/// <see cref="TryBuildEnumSchema"/>'s row, not this one.
+	/// <see langword="false"/> outside the closed BCL set — including an enum, which
+	/// <see cref="ResultSchemaTransformer"/> resolves through the generated
+	/// <see cref="Xml.EnumNameRegistry"/> instead, not this table.
 	/// </summary>
 	public static bool TryBuildSchema(Type clrType, out OpenApiSchema schema)
 	{
@@ -106,33 +106,6 @@ static class ScalarTaxonomy
 		}
 
 		schema = new OpenApiSchema { Type = entry.Type, Format = entry.Format };
-		return true;
-	}
-
-	/// <summary>
-	/// Builds §7's twentieth taxonomy row — <see langword="false"/> for a non-enum type. Per spec §6.5
-	/// ("Enums: names, never numerics"), the schema is <c>string</c> with an <c>enum</c> keyword listing
-	/// every defined member's name, case-styled through <paramref name="style"/> exactly like
-	/// <see cref="XmlMetadataTransformer"/>'s attribute names — the same wire form the generated shapes
-	/// emit (spec §7's enums row: "case-styled member name(s)"). <c>[Flags]</c> enums still resolve to a
-	/// <c>string</c> schema listing the individual defined member names; the space-separated multi-token
-	/// combinations spec §6.5 allows for a flags value have no clean finite <c>enum</c> keyword
-	/// representation in JSON Schema, so this deliberately lists the token vocabulary rather than every
-	/// combination — a documented simplification, not a silent gap.
-	/// </summary>
-	public static bool TryBuildEnumSchema(Type clrType, XmlCaseStyle style, out OpenApiSchema schema)
-	{
-		if (!clrType.IsEnum)
-		{
-			schema = null!;
-			return false;
-		}
-
-		schema = new OpenApiSchema
-		{
-			Type = JsonSchemaType.String,
-			Enum = [.. Enum.GetNames(clrType).Select(name => (JsonNode)RuntimeNameCasing.Apply(style, name))]
-		};
 		return true;
 	}
 }
