@@ -25,11 +25,13 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record BadRequest
 			{
+				[DataMember]
 				public decimal Limit { get; init; }
 			}
 
 			public sealed record GoodResponse
 			{
+				[DataMember]
 				public decimal Total { get; init; }
 			}
 
@@ -63,11 +65,13 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record GoodRequest
 			{
+				[DataMember]
 				public Result<decimal> Limit { get; init; }
 			}
 
 			public sealed record BadResponse
 			{
+				[DataMember]
 				public Result<decimal> Total { get; init; }
 			}
 
@@ -99,17 +103,20 @@ public sealed class ShapeLawDiagnosticTests
 
 			public sealed record SharedThing
 			{
+				[DataMember]
 				public string Name { get; init; } = "";
 			}
 
 			[DataContract]
 			public sealed record BadRequest
 			{
+				[DataMember]
 				public SharedThing Item { get; init; } = null!;
 			}
 
 			public sealed record BadResponse
 			{
+				[DataMember]
 				public SharedThing Item { get; init; } = null!;
 			}
 
@@ -143,16 +150,19 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record GoodRequest
 			{
+				[DataMember]
 				public Result<string> Value { get; init; }
 			}
 
 			public record BadThing
 			{
+				[DataMember]
 				public string Name { get; init; } = "";
 			}
 
 			public sealed record GoodResponse
 			{
+				[DataMember]
 				public BadThing Item { get; init; } = null!;
 			}
 
@@ -181,10 +191,13 @@ public sealed class ShapeLawDiagnosticTests
 		// falls back to LocationInfo.None (empty-but-non-null FilePath), not default(LocationInfo)
 		// (null FilePath, which crashes Location.Create with ArgumentNullException).
 		var externalReference = CompileToMetadataReference("""
+			using System.Runtime.Serialization;
+
 			namespace Norse.Fixtures.External;
 
 			public class ExternalThing
 			{
+				[DataMember]
 				public string Name { get; set; } = "";
 			}
 			""");
@@ -202,11 +215,13 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record GoodRequest
 			{
+				[DataMember]
 				public Result<string> Value { get; init; }
 			}
 
 			public sealed record BadResponse
 			{
+				[DataMember]
 				public ExternalThing Item { get; init; } = null!;
 			}
 
@@ -259,17 +274,21 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record GoodRequest
 			{
+				[DataMember]
 				public Result<string> Value { get; init; }
 			}
 
 			public sealed record PostalAddress
 			{
+				[DataMember]
 				public string Line1 { get; init; } = "";
 			}
 
 			public sealed record BadResponse
 			{
+				[DataMember]
 				public PostalAddress Home { get; init; } = null!;
+				[DataMember]
 				public PostalAddress Mailing { get; init; } = null!;
 			}
 
@@ -310,12 +329,15 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record GoodRequest
 			{
+				[DataMember]
 				public Result<string> Value { get; init; }
 			}
 
 			public sealed record BadResponse
 			{
+				[DataMember]
 				public string UserId { get; init; } = "";
+				[DataMember]
 				public string UserID { get; init; } = "";
 			}
 
@@ -350,11 +372,13 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record GoodRequest
 			{
+				[DataMember]
 				public Result<string> Value { get; init; }
 			}
 
 			public sealed record BadResponse
 			{
+				[DataMember]
 				public List<string> Tags { get; init; } = new();
 			}
 
@@ -386,11 +410,13 @@ public sealed class ShapeLawDiagnosticTests
 
 			public sealed record NoContractRequest
 			{
+				[DataMember]
 				public Result<string> Value { get; init; }
 			}
 
 			public sealed record GoodResponse
 			{
+				[DataMember]
 				public string Status { get; init; } = "";
 			}
 
@@ -410,6 +436,137 @@ public sealed class ShapeLawDiagnosticTests
 	}
 
 	[Fact]
+	void NORSE029_fires_on_a_Result_wrapped_flags_enum_in_the_request_closure()
+	{
+		const string Fixture = """
+			using System;
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N029Request;
+
+			[Flags]
+			public enum AccessRights
+			{
+				None = 0,
+				Read = 1
+			}
+
+			[DataContract]
+			public sealed record BadRequest
+			{
+				[DataMember]
+				public Result<AccessRights> Perm { get; init; }
+			}
+
+			public sealed record GoodResponse
+			{
+				[DataMember]
+				public string Status { get; init; } = "";
+			}
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<GoodResponse>> Do([FromBody] BadRequest request) =>
+					Task.FromResult(new ActionResult<GoodResponse>(new GoodResponse()));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE029");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		SourceAt(Fixture, diagnostic).ShouldBe("Perm");
+	}
+
+	[Fact]
+	void NORSE029_fires_on_a_plain_flags_enum_in_the_response_closure()
+	{
+		const string Fixture = """
+			using System;
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N029Response;
+
+			[Flags]
+			public enum AccessRights
+			{
+				None = 0,
+				Read = 1
+			}
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				[DataMember]
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record BadResponse
+			{
+				[DataMember]
+				public AccessRights Perm { get; init; }
+			}
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<BadResponse>(new BadResponse()));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE029");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		SourceAt(Fixture, diagnostic).ShouldBe("Perm");
+	}
+
+	[Fact]
+	void NORSE029_does_not_fire_when_the_flags_contract_is_unexposed()
+	{
+		const string Fixture = """
+			using System;
+			using System.Runtime.Serialization;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N029ExposureScoping;
+
+			[Flags]
+			public enum AccessRights
+			{
+				None = 0,
+				Read = 1
+			}
+
+			[DataContract]
+			public sealed record UnexposedFlagsRequest
+			{
+				[DataMember]
+				public AccessRights Perm { get; init; }
+			}
+
+			public sealed class HarmlessController : GrpcControllerBase
+			{
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		diagnostics.ShouldBeEmpty();
+	}
+
+	[Fact]
 	void A_violating_contract_untouched_by_any_controller_action_compiles_clean()
 	{
 		const string Fixture = """
@@ -422,6 +579,7 @@ public sealed class ShapeLawDiagnosticTests
 			[DataContract]
 			public sealed record UnexposedBadRequest
 			{
+				[DataMember]
 				public decimal Limit { get; init; }
 			}
 

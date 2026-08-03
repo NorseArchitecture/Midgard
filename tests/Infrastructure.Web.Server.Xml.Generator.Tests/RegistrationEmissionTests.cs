@@ -23,11 +23,13 @@ public sealed class RegistrationEmissionTests
 		[DataContract]
 		public sealed record PingRequest
 		{
+			[DataMember]
 			public Result<string> Value { get; init; }
 		}
 
 		public sealed record PingResponse
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 
@@ -49,23 +51,27 @@ public sealed class RegistrationEmissionTests
 
 		public sealed record SharedAddress
 		{
+			[DataMember]
 			public Result<string> Line1 { get; init; }
 		}
 
 		[DataContract]
 		public sealed record RequestA
 		{
+			[DataMember]
 			public SharedAddress Home { get; init; } = null!;
 		}
 
 		[DataContract]
 		public sealed record RequestB
 		{
+			[DataMember]
 			public SharedAddress Office { get; init; } = null!;
 		}
 
 		public sealed record SharedResponse
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 

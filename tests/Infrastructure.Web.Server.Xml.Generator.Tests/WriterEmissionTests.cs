@@ -40,18 +40,23 @@ public sealed class WriterEmissionTests
 		[DataContract]
 		public sealed record QuoteRequest
 		{
+			[DataMember]
 			public Result<decimal> Limit { get; init; }
+			[DataMember]
 			public Result<DateOnly>? Effective { get; init; }
+			[DataMember]
 			public List<CoverageLine> Coverages { get; init; } = new();
 		}
 
 		public sealed record CoverageLine
 		{
+			[DataMember]
 			public Result<string> Code { get; init; }
 		}
 
 		public sealed record QuoteResponse
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 
@@ -124,18 +129,23 @@ public sealed class WriterEmissionTests
 		[DataContract]
 		public sealed record TruncationRequest
 		{
+			[DataMember]
 			public Result<string> First { get; init; }
+			[DataMember]
 			public Result<int> Second { get; init; }
+			[DataMember]
 			public TruncationNested Nested { get; init; } = null!;
 		}
 
 		public sealed record TruncationNested
 		{
+			[DataMember]
 			public Result<string> Value { get; init; }
 		}
 
 		public sealed record TruncationResponse
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 
@@ -187,24 +197,31 @@ public sealed class WriterEmissionTests
 		[DataContract]
 		public sealed record PingRequest
 		{
+			[DataMember]
 			public Result<string> Value { get; init; }
 		}
 
 		public sealed record Extra
 		{
+			[DataMember]
 			public string Note { get; init; } = "";
 		}
 
 		public sealed record Tag
 		{
+			[DataMember]
 			public string Name { get; init; } = "";
 		}
 
 		public sealed record PingResponse
 		{
+			[DataMember]
 			public int Code { get; init; }
+			[DataMember]
 			public string? Note { get; init; }
+			[DataMember]
 			public Extra? Detail { get; init; }
+			[DataMember]
 			public List<Tag> Tags { get; init; } = new();
 		}
 
@@ -273,162 +290,6 @@ public sealed class WriterEmissionTests
 			.ShouldBe("""<ping_response code="200"><tag name="a" /><tag name="b" /></ping_response>""");
 	}
 
-	const string FlagsFixture = """
-		using System;
-		using System.Runtime.Serialization;
-		using System.Threading.Tasks;
-		using Microsoft.AspNetCore.Mvc;
-		using Norse.Primitives;
-		using Norse.Abstractions.Web.Server.Facade;
-
-		namespace Norse.Fixtures.WriterFlags;
-
-		[Flags]
-		public enum Access
-		{
-			Read = 1,
-			Write = 2,
-			Execute = 4,
-			ReadWrite = Read | Write
-		}
-
-		public enum Status
-		{
-			Draft = 1,
-			Active = 2
-		}
-
-		[DataContract]
-		public sealed record AccessRequest
-		{
-			public Result<Access> Perm { get; init; }
-		}
-
-		[DataContract]
-		public sealed record StatusRequest
-		{
-			public Result<Status> State { get; init; }
-		}
-
-		public sealed record FlagsResponse
-		{
-			public string Ok { get; init; } = "";
-			public Access Perm { get; init; }
-			public Status State { get; init; }
-		}
-
-		public sealed class AccessController : GrpcControllerBase
-		{
-			public Task<ActionResult<FlagsResponse>> Do([FromBody] AccessRequest request) =>
-				Task.FromResult(new ActionResult<FlagsResponse>(new FlagsResponse()));
-		}
-
-		public sealed class StatusController : GrpcControllerBase
-		{
-			public Task<ActionResult<FlagsResponse>> Do([FromBody] StatusRequest request) =>
-				Task.FromResult(new ActionResult<FlagsResponse>(new FlagsResponse()));
-		}
-		""";
-
-	// AccessRequest.Perm/StatusRequest.State are Result<T>-wrapped (request-side shape law) and so can
-	// never write, whatever value they carry — the enum-specific formatting/decomposition logic below
-	// is therefore only reachable through a raw (non-Result) enum member, which shape law requires to
-	// live on the response side instead: FlagsResponse.Perm/State.
-
-	[Fact]
-	void Writing_a_Result_wrapped_enum_member_throws_the_same_way_any_other_scalar_does()
-	{
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("AccessRequest");
-		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var readWrite = Enum.ToObject(accessType, 3); // Read (1) | Write (2) == the exactly-defined ReadWrite — even a perfectly valid, defined value still throws.
-
-		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.AccessRequest",
-			("Perm", CompiledFixture.CreateResultSuccess(accessType, readWrite)));
-
-		var exception = Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.PascalCase));
-
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
-	}
-
-	[Fact]
-	void An_exactly_defined_flags_combination_writes_its_own_name_not_the_decomposed_parts()
-	{
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("FlagsResponse");
-		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var statusType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Status");
-		var readWrite = Enum.ToObject(accessType, 3); // Read (1) | Write (2) == the exactly-defined ReadWrite
-		var draft = Enum.ToObject(statusType, 1); // State must carry a defined value too, or it throws first.
-
-		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", readWrite), ("State", draft));
-
-		WriteFragment(shape, response, WireCaseStyle.PascalCase).ShouldBe("""<FlagsResponse Ok="" Perm="ReadWrite" State="Draft" />""");
-	}
-
-	[Fact]
-	void An_undecomposable_flags_combination_greedily_decomposes_descending_by_value()
-	{
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("FlagsResponse");
-		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var statusType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Status");
-		var readExecute = Enum.ToObject(accessType, 5); // Read (1) | Execute (4) — no member defines 5 exactly
-		var draft = Enum.ToObject(statusType, 1); // State must carry a defined value too, or it throws first.
-
-		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", readExecute), ("State", draft));
-
-		// Descending by value among defined non-zero members (Execute=4, ReadWrite=3, Write=2, Read=1):
-		// Execute matches first (consumes 4), ReadWrite/Write don't fit the remaining 1 bit, Read matches last.
-		WriteFragment(shape, response, WireCaseStyle.PascalCase).ShouldBe("""<FlagsResponse Ok="" Perm="Execute Read" State="Draft" />""");
-	}
-
-	[Fact]
-	void A_flags_value_with_leftover_bits_after_decomposition_throws()
-	{
-		// Perm writes before State in declaration order, so an undefined Perm throws before State's own
-		// (also-unset, also-undefined) default value is ever reached — no need to give State a valid
-		// value here the way the two successful-write tests above do.
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("FlagsResponse");
-		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var undefined = Enum.ToObject(accessType, 8); // no defined bit covers this
-
-		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", undefined));
-
-		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.PascalCase));
-	}
-
-	[Fact]
-	void A_default_flags_value_with_no_defined_zero_member_throws()
-	{
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("FlagsResponse");
-		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var zero = Enum.ToObject(accessType, 0); // Access defines no zero member
-
-		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", zero));
-
-		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.PascalCase));
-	}
-
-	[Fact]
-	void An_undefined_non_flags_enum_value_throws()
-	{
-		// Perm must carry a defined value here, or it throws first (declaration order) for the wrong
-		// reason — this test is specifically about State's own undefined-value throw.
-		var compiled = CompiledFixture.Build(FlagsFixture);
-		var shape = compiled.Shape("FlagsResponse");
-		var accessType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Access");
-		var statusType = compiled.ResolveType("Norse.Fixtures.WriterFlags.Status");
-		var read = Enum.ToObject(accessType, 1);
-		var undefined = Enum.ToObject(statusType, 99);
-
-		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.FlagsResponse", ("Perm", read), ("State", undefined));
-
-		Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.PascalCase));
-	}
-
 	const string SharedTypeFixture = """
 		using System.Runtime.Serialization;
 		using System.Threading.Tasks;
@@ -440,23 +301,27 @@ public sealed class WriterEmissionTests
 
 		public sealed record SharedAddress
 		{
+			[DataMember]
 			public Result<string> Line1 { get; init; }
 		}
 
 		[DataContract]
 		public sealed record RequestA
 		{
+			[DataMember]
 			public SharedAddress Home { get; init; } = null!;
 		}
 
 		[DataContract]
 		public sealed record RequestB
 		{
+			[DataMember]
 			public SharedAddress Office { get; init; } = null!;
 		}
 
 		public sealed record SharedResponse
 		{
+			[DataMember]
 			public string Status { get; init; } = "";
 		}
 
@@ -489,6 +354,55 @@ public sealed class WriterEmissionTests
 		using MemoryStream stream = new();
 		var emitResult = outputCompilation.Emit(stream, cancellationToken: TestContext.Current.CancellationToken);
 		emitResult.Success.ShouldBeTrue(string.Join("\n", emitResult.Diagnostics));
+	}
+
+	const string DataMemberFilterFixture = """
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.WriterDataMemberFilter;
+
+		[DataContract]
+		public sealed record FilterRequest
+		{
+			[DataMember]
+			public Result<string> Name { get; init; }
+			public string Shadow { get; init; } = "";
+		}
+
+		public sealed record FilterResponse
+		{
+			[DataMember]
+			public string Status { get; init; } = "";
+		}
+
+		public sealed class FilterController : GrpcControllerBase
+		{
+			public Task<ActionResult<FilterResponse>> Do([FromBody] FilterRequest request) =>
+				Task.FromResult(new ActionResult<FilterResponse>(new FilterResponse()));
+		}
+		""";
+
+	[Fact]
+	void An_undecorated_property_never_enters_the_closure_and_leaves_no_trace_in_generated_output()
+	{
+		// Shadow carries no [DataMember] — the opt-in membership law (design spec §4b) means it does
+		// not exist to Futhark at all: no closure entry, no shape member, no diagnostic, and no trace
+		// of it anywhere in the generated shape's own source, in any casing the writer could have
+		// chosen for it had it been a real member.
+		GeneratorDriver driver = CSharpGeneratorDriver.Create([new XmlShapeGenerator().AsSourceGenerator()], parseOptions: GeneratorTestHarness.ParseOptions);
+		driver = driver.RunGeneratorsAndUpdateCompilation(GeneratorTestHarness.CreateCompilation(DataMemberFilterFixture), out _, out var diagnostics, TestContext.Current.CancellationToken);
+
+		diagnostics.ShouldBeEmpty();
+
+		var generatedSources = driver.GetRunResult().Results.Single().GeneratedSources;
+		var requestShapeSource = generatedSources.Single(s => s.HintName == "FilterRequestXmlShape.g.cs").SourceText.ToString();
+
+		foreach (var casing in new[] { "shadow", "Shadow", "SHADOW" })
+			requestShapeSource.ShouldNotContain(casing);
 	}
 
 	static string WriteRoot(IXmlShape shape, object value, WireCaseStyle style)
@@ -577,15 +491,6 @@ public sealed class WriterEmissionTests
 				list.Add(item);
 
 			return list;
-		}
-
-		/// <summary>Constructs <c>Result&lt;{enumType}&gt;</c> in its success state via reflection — <c>Result&lt;T&gt;</c>/<c>Success&lt;T&gt;</c> are generic over the fixture's own dynamically-loaded enum type, which this test project cannot close a generic over at compile time.</summary>
-		public static object CreateResultSuccess(System.Type enumType, object enumValue)
-		{
-			var successType = typeof(Success<>).MakeGenericType(enumType);
-			var success = Activator.CreateInstance(successType, enumValue)!;
-			var resultType = typeof(Result<>).MakeGenericType(enumType);
-			return Activator.CreateInstance(resultType, success)!;
 		}
 	}
 }
