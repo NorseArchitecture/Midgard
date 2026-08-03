@@ -147,6 +147,11 @@ public sealed class TransformerTests
 
 		var members = status["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
 		members.ShouldBe(["active", "inactive"]);
+
+		// A raw (non-Result) enum member is always response-side by the shape law (NORSE022/23 ban raw
+		// scalars from request closures), and this governed component is never referenced from a request
+		// direction — the component schema itself carries readOnly, restoring the spec §12 commitment.
+		status["readOnly"]!.GetValue<bool>().ShouldBeTrue();
 	}
 
 	[Fact]
@@ -159,6 +164,12 @@ public sealed class TransformerTests
 
 		var members = statusResult["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
 		members.ShouldBe(["active", "inactive"]);
+
+		// Request-side Result<TEnum> members carry writeOnly, never readOnly — the component-schema
+		// ReadOnly stamp EnumSchemaTransformer applies to the raw $ref path must not leak here; this is
+		// an inline schema ResultSchemaTransformer builds fresh via the shared ApplyGovernedList helper.
+		statusResult["writeOnly"]!.GetValue<bool>().ShouldBeTrue();
+		statusResult.AsObject().ContainsKey("readOnly").ShouldBeFalse();
 	}
 
 	[Fact]

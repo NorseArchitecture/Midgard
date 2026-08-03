@@ -38,6 +38,14 @@ public sealed class EnumSchemaTransformer(EnumNameRegistry registry, NorseXmlOpt
 			throw new NotSupportedException($"no generated name table for enum '{type.Name}' — an enum outside every facade closure has no text wire law");
 
 		ApplyGovernedList(schema, table, (int)_options.CaseStyle);
+
+		// A raw (non-Result) enum member is always response-side by the shape law (NORSE022/23 ban
+		// raw scalars from request closures), and this governed component is never referenced from a
+		// request direction — Result<TEnum> request members get their own inline schema from
+		// ResultSchemaTransformer instead, stamped WriteOnly there, never through this path. Stamped
+		// here rather than inside ApplyGovernedList so that shared helper stays direction-agnostic —
+		// ResultSchemaTransformer's Result<TEnum> branch calls it too and must not inherit ReadOnly.
+		schema.ReadOnly = true;
 		return Task.CompletedTask;
 	}
 
