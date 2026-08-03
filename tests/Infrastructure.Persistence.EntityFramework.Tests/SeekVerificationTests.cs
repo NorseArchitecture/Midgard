@@ -71,9 +71,9 @@ public sealed class PostgresSeekVerificationTests(PostgresContainerFixture fixtu
 [Collection(nameof(SqlServerCollection))]
 public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fixture, ITestOutputHelper output)
 {
-	public static bool IsDockerAvailable => DockerAvailability.IsAvailable;
+	public static bool IsSqlServerTestable => DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
 
-	[Fact(SkipUnless = nameof(IsDockerAvailable), Skip = "Requires a running Docker daemon.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Anchored_composite_query_is_sargable_shaped()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);

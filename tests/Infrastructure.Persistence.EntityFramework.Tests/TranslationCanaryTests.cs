@@ -81,12 +81,12 @@ public sealed class PostgresTranslationCanaryTests(PostgresContainerFixture fixt
 [Collection(nameof(SqlServerCollection))]
 public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fixture, ITestOutputHelper output)
 {
-	public static bool IsDockerAvailable => DockerAvailability.IsAvailable;
+	public static bool IsSqlServerTestable => DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
 
 	(Repository<WellContext, WidgetEntity, WidgetView> Repository, List<string> Log) CreateLoggedRepository() =>
 		TranslationCanarySupport.CreateLoggedRepository(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
 
-	[Fact(SkipUnless = nameof(IsDockerAvailable), Skip = "Requires a running Docker daemon.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Promoted_collection_any_emits_exists_not_client_eval()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
@@ -98,7 +98,7 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 		log.ShouldContain(l => l.Contains("EXISTS", StringComparison.Ordinal));
 	}
 
-	[Fact(SkipUnless = nameof(IsDockerAvailable), Skip = "Requires a running Docker daemon.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Unpromoted_json_collection_any_translates_server_side()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
@@ -121,7 +121,7 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 			l.Contains("OPENJSON", StringComparison.OrdinalIgnoreCase));
 	}
 
-	[Fact(SkipUnless = nameof(IsDockerAvailable), Skip = "Requires a running Docker daemon.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Single_take_two_sql_matches_native_single_or_default()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
