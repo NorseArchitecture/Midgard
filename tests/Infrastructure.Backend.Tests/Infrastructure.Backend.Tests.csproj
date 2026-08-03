@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.*-*" />
-		<ProjectReference Include="../../src/Infrastructure.Serialization/Infrastructure.Serialization.csproj" />
+		<ProjectReference Include="../../src/Infrastructure.Backend/Infrastructure.Backend.csproj" />
 	</ItemGroup>
 </Project>

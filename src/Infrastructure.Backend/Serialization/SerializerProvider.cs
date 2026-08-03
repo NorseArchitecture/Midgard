@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Norse.Abstractions.Backend.Serialization;
 
-namespace Norse.Infrastructure.Serialization;
+namespace Norse.Infrastructure.Backend.Serialization;
 
 /// <summary>Lazy-mints and caches one <see cref="SystemTextJsonSerializer"/> per strategy.</summary>
 sealed class SerializerProvider : ISerializerProvider

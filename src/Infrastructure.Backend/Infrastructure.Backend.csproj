@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Backend: Midgard's shared server-side assembly (the mirror of Norse.Abstractions.Backend), home to concerns both {Realm}.Web.Server and {Realm}.Worker consume. First resident is the serialization seam's System.Text.Json machinery (ISerializer/ISerializerProvider implementations, naming-strategy keyed) under Serialization/ — encodings live here, inside the wire border, per NORSE070.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<NorseRef Include="Abstractions.Backend">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+	</ItemGroup>
+</Project>

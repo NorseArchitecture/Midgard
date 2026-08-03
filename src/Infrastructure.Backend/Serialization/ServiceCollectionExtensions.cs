@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Norse.Abstractions.Backend.Serialization;
 
-namespace Norse.Infrastructure.Serialization;
+namespace Norse.Infrastructure.Backend.Serialization;
 
 /// <summary>Composition-root wiring for the serialization seam.</summary>
 public static class ServiceCollectionExtensions

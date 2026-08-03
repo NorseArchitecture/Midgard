@@ -22,7 +22,7 @@
 		<Project Path="src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
 		<Project Path="src/Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" />
 		<Project Path="src/Infrastructure.Persistence.EntityFramework/Infrastructure.Persistence.EntityFramework.csproj" />
-		<Project Path="src/Infrastructure.Serialization/Infrastructure.Serialization.csproj" />
+		<Project Path="src/Infrastructure.Backend/Infrastructure.Backend.csproj" />
 	</Folder>
 	<Folder Name="/gen/">
 		<File Path="gen/Directory.Build.props" />
@@ -46,6 +46,6 @@
 		<Project Path="tests/Infrastructure.Web.Grpc.Tests/Infrastructure.Web.Grpc.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Persistence.EntityFramework.Tests/Infrastructure.Persistence.EntityFramework.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Server.Xml.Generator.Tests/Infrastructure.Web.Server.Xml.Generator.Tests.csproj" />
-		<Project Path="tests/Infrastructure.Serialization.Tests/Infrastructure.Serialization.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Backend.Tests/Infrastructure.Backend.Tests.csproj" />
 	</Folder>
 </Solution>

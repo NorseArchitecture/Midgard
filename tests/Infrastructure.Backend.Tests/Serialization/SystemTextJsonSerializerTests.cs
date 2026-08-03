@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Norse.Abstractions.Backend.Serialization;
+using Norse.Infrastructure.Backend.Serialization;
 
-namespace Norse.Infrastructure.Serialization.Tests;
+namespace Norse.Infrastructure.Backend.Tests.Serialization;
 
 public sealed class SystemTextJsonSerializerTests
 {

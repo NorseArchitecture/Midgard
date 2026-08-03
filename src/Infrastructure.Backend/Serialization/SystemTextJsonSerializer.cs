@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Norse.Abstractions.Backend.Serialization;
 
-namespace Norse.Infrastructure.Serialization;
+namespace Norse.Infrastructure.Backend.Serialization;
 
 /// <summary>
 /// The JSON arm of the seam: one instance per <see cref="NamingStrategy"/>, four cached
