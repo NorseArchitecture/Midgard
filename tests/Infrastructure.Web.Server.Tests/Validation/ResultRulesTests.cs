@@ -85,4 +85,89 @@ public sealed class ResultRulesTests
 		result.IsValid.ShouldBeFalse();
 		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(malformed));
 	}
+
+	public enum Status
+	{
+		Active = 1,
+		Inactive = 2
+	}
+
+	public sealed record EnumSample(Result<Status> Required, Result<Status>? Optional);
+
+	[Fact]
+	void ResultRequiredEnum_passes_a_success_Result()
+	{
+		InlineValidator<EnumSample> validator = [];
+		validator.RuleFor(s => s.Required).ResultRequiredEnum();
+
+		var result = validator.Validate(new EnumSample(new Success<Status>(Status.Active), null));
+
+		result.IsValid.ShouldBeTrue();
+	}
+
+	[Fact]
+	void ResultRequiredEnum_fails_a_default_Result_with_the_exact_required_missing_message()
+	{
+		// One-message-source condition, enum leg: the rendered text must be literally equal to
+		// FailureDetail.Render of a directly constructed ParseFailure.Empty failure — enums have no
+		// Parser.ParseRequired route (not ISpanParsable), so this is the enum twin's own construction,
+		// not a call into the scalar path — yet the wording is byte-identical by construction, since
+		// FailureDetail.Render dispatches on ParseFailure.Empty alone, ignoring Input/ExpectedType.
+		InlineValidator<EnumSample> validator = [];
+		validator.RuleFor(s => s.Required).ResultRequiredEnum();
+
+		var result = validator.Validate(new EnumSample(default, null));
+
+		result.IsValid.ShouldBeFalse();
+		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(new Failure(ParseFailure.Empty, "", nameof(Status))));
+	}
+
+	[Fact]
+	void ResultRequiredEnum_fails_a_Failure_Result_rendering_that_failures_own_detail()
+	{
+		InlineValidator<EnumSample> validator = [];
+		validator.RuleFor(s => s.Required).ResultRequiredEnum();
+		Failure malformed = new(ParseFailure.Malformed, "x", nameof(Status));
+
+		var result = validator.Validate(new EnumSample(malformed, null));
+
+		result.IsValid.ShouldBeFalse();
+		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(malformed));
+	}
+
+	[Fact]
+	void ResultOptionalEnum_passes_when_absent()
+	{
+		InlineValidator<EnumSample> validator = [];
+		validator.RuleFor(s => s.Optional).ResultOptionalEnum();
+
+		var result = validator.Validate(new EnumSample(new Success<Status>(Status.Active), null));
+
+		result.IsValid.ShouldBeTrue();
+	}
+
+	[Fact]
+	void ResultOptionalEnum_passes_when_present_and_successful()
+	{
+		InlineValidator<EnumSample> validator = [];
+		validator.RuleFor(s => s.Optional).ResultOptionalEnum();
+
+		var result = validator.Validate(new EnumSample(new Success<Status>(Status.Active), new Success<Status>(Status.Inactive)));
+
+		result.IsValid.ShouldBeTrue();
+	}
+
+	[Fact]
+	void ResultOptionalEnum_fails_when_present_and_failed()
+	{
+		InlineValidator<EnumSample> validator = [];
+		validator.RuleFor(s => s.Optional).ResultOptionalEnum();
+		Failure malformed = new(ParseFailure.Malformed, "x", nameof(Status));
+		Result<Status> failed = malformed;
+
+		var result = validator.Validate(new EnumSample(new Success<Status>(Status.Active), failed));
+
+		result.IsValid.ShouldBeFalse();
+		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(malformed));
+	}
 }

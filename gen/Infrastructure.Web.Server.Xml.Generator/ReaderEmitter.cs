@@ -291,6 +291,29 @@ static class ReaderEmitter
 				lines.Add($"\t\t\t{ResultVar(member)} = new {PrimitivesNs}.Result<string>(new {PrimitivesNs}.Success<string>({content}));");
 				lines.Add("\t\t}");
 			}
+			else if (member.EnumValues.Count > 0)
+			{
+				// Enum, required. EnumLexical.Parse never distinguishes absence from present-empty
+				// (spec 5's own decision: "" is content, never absence) — so, unlike the plain-scalar
+				// branch below (whose Parser.ParseRequired already special-cases "" as Empty), absence
+				// is handled here at the emission layer, mirroring the isString branch above: an
+				// entirely absent required enum member yields the presence-law "required value missing"
+				// failure directly, never routed through the parse funnel and never Malformed.
+				var tableRef = WriterEmitter.EnumTableReference(rootNamespace, member.ScalarTypeName!);
+				lines.Add($"\t\t{PrimitivesNs}.Result<{member.ScalarTypeName}> {ResultVar(member)};");
+				lines.Add($"\t\tif ({content} is null)");
+				lines.Add("\t\t{");
+				lines.Add($"\t\t\t{ResultVar(member)} = new {PrimitivesNs}.Failure({PrimitivesNs}.ParseFailure.Empty, \"\", {tableRef}.TypeName);");
+				lines.Add($"\t\t\tif ({ResultVar(member)}.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
+				lines.Add($"\t\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
+				lines.Add("\t\t}");
+				lines.Add("\t\telse");
+				lines.Add("\t\t{");
+				lines.Add($"\t\t\t{ResultVar(member)} = {PresentParseExpression(member, content, rootNamespace)};");
+				lines.Add($"\t\t\tif ({ResultVar(member)}.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
+				lines.Add($"\t\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
+				lines.Add("\t\t}");
+			}
 			else
 			{
 				lines.Add($"\t\tvar {ResultVar(member)} = {PresentParseExpression(member, $"{content} ?? string.Empty", rootNamespace)};");

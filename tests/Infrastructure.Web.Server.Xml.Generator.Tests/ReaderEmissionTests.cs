@@ -321,6 +321,37 @@ public sealed class ReaderEmissionTests
 		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse 'Cancelled' as Status"));
 	}
 
+	[Fact]
+	void An_entirely_absent_required_enum_attribute_yields_required_value_missing_distinct_from_present_empty()
+	{
+		var compiled = CompiledFixture.Build(RequiredNestedFixture);
+		var shape = compiled.Shape("OrderRequest");
+
+		// State never appears on the element at all (spec §8.2 presence law) — must yield the
+		// required-missing failure, never routed through EnumLexical.Parse (which would report
+		// "cannot parse '' as Status", a Malformed failure, since it treats "" as content, never absence).
+		var xml = """<OrderRequest><Payment Amount="1.00" /></OrderRequest>""";
+
+		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
+
+		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "required value missing"));
+	}
+
+	[Fact]
+	void A_present_empty_required_enum_attribute_is_malformed_not_required_missing()
+	{
+		var compiled = CompiledFixture.Build(RequiredNestedFixture);
+		var shape = compiled.Shape("OrderRequest");
+
+		// State is present with empty content — distinct from entire absence above: this is Malformed
+		// (EnumLexical.Parse sees "" as unrecognized content), never the required-missing failure.
+		var xml = """<OrderRequest State=""><Payment Amount="1.00" /></OrderRequest>""";
+
+		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
+
+		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse '' as Status"));
+	}
+
 	static object GetProperty(object instance, string name)
 	{
 		var property = instance.GetType().GetProperty(name) ?? throw new InvalidOperationException($"Property '{name}' was not found on '{instance.GetType()}'.");
