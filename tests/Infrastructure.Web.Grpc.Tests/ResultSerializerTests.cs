@@ -6,11 +6,11 @@ using ProtoBuf.Meta;
 namespace Norse.Infrastructure.Web.Grpc.Tests;
 
 /// <summary>
-/// <see cref="Result{T}"/> is a deserialization-only type on the gRPC leg exactly as on the JSON and
-/// XML legs: <see cref="ResultSerializer{T}.Write"/> always throws, for every state — success,
-/// failure, and default alike — so no test here can manufacture fixture wire bytes by constructing a
-/// <see cref="Result{T}"/>-populated envelope and serializing it through the normal model. Every
-/// read-path fixture below is instead built by serializing a <em>plain</em> field of the same type
+/// <see cref="ResultSerializer{T}.Write"/> unwraps a success <see cref="Result{T}"/> to the scalar's
+/// own wire form — the union never rides the wire — and throws <see cref="InvalidOperationException"/>
+/// only for the two illegal states, failure and default; <see cref="ResultEnumSerializer{TEnum}"/>
+/// still throws unconditionally for every state (its own success branch is a later increment). Most
+/// read-path fixtures below are still built by serializing a <em>plain</em> field of the same type
 /// (never a <see cref="Result{T}"/> one) through a mirror envelope type on the same model, then feeding
 /// those bytes into the real <see cref="Result{T}"/>-typed envelope's <c>Deserialize</c> — proving
 /// <see cref="ResultSerializer{T}"/>'s <c>Read</c> decodes exactly what a real client's plain field
@@ -18,14 +18,15 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 /// gives the bare type a registered wire law (the §7 "O" string), so its fixtures ride the same
 /// plain-field mirror as every other row; <see cref="WireBytes"/>'s hand-built payloads remain only
 /// where the wire text itself is the fixture (the malformed-string case and the byte-level
-/// wire-form pin).
+/// wire-form pin). The success-unwrap oracle tests below invert the technique deliberately: they
+/// construct a <see cref="Result{T}"/>-populated envelope and serialize it, proving the write side
+/// lands on the exact same bytes as the plain-field mirror.
 /// </summary>
 public sealed class ResultSerializerTests
 {
-	// Result<T> is a deserialization-only type — Write always throws, for every state, success
-	// included. Matches the JSON leg's ResultJsonConverter<T> wording exactly: one platform law, one
-	// message, regardless of channel.
-	const string DeserializationOnlyMessage = "Result<T> is a deserialization-only type and must never be written";
+	// A failed or default Result<T> is illegal to write; a success unwraps to the plain scalar
+	// instead. One law, one message, regardless of channel.
+	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	[Fact]
 	void Round_trips_a_success_Result_of_DateOnly_and_a_null_optional_Result_of_string()
@@ -53,23 +54,64 @@ public sealed class ResultSerializerTests
 	}
 
 	[Theory]
-	[MemberData(nameof(RequiredResultStates))]
-	void Writing_any_state_of_a_required_Result_throws(string label, Result<int> value)
+	[MemberData(nameof(IllegalWriteStates))]
+	void Writing_a_failed_or_default_Result_throws(string label, Result<int> value)
 	{
-		var model = TestModel.Create();
-
 		var exception = Should.Throw<InvalidOperationException>(() =>
-			TestModel.Serialize(model, new IntEnvelope { Value = value }));
-
-		exception.Message.ShouldBe(DeserializationOnlyMessage, label);
+			TestModel.Serialize(TestModel.Create(), new IntEnvelope { Value = value }));
+		exception.Message.ShouldBe(IllegalWriteMessage, label);
 	}
 
-	public static TheoryData<string, Result<int>> RequiredResultStates() => new()
+	public static TheoryData<string, Result<int>> IllegalWriteStates() => new()
 	{
-		{ "success", new Success<int>(42) },
 		{ "failure", new Failure(ParseFailure.Malformed, "x", "Int32") },
 		{ "default", default },
 	};
+
+	[Fact]
+	void Writing_a_success_emits_the_plain_fields_exact_wire_bytes()
+	{
+		// The success-unwrap law's oracle: Envelope<T>{Success(v)} and PlainEnvelope<T>{v} must be
+		// byte-identical — the union never rides the wire (spec §2). One assertion per taxonomy row.
+		AssertSuccessWriteMatchesPlain(true);
+		AssertSuccessWriteMatchesPlain((byte)200);
+		AssertSuccessWriteMatchesPlain((sbyte)-100);
+		AssertSuccessWriteMatchesPlain((short)-12345);
+		AssertSuccessWriteMatchesPlain((ushort)54321);
+		AssertSuccessWriteMatchesPlain(-123456);
+		AssertSuccessWriteMatchesPlain(3000000000U);
+		AssertSuccessWriteMatchesPlain(-123456789012345L);
+		AssertSuccessWriteMatchesPlain(18000000000000000000UL);
+		AssertSuccessWriteMatchesPlain(3.14f);
+		AssertSuccessWriteMatchesPlain(2.71828182845);
+		AssertSuccessWriteMatchesPlain(1234.56m);
+		AssertSuccessWriteMatchesPlain('Z');
+		AssertSuccessWriteMatchesPlain("hello, Norse!");
+		AssertSuccessWriteMatchesPlain(Guid.NewGuid());
+		AssertSuccessWriteMatchesPlain(new DateOnly(2026, 8, 2));
+		AssertSuccessWriteMatchesPlain(new TimeOnly(23, 59, 59, 999));
+		AssertSuccessWriteMatchesPlain(new DateTime(2026, 8, 2, 1, 2, 3, DateTimeKind.Utc));
+		AssertSuccessWriteMatchesPlain(new DateTimeOffset(2026, 8, 2, 1, 2, 3, TimeSpan.FromHours(-5)));
+		AssertSuccessWriteMatchesPlain(new TimeSpan(3, 4, 5, 6));
+	}
+
+	static void AssertSuccessWriteMatchesPlain<T>(T value) where T : notnull
+	{
+		var model = TestModel.Create();
+		var wrapped = TestModel.Serialize(model, new Envelope<T> { Value = new Success<T>(value) });
+		var plain = TestModel.Serialize(model, new PlainEnvelope<T> { Value = value });
+		wrapped.ShouldBe(plain, $"Result<{typeof(T).Name}> success wire bytes");
+	}
+
+	[Fact]
+	void A_success_written_by_the_wrapped_type_round_trips_through_the_wrapped_type()
+	{
+		var model = TestModel.Create();
+		var payload = TestModel.Serialize(model, new Envelope<int> { Value = new Success<int>(42) });
+		var back = TestModel.Deserialize<Envelope<int>>(model, payload);
+		back.Value.TryGetValue(out Success<int> success).ShouldBeTrue();
+		success.Value.ShouldBe(42);
+	}
 
 	[Theory]
 	[MemberData(nameof(OptionalResultStates))]
@@ -80,14 +122,24 @@ public sealed class ResultSerializerTests
 		var exception = Should.Throw<InvalidOperationException>(() =>
 			TestModel.Serialize(model, new OptionalIntEnvelope { Value = value }));
 
-		exception.Message.ShouldBe(DeserializationOnlyMessage, label);
+		exception.Message.ShouldBe(IllegalWriteMessage, label);
 	}
 
 	public static TheoryData<string, Result<int>?> OptionalResultStates() => new()
 	{
-		{ "success", new Success<int>(42) },
 		{ "failure", new Failure(ParseFailure.Malformed, "x", "Int32") },
 	};
+
+	[Fact]
+	void Writing_a_present_optional_success_emits_the_plain_fields_exact_wire_bytes()
+	{
+		var model = TestModel.Create();
+
+		var wrapped = TestModel.Serialize(model, new ResultEnvelope { When = new DateOnly(2026, 8, 2), Name = new Success<string>("Bifrost") });
+		var plain = TestModel.Serialize(model, new PlainResultEnvelope { When = new DateOnly(2026, 8, 2), Name = "Bifrost" });
+
+		wrapped.ShouldBe(plain);
+	}
 
 	[Fact]
 	void An_absent_field_deserializes_to_a_default_Result()
@@ -296,7 +348,7 @@ public sealed class ResultSerializerTests
 		var exception = Should.Throw<InvalidOperationException>(() =>
 			TestModel.Serialize(model, new Envelope<WireStatus> { Value = new Success<WireStatus>(WireStatus.Active) }));
 
-		exception.Message.ShouldBe(DeserializationOnlyMessage);
+		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
 
 	[Fact]

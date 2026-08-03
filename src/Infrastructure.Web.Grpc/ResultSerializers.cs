@@ -14,17 +14,18 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// <see cref="DateTimeOffset"/>, which protobuf-net cannot represent natively at all and so falls
 /// back to a plain <c>string</c> carrying its §7 lexical form, funneled through
 /// <see cref="Parser.ParseRequired{T}"/>; see <see cref="ResultSerializer{T}"/>'s remarks for the full
-/// per-type accounting. <see cref="Result{T}"/> is a deserialization-only type: <c>Write</c> always
-/// throws <see cref="InvalidOperationException"/>, success included, for every row regardless of which
-/// encoding it reads. An absent field on read leaves the member at <c>default(Result{T})</c> —
-/// protobuf-net's native behavior for any field whose tag never appears on the wire, since deserialize
-/// only ever invokes a field's serializer for tags it actually finds — which
-/// <c>Infrastructure.Web.Server</c>'s <c>ResultRules</c> validation catches downstream (spec §9.3).
-/// <c>Result{T}?</c> (<see cref="Nullable{T}"/> of <see cref="Result{T}"/>) needs no separate
-/// registration: protobuf-net's built-in <see cref="Nullable{T}"/> handling already skips the write
-/// when null and leaves null on an absent read; a present <see cref="Result{T}"/> wrapped in the
-/// nullable still reaches the same serializer's <c>Write</c> and still throws, whatever state it
-/// carries.
+/// per-type accounting. <c>Write</c> unwraps a success <see cref="Result{T}"/> to the row's own wire
+/// form — the union never rides the wire — and throws <see cref="InvalidOperationException"/> only for
+/// the two illegal states, failure and default. An absent field on read leaves the member at
+/// <c>default(Result{T})</c> — protobuf-net's native behavior for any field whose tag never appears on
+/// the wire, since deserialize only ever invokes a field's serializer for tags it actually finds —
+/// which <c>Infrastructure.Web.Server</c>'s <c>ResultRules</c> validation catches downstream (spec
+/// §9.3). <see cref="ResultEnumSerializer{TEnum}"/> is the one row still fully deserialization-only:
+/// its <c>Write</c> throws unconditionally for every state, success included, until it gains its own
+/// success branch. <c>Result{T}?</c> (<see cref="Nullable{T}"/> of <see cref="Result{T}"/>) needs no
+/// separate registration: protobuf-net's built-in <see cref="Nullable{T}"/> handling already skips the
+/// write when null and leaves null on an absent read; a present <see cref="Result{T}"/> wrapped in the
+/// nullable still reaches the same serializer's <c>Write</c>, unwrap-or-throw law and all.
 /// </summary>
 /// <remarks>
 /// Open-generic surrogate registration was verified (spike, protobuf-net 3.2.56) and does not work:
@@ -40,10 +41,11 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// </remarks>
 public static class ResultSerializers
 {
-	// Result<T> is a deserialization-only type — Write always throws, for every state, success
-	// included, on every channel. One law, one message: ResultSerializer<T>, ResultEnumSerializer<TEnum>,
-	// and the JSON leg's ResultJsonConverter<T> all carry this exact wording.
-	internal const string DeserializationOnlyMessage = "Result<T> is a deserialization-only type and must never be written";
+	// A failed or default Result<T> is illegal to write — the two states Write throws for.
+	// A success unwraps to the scalar's own wire form instead: the union never rides the wire.
+	// One law, one message: ResultSerializer<T>, ResultEnumSerializer<TEnum>, and the JSON leg's
+	// ResultJsonConverter<T> all carry this exact wording.
+	internal const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = [];
 

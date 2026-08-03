@@ -44,7 +44,7 @@ sealed class ResultEnumSerializer<TEnum> : ISerializer<Result<TEnum>>, ISerializ
 
 	/// <exception cref="InvalidOperationException">Always.</exception>
 	public void Write(ref ProtoWriter.State state, Result<TEnum> value) =>
-		throw new InvalidOperationException(ResultSerializers.DeserializationOnlyMessage);
+		throw new InvalidOperationException(ResultSerializers.IllegalWriteMessage);
 
 	Result<TEnum>? ISerializer<Result<TEnum>?>.Read(ref ProtoReader.State state, Result<TEnum>? value) =>
 		Read(ref state, value.GetValueOrDefault());
