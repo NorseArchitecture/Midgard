@@ -115,6 +115,92 @@ public sealed class RegistrationEmissionTests
 		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.RequestB"), out _).ShouldBeTrue();
 	}
 
+	const string EnumFixture = """
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.RegistrationEnum;
+
+		public enum Status
+		{
+			Active = 1,
+			Inactive = 2
+		}
+
+		// Never reachable from any [DataMember] closure — no facade controller's request/response graph
+		// exposes it, so it must never appear in NorseEnumNameRegistration.Build()'s registry.
+		public enum Unexposed
+		{
+			OnlyValue = 1
+		}
+
+		[DataContract]
+		public sealed record PingRequest
+		{
+			[DataMember]
+			public Result<Status> State { get; init; }
+		}
+
+		public sealed record PingResponse
+		{
+			[DataMember]
+			public string Status { get; init; } = "";
+		}
+
+		public sealed class PingController : GrpcControllerBase
+		{
+			public Task<ActionResult<PingResponse>> Do([FromBody] PingRequest request) =>
+				Task.FromResult(new ActionResult<PingResponse>(new PingResponse()));
+		}
+		""";
+
+	[Fact]
+	void EnumRegistration_Build_registers_a_table_for_every_reachable_enum_and_none_for_an_unexposed_one()
+	{
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(EnumFixture);
+		diagnostics.ShouldBeEmpty();
+
+		var assembly = Emit(outputCompilation);
+		var rootNamespace = outputCompilation.AssemblyName!;
+		var registrationType = assembly.GetType($"{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration")
+			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated.");
+		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
+
+		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
+
+		var statusType = assembly.GetType("Norse.Fixtures.RegistrationEnum.Status")
+			?? throw new InvalidOperationException("Status was not found in the compiled fixture assembly.");
+		var unexposedType = assembly.GetType("Norse.Fixtures.RegistrationEnum.Unexposed")
+			?? throw new InvalidOperationException("Unexposed was not found in the compiled fixture assembly.");
+
+		registry.TryGet(statusType, out var statusTable).ShouldBeTrue();
+		statusTable!.TypeName.ShouldBe("Status");
+		statusTable.Count.ShouldBe(2);
+
+		registry.TryGet(unexposedType, out _).ShouldBeFalse();
+	}
+
+	[Fact]
+	void EnumRegistration_Build_returns_a_working_empty_registry_when_the_compilation_exposes_no_enums()
+	{
+		const string NoEnumFixture = "namespace Norse.Fixtures.RegistrationEnumEmpty;\n\npublic sealed record Plain;";
+
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(NoEnumFixture);
+		diagnostics.ShouldBeEmpty();
+
+		var assembly = Emit(outputCompilation);
+		var registrationType = assembly.GetType($"{outputCompilation.AssemblyName}.NorseXmlShapes.NorseEnumNameRegistration")
+			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated for an enum-free compilation.");
+		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
+
+		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
+
+		registry.TryGet(typeof(DayOfWeek), out _).ShouldBeFalse();
+	}
+
 	[Fact]
 	void Build_returns_a_working_empty_registry_when_the_compilation_has_no_facade_controllers()
 	{

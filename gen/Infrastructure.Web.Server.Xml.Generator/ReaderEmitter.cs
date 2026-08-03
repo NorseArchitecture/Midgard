@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 
 /// <summary>
@@ -61,7 +59,7 @@ static class ReaderEmitter
 	}
 
 	/// <summary>The full <c>Read</c> method — signature, braces, and body — spliced verbatim into the enclosing shape class.</summary>
-	public static string ReadMethod(string rootNamespace, ShapeModel shape, Dictionary<string, WriterEmitter.EnumTable> enumTables)
+	public static string ReadMethod(string rootNamespace, ShapeModel shape)
 	{
 		var scalarMembers = shape.Members.Where(m => m.Kind == MemberKind.Scalar).ToList();
 		var complexMembers = shape.Members.Where(m => m.Kind == MemberKind.Complex).ToList();
@@ -102,7 +100,7 @@ static class ReaderEmitter
 		body.Add(string.Empty);
 		body.Add("\t\t// Presence-aware funnel (spec §8.2) — one resolution per scalar member.");
 		foreach (var member in scalarMembers)
-			body.AddRange(ScalarResolution(member, enumTables));
+			body.AddRange(ScalarResolution(member, rootNamespace));
 
 		body.Add(string.Empty);
 		body.Add("\t\t// Required singleton complex/collection-backed members missing entirely.");
@@ -238,18 +236,17 @@ static class ReaderEmitter
 	/// <summary>
 	/// The presence-aware funnel (spec §8.2) for one scalar member — builds the local <c>Result&lt;T&gt;</c>
 	/// (or <c>Result&lt;T&gt;?</c> / raw unwrapped value, depending on <see cref="MemberModel.IsResultWrapped"/>)
-	/// that <see cref="ScalarFinalExpression"/> later reads back for the object initializer.
+	/// that <see cref="ScalarFinalExpression"/> later reads back for the object initializer. As of Task 8,
+	/// an enum-typed member's present-content parse (<see cref="PresentParseExpression"/>) calls the shared
+	/// runtime <c>EnumLexical.Parse</c> — which reports no failure of its own — so every branch below
+	/// always runs the same <c>TryGetValue(out Failure)</c>/<c>context.AddScalarFailure</c> check
+	/// regardless of scalar kind; enum and plain-scalar members share one accumulation path, never two.
 	/// </summary>
-	static List<string> ScalarResolution(MemberModel member, Dictionary<string, WriterEmitter.EnumTable> enumTables)
+	static List<string> ScalarResolution(MemberModel member, string rootNamespace)
 	{
 		var content = ContentVar(member);
 		var attrNames = $"_{member.ClrName}AttrNames[(int)style]";
 		var isString = member.ScalarTypeName == "string";
-		// Enum lookup helpers (ExactMatchParseMethod/FlagsParseMethod below) call context.AddScalarFailure
-		// (or, for a duplicate flags token, context.AddFailure directly) themselves — they need context to
-		// render the malformed-vs-empty-vs-duplicate-token distinction correctly, so the call sites below
-		// must not report a second time over the same Result<T> failure.
-		var selfReports = member.EnumValues.Count > 0;
 
 		if (member.IsResultWrapped && member.IsNullable)
 		{
@@ -265,13 +262,9 @@ static class ReaderEmitter
 			}
 			else
 			{
-				lines.Add($"\t\t\tvar __inner = {PresentParseExpression(member, content, enumTables, attrNames)};");
-				if (!selfReports)
-				{
-					lines.Add($"\t\t\tif (__inner.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
-					lines.Add($"\t\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
-				}
-
+				lines.Add($"\t\t\tvar __inner = {PresentParseExpression(member, content, rootNamespace)};");
+				lines.Add($"\t\t\tif (__inner.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
+				lines.Add($"\t\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
 				lines.Add($"\t\t\t{ResultVar(member)} = __inner;");
 			}
 
@@ -300,12 +293,9 @@ static class ReaderEmitter
 			}
 			else
 			{
-				lines.Add($"\t\tvar {ResultVar(member)} = {PresentParseExpression(member, $"{content} ?? string.Empty", enumTables, attrNames)};");
-				if (!selfReports)
-				{
-					lines.Add($"\t\tif ({ResultVar(member)}.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
-					lines.Add($"\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
-				}
+				lines.Add($"\t\tvar {ResultVar(member)} = {PresentParseExpression(member, $"{content} ?? string.Empty", rootNamespace)};");
+				lines.Add($"\t\tif ({ResultVar(member)}.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
+				lines.Add($"\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
 			}
 
 			return lines;
@@ -322,20 +312,11 @@ static class ReaderEmitter
 			lines.Add($"\t\t{member.ScalarTypeName}? {ValueVar(member)} = null;");
 			lines.Add($"\t\tif ({content} is not null)");
 			lines.Add("\t\t{");
-			lines.Add($"\t\t\tvar __inner = {PresentParseExpression(member, content, enumTables, attrNames)};");
-			if (selfReports)
-			{
-				lines.Add($"\t\t\tif (__inner.TryGetValue(out {PrimitivesNs}.Success<{member.ScalarTypeName}> {SuccessVar(member)}))");
-				lines.Add($"\t\t\t\t{ValueVar(member)} = {SuccessVar(member)}.Value;");
-			}
-			else
-			{
-				lines.Add($"\t\t\tif (__inner.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
-				lines.Add($"\t\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
-				lines.Add($"\t\t\telse if (__inner.TryGetValue(out {PrimitivesNs}.Success<{member.ScalarTypeName}> {SuccessVar(member)}))");
-				lines.Add($"\t\t\t\t{ValueVar(member)} = {SuccessVar(member)}.Value;");
-			}
-
+			lines.Add($"\t\t\tvar __inner = {PresentParseExpression(member, content, rootNamespace)};");
+			lines.Add($"\t\t\tif (__inner.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
+			lines.Add($"\t\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
+			lines.Add($"\t\t\telse if (__inner.TryGetValue(out {PrimitivesNs}.Success<{member.ScalarTypeName}> {SuccessVar(member)}))");
+			lines.Add($"\t\t\t\t{ValueVar(member)} = {SuccessVar(member)}.Value;");
 			lines.Add("\t\t}");
 			return lines;
 		}
@@ -361,27 +342,28 @@ static class ReaderEmitter
 		else
 		{
 			List<string> lines = [];
-			lines.Add($"\t\tvar __{member.ClrName}Result = {PresentParseExpression(member, $"{content} ?? string.Empty", enumTables, attrNames)};");
-			if (!selfReports)
-			{
-				lines.Add($"\t\tif (__{member.ClrName}Result.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
-				lines.Add($"\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
-			}
-
+			lines.Add($"\t\tvar __{member.ClrName}Result = {PresentParseExpression(member, $"{content} ?? string.Empty", rootNamespace)};");
+			lines.Add($"\t\tif (__{member.ClrName}Result.TryGetValue(out {PrimitivesNs}.Failure {FailureVar(member)}))");
+			lines.Add($"\t\t\tcontext.AddScalarFailure({attrNames}, {FailureVar(member)});");
 			lines.Add($"\t\tvar {ValueVar(member)} = __{member.ClrName}Result.TryGetValue(out {PrimitivesNs}.Success<{member.ScalarTypeName}> {SuccessVar(member)}) ? {SuccessVar(member)}.Value : default!;");
 			return lines;
 		}
 	}
 
-	/// <summary>The C# expression evaluating to <c>Result&lt;T&gt;</c> for present (non-null) content — routed through <c>Parser.ParseRequired</c> for plain scalars, or the shape's own enum lookup helpers for enum-typed members. Never called for <c>string</c> members, which bypass this funnel entirely (Task 3 precedent).</summary>
-	static string PresentParseExpression(MemberModel member, string contentExpression, Dictionary<string, WriterEmitter.EnumTable> enumTables, string attrNamesExpression)
+	/// <summary>
+	/// The C# expression evaluating to <c>Result&lt;T&gt;</c> for present (non-null) content — routed
+	/// through <c>Parser.ParseRequired</c> for plain scalars, or (Task 8) the shared runtime
+	/// <c>EnumLexical.Parse</c> against the generated <c>NorseEnumNameRegistration</c> table for
+	/// enum-typed members, generic-inferred is not possible here (no parameter of type <c>TEnum</c>, unlike
+	/// <see cref="WriterEmitter.EnumFormatCall"/>'s <c>value</c> parameter), so the type argument is always
+	/// explicit. Never called for <c>string</c> members, which bypass this funnel entirely (Task 3 precedent).
+	/// </summary>
+	static string PresentParseExpression(MemberModel member, string contentExpression, string rootNamespace)
 	{
 		if (member.EnumValues.Count == 0)
 			return $"{PrimitivesNs}.Parser.ParseRequired<{member.ScalarTypeName}>({contentExpression}, {Invariant})";
 
-		var table = WriterEmitter.GetOrAddEnumTable(member, enumTables);
-		var method = member.IsFlagsEnum ? $"{table.SafeName}ParseFlags" : $"{table.SafeName}ParseResult";
-		return $"{method}({contentExpression}, (int)style, context, {attrNamesExpression})";
+		return $"{XmlNs}.EnumLexical.Parse<{member.ScalarTypeName}>({WriterEmitter.EnumTableReference(rootNamespace, member.ScalarTypeName!)}, {contentExpression}, (int)style)";
 	}
 
 	static string ScalarFinalExpression(MemberModel member)
@@ -393,69 +375,6 @@ static class ReaderEmitter
 			return ContentVar(member);
 
 		return ValueVar(member);
-	}
-
-	/// <summary>Reader-only enum helper methods — name→value lookups, the mirror of <see cref="WriterEmitter"/>'s value→name tables, sharing the exact same <c>_{SafeName}Names</c> field.</summary>
-	public static string EnumHelperMethods(Dictionary<string, WriterEmitter.EnumTable> enumTables)
-	{
-		List<string> methods = [];
-		foreach (var table in enumTables.Values)
-			methods.Add(table.IsFlags ? FlagsParseMethod(table) : ExactMatchParseMethod(table));
-
-		return methods.Count == 0 ? string.Empty : "\n" + string.Join("\n\n", methods);
-	}
-
-	static string ExactMatchParseMethod(WriterEmitter.EnumTable table)
-	{
-		StringBuilder sb = new();
-		sb.Append($"\tstatic {PrimitivesNs}.Result<{table.EnumTypeName}> {table.SafeName}ParseResult(string content, int styleIndex, {XmlNs}.XmlReadContext context, string attributeName)\n\t{{\n");
-		sb.Append("\t\tif (content.Length == 0)\n");
-		sb.Append("\t\t{\n");
-		sb.Append($"\t\t\tvar __empty = new {PrimitivesNs}.Failure({PrimitivesNs}.ParseFailure.Empty, string.Empty, \"{WriterEmitter.ShortName(table.EnumTypeName)}\");\n");
-		sb.Append("\t\t\tcontext.AddScalarFailure(attributeName, __empty);\n");
-		sb.Append($"\t\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(__empty);\n");
-		sb.Append("\t\t}\n\n");
-		for (var i = 0; i < table.Values.Count; i++)
-			sb.Append($"\t\tif (string.Equals(content, _{table.SafeName}Names[{i}][styleIndex], {Ordinal}))\n\t\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(new {PrimitivesNs}.Success<{table.EnumTypeName}>({table.EnumTypeName}.{table.Values[i].ClrName}));\n\n");
-		sb.Append($"\t\tvar __malformed = new {PrimitivesNs}.Failure({PrimitivesNs}.ParseFailure.Malformed, content, \"{WriterEmitter.ShortName(table.EnumTypeName)}\");\n");
-		sb.Append("\t\tcontext.AddScalarFailure(attributeName, __malformed);\n");
-		sb.Append($"\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(__malformed);\n\t}}");
-		return sb.ToString();
-	}
-
-	static string FlagsParseMethod(WriterEmitter.EnumTable table)
-	{
-		StringBuilder sb = new();
-		sb.Append($"\tstatic {PrimitivesNs}.Result<{table.EnumTypeName}> {table.SafeName}ParseFlags(string content, int styleIndex, {XmlNs}.XmlReadContext context, string attributeName)\n\t{{\n");
-		sb.Append("\t\tif (content.Length == 0)\n");
-		sb.Append("\t\t{\n");
-		sb.Append($"\t\t\tvar __empty = new {PrimitivesNs}.Failure({PrimitivesNs}.ParseFailure.Empty, string.Empty, \"{WriterEmitter.ShortName(table.EnumTypeName)}\");\n");
-		sb.Append("\t\t\tcontext.AddScalarFailure(attributeName, __empty);\n");
-		sb.Append($"\t\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(__empty);\n");
-		sb.Append("\t\t}\n\n");
-		sb.Append("\t\tvar __tokens = content.Split(' ', global::System.StringSplitOptions.RemoveEmptyEntries);\n");
-		sb.Append("\t\tlong __bits = 0;\n");
-		sb.Append("\t\tvar __used = new global::System.Collections.Generic.HashSet<string>(global::System.StringComparer.Ordinal);\n");
-		sb.Append("\t\tforeach (var __token in __tokens)\n");
-		sb.Append("\t\t{\n");
-		sb.Append("\t\t\tlong? __matched = null;\n");
-		for (var i = 0; i < table.Values.Count; i++)
-			sb.Append($"\t\t\tif (string.Equals(__token, _{table.SafeName}Names[{i}][styleIndex], {Ordinal})) __matched = {table.Values[i].Value}L;\n");
-		sb.Append("\t\t\tif (__matched is null)\n");
-		sb.Append("\t\t\t{\n");
-		sb.Append($"\t\t\t\tvar __malformed = new {PrimitivesNs}.Failure({PrimitivesNs}.ParseFailure.Malformed, content, \"{WriterEmitter.ShortName(table.EnumTypeName)}\");\n");
-		sb.Append("\t\t\t\tcontext.AddScalarFailure(attributeName, __malformed);\n");
-		sb.Append($"\t\t\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(__malformed);\n");
-		sb.Append("\t\t\t}\n\n");
-		sb.Append("\t\t\tif (!__used.Add(__token))\n");
-		sb.Append("\t\t\t{\n");
-		sb.Append("\t\t\t\tcontext.AddFailure(context.PathTo(attributeName), $\"duplicate flags token '{__token}'\");\n");
-		sb.Append($"\t\t\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(new {PrimitivesNs}.Failure({PrimitivesNs}.ParseFailure.Malformed, content, \"{WriterEmitter.ShortName(table.EnumTypeName)}\"));\n");
-		sb.Append("\t\t\t}\n\n");
-		sb.Append("\t\t\t__bits |= __matched.Value;\n");
-		sb.Append("\t\t}\n\n");
-		sb.Append($"\t\treturn new {PrimitivesNs}.Result<{table.EnumTypeName}>(new {PrimitivesNs}.Success<{table.EnumTypeName}>(({table.EnumTypeName})__bits));\n\t}}");
-		return sb.ToString();
 	}
 
 	static string ContentVar(MemberModel member) => $"{member.ClrName}Content";
