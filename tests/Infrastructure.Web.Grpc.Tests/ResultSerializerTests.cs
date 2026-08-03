@@ -25,7 +25,8 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 public sealed class ResultSerializerTests
 {
 	// A failed or default Result<T> is illegal to write; a success unwraps to the plain scalar
-	// instead. One law, one message, regardless of channel.
+	// instead. One law, one message: the gRPC serializers throw this exact wording, and the JSON
+	// converters and generated XML writer align on the same literal within this change series.
 	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	[Fact]
@@ -128,6 +129,7 @@ public sealed class ResultSerializerTests
 	public static TheoryData<string, Result<int>?> OptionalResultStates() => new()
 	{
 		{ "failure", new Failure(ParseFailure.Malformed, "x", "Int32") },
+		{ "default", (Result<int>?)default(Result<int>) },
 	};
 
 	[Fact]

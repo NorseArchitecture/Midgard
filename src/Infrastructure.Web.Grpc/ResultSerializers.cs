@@ -41,10 +41,9 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// </remarks>
 public static class ResultSerializers
 {
-	// A failed or default Result<T> is illegal to write — the two states Write throws for.
-	// A success unwraps to the scalar's own wire form instead: the union never rides the wire.
-	// One law, one message: ResultSerializer<T>, ResultEnumSerializer<TEnum>, and the JSON leg's
-	// ResultJsonConverter<T> all carry this exact wording.
+	// A failed or default Result<T> is illegal to write; a success unwraps to the plain scalar
+	// instead. One law, one message: the gRPC serializers throw this exact wording, and the JSON
+	// converters and generated XML writer align on the same literal within this change series.
 	internal const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = [];
