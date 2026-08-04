@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Norse.Infrastructure.Backend.Serialization;
 using Norse.Infrastructure.Web.Server.Json;
 using Norse.Infrastructure.Web.Server.Xml;
 
@@ -25,6 +26,7 @@ public sealed class MvcBuilderExtensionsTests
 		var jsonOptions = provider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
 		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is ResultJsonConverterFactory);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is MaskedValueJsonConverterFactory);
 		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is DateTimeLexicalJsonConverter);
 		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is DateTimeOffsetLexicalJsonConverter);
 		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is TimeOnlyLexicalJsonConverter);

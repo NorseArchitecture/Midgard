@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Norse.Infrastructure.Backend.Serialization;
 using Norse.Infrastructure.Web.Server.Xml;
 
 namespace Norse.Infrastructure.Web.Server.Json;
@@ -43,6 +44,7 @@ public static class MvcBuilderExtensions
 				options.JsonSerializerOptions.TypeInfoResolver =
 					(options.JsonSerializerOptions.TypeInfoResolver ?? new DefaultJsonTypeInfoResolver()).WithAddedModifier(OptInContractModifier.Apply);
 				options.JsonSerializerOptions.Converters.Add(new ResultJsonConverterFactory());
+				options.JsonSerializerOptions.Converters.Add(new MaskedValueJsonConverterFactory());
 				options.JsonSerializerOptions.Converters.Add(new DateTimeLexicalJsonConverter());
 				options.JsonSerializerOptions.Converters.Add(new DateTimeOffsetLexicalJsonConverter());
 				options.JsonSerializerOptions.Converters.Add(new TimeOnlyLexicalJsonConverter());
