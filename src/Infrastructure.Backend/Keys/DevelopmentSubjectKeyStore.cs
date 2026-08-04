@@ -83,6 +83,22 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 	}
 
 	/// <inheritdoc />
+	/// <remarks>
+	/// Crash-safety ordering: a bare key/receipt file pair cannot tell "this subject never had a
+	/// key" apart from "a prior destroy was interrupted mid-flight" — both leave neither file on
+	/// disk. The pending-receipt marker resolves that: it is written (durably proving intent to
+	/// destroy, receipt content and all) <em>before</em> the key is touched, so any crash point
+	/// leaves resumable evidence. A crash before the marker write leaves the key untouched and no
+	/// marker — indistinguishable from never having started, which is correct, nothing happened
+	/// yet. A crash after the marker write but before the key delete resumes by finishing the
+	/// delete and promoting the same marker (not minting a second receipt). A crash after the
+	/// delete but before the promotion resumes by promoting the marker outright. In every case
+	/// <see cref="GetAsync"/> — which only ever looks at the key file and the final receipt file,
+	/// never the marker — answers <c>Missing</c> (the honest incident arm) for the entire window
+	/// between the key disappearing and the marker being promoted; it can never show a still-
+	/// available key alongside a receipt that has already been handed out, and a destroyed subject
+	/// can never be silently re-keyed by a retried destroy.
+	/// </remarks>
 	public async ValueTask<ErasureReceipt> DestroyAsync(Guid subjectId, CancellationToken cancellationToken = default)
 	{
 		var receiptPath = ReceiptPath(subjectId);
@@ -90,13 +106,27 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 			return await ReadReceiptAsync(receiptPath, cancellationToken).ConfigureAwait(false);
 
 		var keyPath = KeyPath(subjectId);
+		var pendingReceiptPath = PendingReceiptPath(subjectId);
+
+		// A surviving marker proves a destroy was already under way for this subject — resume it
+		// (finish deleting the key, then promote the same receipt) rather than re-deciding
+		// KeyMissingException vs. proceed, which the key file's mere absence cannot answer.
+		if (File.Exists(pendingReceiptPath))
+		{
+			var pendingReceipt = await ReadReceiptAsync(pendingReceiptPath, cancellationToken).ConfigureAwait(false);
+			File.Delete(keyPath); // idempotent — already gone if the prior attempt got this far
+			File.Move(pendingReceiptPath, receiptPath);
+			return pendingReceipt;
+		}
+
 		if (!File.Exists(keyPath))
 			throw new KeyMissingException(subjectId);
 
 		ErasureReceipt receipt = new(Guid.NewGuid(), DateTimeOffset.UtcNow);
 		ReceiptDocument document = new(receipt.ReceiptId, receipt.SeveredAt);
-		await File.WriteAllBytesAsync(receiptPath, JsonSerializer.SerializeToUtf8Bytes(document, KeysJsonContext.Default.ReceiptDocument), cancellationToken).ConfigureAwait(false);
+		await File.WriteAllBytesAsync(pendingReceiptPath, JsonSerializer.SerializeToUtf8Bytes(document, KeysJsonContext.Default.ReceiptDocument), cancellationToken).ConfigureAwait(false);
 		File.Delete(keyPath); // unrecoverable from current state
+		File.Move(pendingReceiptPath, receiptPath);
 		return receipt;
 	}
 
@@ -105,6 +135,9 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 
 	string ReceiptPath(Guid subjectId) =>
 		Path.Combine(_root, $"{subjectId:N}.receipt");
+
+	string PendingReceiptPath(Guid subjectId) =>
+		Path.Combine(_root, $"{subjectId:N}.receipt.pending");
 
 	static async ValueTask<ErasureReceipt> ReadReceiptAsync(string receiptPath, CancellationToken cancellationToken)
 	{
