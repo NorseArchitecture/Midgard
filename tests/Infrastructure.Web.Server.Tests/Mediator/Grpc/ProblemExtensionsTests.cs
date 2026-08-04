@@ -1,11 +1,27 @@
+using Google.Rpc;
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Web.Server.Mediator.Grpc;
+using Status = Google.Rpc.Status;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
 public sealed class ProblemExtensionsTests
 {
+	/// <summary>Reads the <c>grpc-status-details-bin</c> trailer off an <see cref="RpcException"/> and unpacks its <see cref="ErrorInfo"/> detail.</summary>
+	static ErrorInfo DecodeErrorInfo(RpcException exception)
+	{
+		var trailer = exception.Trailers.Get("grpc-status-details-bin");
+		trailer.ShouldNotBeNull();
+		var richStatus = Status.Parser.ParseFrom(trailer.ValueBytes);
+		foreach (var detail in richStatus.Details)
+		{
+			if (detail.Is(ErrorInfo.Descriptor) && detail.TryUnpack<ErrorInfo>(out var errorInfo))
+				return errorInfo;
+		}
+		throw new InvalidOperationException("No ErrorInfo detail present on the trailer.");
+	}
+
 	[Fact]
 	void LockedOut_And_Forbidden_ShareStatusCode_ButDistinctErrorInfoReason()
 	{
@@ -47,5 +63,27 @@ public sealed class ProblemExtensionsTests
 		// shares Internal with Fault, distinguished by ErrorInfo.Reason on the wire.
 		var exception = new Problem { Category = ErrorCategory.MultipleMatches }.ToRpcException();
 		exception.StatusCode.ShouldBe(StatusCode.Internal);
+	}
+
+	[Fact]
+	void Erased_maps_to_not_found_status_with_receipt_metadata()
+	{
+		ErasureReceipt receipt = new(Guid.NewGuid(), new DateTimeOffset(2026, 8, 3, 12, 0, 0, TimeSpan.Zero));
+		Problem problem = new() { Category = ErrorCategory.Erased, Receipt = receipt };
+		var exception = problem.ToRpcException();
+		exception.StatusCode.ShouldBe(StatusCode.NotFound);
+		var errorInfo = DecodeErrorInfo(exception);
+		errorInfo.Reason.ShouldBe("Erased");
+		errorInfo.Metadata["receipt"].ShouldBe(receipt.ReceiptId.ToString("D"));
+		errorInfo.Metadata["severedAt"].ShouldBe("2026-08-03T12:00:00.0000000+00:00");
+	}
+
+	[Fact]
+	void Erased_without_a_receipt_carries_no_receipt_metadata()
+	{
+		Problem problem = new() { Category = ErrorCategory.Erased };
+		var errorInfo = DecodeErrorInfo(problem.ToRpcException());
+		errorInfo.Reason.ShouldBe("Erased");
+		errorInfo.Metadata.ShouldNotContainKey("receipt");
 	}
 }

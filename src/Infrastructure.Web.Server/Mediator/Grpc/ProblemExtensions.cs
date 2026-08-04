@@ -1,3 +1,4 @@
+using System.Globalization;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Google.Rpc;
@@ -10,11 +11,14 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 /// <summary>
 /// Converts a <see cref="Problem"/> to an <see cref="RpcException"/>. The gRPC status code is the
 /// partner-legible idiom — standard tooling reads it correctly without knowing Norse exists — but it
-/// is not injective (<see cref="ErrorCategory.LockedOut"/>/<see cref="ErrorCategory.Forbidden"/> share
+/// is not injective across all members (<see cref="ErrorCategory.LockedOut"/>/<see cref="ErrorCategory.Forbidden"/> share
 /// PermissionDenied; <see cref="ErrorCategory.Unauthorized"/>/<see cref="ErrorCategory.InvalidCredentials"/>
-/// share Unauthenticated). Every response also carries a <c>google.rpc.ErrorInfo</c> detail whose
-/// <c>Reason</c> is the exact <see cref="ErrorCategory"/> member name — the only field
-/// the client-side <c>RpcExceptionExtensions.DecodeProblem</c> method trusts (spec §2.1).
+/// share Unauthenticated; <see cref="ErrorCategory.Erased"/> shares NotFound). Every response also carries
+/// a <c>google.rpc.ErrorInfo</c> detail whose <c>Reason</c> is the exact <see cref="ErrorCategory"/> member
+/// name — the only field the client-side <c>RpcExceptionExtensions.DecodeProblem</c> method trusts (spec §2.1).
+/// When <see cref="Problem.Receipt"/> is populated (the <see cref="ErrorCategory.Erased"/> crypto-shred
+/// producer), the <c>ErrorInfo.Metadata</c> also carries <c>receipt</c> (Guid <c>"D"</c> format) and
+/// <c>severedAt</c> (<c>"O"</c> format, invariant culture).
 /// </summary>
 public static class ProblemExtensions
 {
@@ -36,6 +40,7 @@ public static class ProblemExtensions
 				ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
 				ErrorCategory.Fault => StatusCode.Internal,
 				ErrorCategory.MultipleMatches => StatusCode.Internal,
+				ErrorCategory.Erased => StatusCode.NotFound,
 				_ => StatusCode.Unknown
 			};
 
@@ -44,11 +49,17 @@ public static class ProblemExtensions
 				Code = (int)MapToGoogleRpcCode(statusCode),
 				Message = problem.Category.ToString()
 			};
-			richStatus.Details.Add(Any.Pack(new ErrorInfo
+			ErrorInfo errorInfo = new()
 			{
 				Reason = problem.Category.ToString(),
 				Domain = ErrorInfoDomain
-			}));
+			};
+			if (problem.Receipt is { } receipt)
+			{
+				errorInfo.Metadata.Add("receipt", receipt.ReceiptId.ToString("D"));
+				errorInfo.Metadata.Add("severedAt", receipt.SeveredAt.ToString("O", CultureInfo.InvariantCulture));
+			}
+			richStatus.Details.Add(Any.Pack(errorInfo));
 			if (problem.Errors.Count > 0)
 			{
 				BadRequest badRequest = new();
