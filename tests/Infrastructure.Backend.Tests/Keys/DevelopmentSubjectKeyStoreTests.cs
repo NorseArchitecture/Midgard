@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Norse.Abstractions.Backend.Keys;
+using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Backend.Keys;
 
 namespace Norse.Infrastructure.Backend.Tests.Keys;
@@ -74,6 +76,28 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 		var exception = await Should.ThrowAsync<KeyDestroyedException>(
 			async () => await reopened.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
 		exception.Receipt.ShouldBe(receipt);
+	}
+
+	[Fact]
+	async Task GetOrCreate_treats_a_pending_receipt_marker_as_destroyed_and_never_mints_a_key()
+	{
+		// Simulates the crash window inside DestroyAsync: the key has already been deleted and the
+		// pending marker written, but the marker hasn't been promoted to the final receipt yet (the
+		// marker file is created directly here, bypassing DestroyAsync, to land in exactly that
+		// window). GetOrCreate must treat that the same as an already-destroyed subject — never
+		// mint a fresh key underneath a subject that is mid-erasure.
+		var subject = Guid.NewGuid();
+		ErasureReceipt receipt = new(Guid.NewGuid(), DateTimeOffset.UtcNow);
+		Directory.CreateDirectory(_root);
+		await File.WriteAllBytesAsync(
+			Path.Combine(_root, $"{subject:N}.receipt.pending"),
+			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt), KeysJsonContext.Default.ReceiptDocument),
+			TestContext.Current.CancellationToken);
+
+		var exception = await Should.ThrowAsync<KeyDestroyedException>(
+			async () => await Store.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
+		exception.Receipt.ShouldBe(receipt);
+		File.Exists(Path.Combine(_root, $"{subject:N}.key")).ShouldBeFalse();
 	}
 
 	[Fact]

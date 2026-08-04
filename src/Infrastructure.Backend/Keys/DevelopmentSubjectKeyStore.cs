@@ -67,6 +67,15 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 	}
 
 	/// <inheritdoc />
+	/// <remarks>
+	/// Must agree with <see cref="DestroyAsync"/>'s three-file state machine (key / receipt /
+	/// pending-marker), not just the final key/receipt pair: during the crash window between the
+	/// key delete and the marker promotion, only the pending marker proves the subject is mid-
+	/// destroy. Treating that window as "unknown subject" would mint a fresh key for a subject
+	/// already being erased — this checks the marker and throws <see cref="KeyDestroyedException"/>
+	/// off its (not-yet-promoted) receipt content, same as the final-receipt case, rather than ever
+	/// re-keying.
+	/// </remarks>
 	public async ValueTask<byte[]> GetOrCreateAsync(Guid subjectId, CancellationToken cancellationToken = default)
 	{
 		var keyPath = KeyPath(subjectId);
@@ -76,6 +85,10 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 		var receiptPath = ReceiptPath(subjectId);
 		if (File.Exists(receiptPath))
 			throw new KeyDestroyedException(await ReadReceiptAsync(receiptPath, cancellationToken).ConfigureAwait(false));
+
+		var pendingReceiptPath = PendingReceiptPath(subjectId);
+		if (File.Exists(pendingReceiptPath))
+			throw new KeyDestroyedException(await ReadReceiptAsync(pendingReceiptPath, cancellationToken).ConfigureAwait(false));
 
 		var key = RandomNumberGenerator.GetBytes(32);
 		await File.WriteAllBytesAsync(keyPath, key, cancellationToken).ConfigureAwait(false);
