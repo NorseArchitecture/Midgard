@@ -65,6 +65,41 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 	}
 
 	[Fact]
+	async Task Destroy_throws_key_missing_for_a_subject_with_no_key_and_no_receipt()
+	{
+		var subject = Guid.NewGuid(); // never touched via GetOrCreateAsync — no key, no receipt, no marker
+		await Should.ThrowAsync<KeyMissingException>(
+			async () => await Store.DestroyAsync(subject, TestContext.Current.CancellationToken));
+	}
+
+	[Fact]
+	async Task Destroy_resumes_from_an_orphaned_pending_marker_and_promotes_it_without_minting_a_new_receipt()
+	{
+		// Simulates the crash window inside DestroyAsync: the marker was written directly here
+		// (bypassing DestroyAsync) with no key file present, landing in the resume branch — Destroy
+		// must hand back the marker's own receipt (not mint a fresh one) and promote the marker to
+		// the final receipt file.
+		var subject = Guid.NewGuid();
+		ErasureReceipt receipt = new(Guid.NewGuid(), DateTimeOffset.UtcNow);
+		Directory.CreateDirectory(_root);
+		var pendingPath = Path.Combine(_root, $"{subject:N}.receipt.pending");
+		await File.WriteAllBytesAsync(
+			pendingPath,
+			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt), KeysJsonContext.Default.ReceiptDocument),
+			TestContext.Current.CancellationToken);
+
+		var store = Store;
+		var resumed = await store.DestroyAsync(subject, TestContext.Current.CancellationToken);
+		resumed.ReceiptId.ShouldBe(receipt.ReceiptId);
+		resumed.SeveredAt.ShouldBe(receipt.SeveredAt);
+		File.Exists(Path.Combine(_root, $"{subject:N}.receipt")).ShouldBeTrue();
+		File.Exists(pendingPath).ShouldBeFalse();
+
+		var result = await store.GetAsync(subject, TestContext.Current.CancellationToken);
+		result.Match(_ => "available", r => r.ReceiptId.ToString(), () => "missing").ShouldBe(receipt.ReceiptId.ToString());
+	}
+
+	[Fact]
 	async Task Destruction_survives_a_store_recreate_and_a_destroyed_subject_never_rekeys()
 	{
 		// Verify item 9 at dev-store scope: the receipt is durable, the key is gone, and
@@ -98,6 +133,24 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 			async () => await Store.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
 		exception.Receipt.ShouldBe(receipt);
 		File.Exists(Path.Combine(_root, $"{subject:N}.key")).ShouldBeFalse();
+	}
+
+	[Fact]
+	async Task Get_treats_a_pending_receipt_marker_as_destroyed_not_missing()
+	{
+		// Same crash-window fixture as GetOrCreate_treats_a_pending_receipt_marker_as_destroyed_and_never_mints_a_key:
+		// only the marker exists (no key, no promoted receipt). Get must agree with GetOrCreate that
+		// the subject is destroyed, not answer Missing for a subject that is mid-erasure.
+		var subject = Guid.NewGuid();
+		ErasureReceipt receipt = new(Guid.NewGuid(), DateTimeOffset.UtcNow);
+		Directory.CreateDirectory(_root);
+		await File.WriteAllBytesAsync(
+			Path.Combine(_root, $"{subject:N}.receipt.pending"),
+			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt), KeysJsonContext.Default.ReceiptDocument),
+			TestContext.Current.CancellationToken);
+
+		var result = await Store.GetAsync(subject, TestContext.Current.CancellationToken);
+		result.Match(_ => "available", r => r.ReceiptId.ToString(), () => "missing").ShouldBe(receipt.ReceiptId.ToString());
 	}
 
 	[Fact]

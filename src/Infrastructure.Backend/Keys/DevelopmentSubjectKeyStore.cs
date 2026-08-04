@@ -54,6 +54,17 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 	}
 
 	/// <inheritdoc />
+	/// <remarks>
+	/// Must agree with <see cref="DestroyAsync"/>'s three-file state machine (key / receipt /
+	/// pending-marker), same as <see cref="GetOrCreateAsync"/>: the key-exists check stays first (so
+	/// the narrow key-exists-and-marker-exists sub-window still correctly answers <c>Available</c>),
+	/// then the final receipt, then the pending marker. Without the marker check, the crash window
+	/// between the key delete and the marker promotion — which can persist indefinitely on a
+	/// transient I/O failure, not just briefly — would answer <c>Missing</c> while
+	/// <see cref="GetOrCreateAsync"/> throws <see cref="KeyDestroyedException"/> for the same
+	/// subject; checking all three files here keeps the two methods in agreement on every subject
+	/// state, always.
+	/// </remarks>
 	public async ValueTask<SubjectKeyResult> GetAsync(Guid subjectId, CancellationToken cancellationToken = default)
 	{
 		var keyPath = KeyPath(subjectId);
@@ -61,8 +72,12 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 			return SubjectKeyResult.Available(await File.ReadAllBytesAsync(keyPath, cancellationToken).ConfigureAwait(false));
 
 		var receiptPath = ReceiptPath(subjectId);
-		return File.Exists(receiptPath) ?
-			SubjectKeyResult.Destroyed(await ReadReceiptAsync(receiptPath, cancellationToken).ConfigureAwait(false)) :
+		if (File.Exists(receiptPath))
+			return SubjectKeyResult.Destroyed(await ReadReceiptAsync(receiptPath, cancellationToken).ConfigureAwait(false));
+
+		var pendingReceiptPath = PendingReceiptPath(subjectId);
+		return File.Exists(pendingReceiptPath) ?
+			SubjectKeyResult.Destroyed(await ReadReceiptAsync(pendingReceiptPath, cancellationToken).ConfigureAwait(false)) :
 			SubjectKeyResult.Missing;
 	}
 
@@ -106,11 +121,12 @@ public sealed class DevelopmentSubjectKeyStore(string rootPath) : ISubjectKeySto
 	/// yet. A crash after the marker write but before the key delete resumes by finishing the
 	/// delete and promoting the same marker (not minting a second receipt). A crash after the
 	/// delete but before the promotion resumes by promoting the marker outright. In every case
-	/// <see cref="GetAsync"/> — which only ever looks at the key file and the final receipt file,
-	/// never the marker — answers <c>Missing</c> (the honest incident arm) for the entire window
-	/// between the key disappearing and the marker being promoted; it can never show a still-
-	/// available key alongside a receipt that has already been handed out, and a destroyed subject
-	/// can never be silently re-keyed by a retried destroy.
+	/// <see cref="GetAsync"/> — which checks the key file, the final receipt file, and the pending
+	/// marker, same three files as <see cref="GetOrCreateAsync"/> — answers <c>Destroyed</c> off the
+	/// marker's (not-yet-promoted) receipt for the entire window between the key disappearing and the
+	/// marker being promoted; it can never show a still-available key alongside a receipt that has
+	/// already been handed out, and a destroyed subject can never be silently re-keyed by a retried
+	/// destroy.
 	/// </remarks>
 	public async ValueTask<ErasureReceipt> DestroyAsync(Guid subjectId, CancellationToken cancellationToken = default)
 	{
