@@ -42,4 +42,25 @@ public sealed class RpcExceptionExtensionsTests
 		decoded["Email"].ShouldBe(["Email is required", "Email is not a valid address"]);
 		decoded["Password"].ShouldBe(["Password is required"]);
 	}
+
+	[Fact]
+	void Decode_rehydrates_the_erasure_receipt_from_error_info_metadata()
+	{
+		// Build the trailer exactly as the server does (reuse/extend the existing round-trip helper).
+		ErasureReceipt receipt = new(Guid.NewGuid(), new DateTimeOffset(2026, 8, 3, 12, 0, 0, TimeSpan.Zero));
+		var problem = new Problem { Category = ErrorCategory.Erased, Receipt = receipt }
+			.ToRpcException()
+			.DecodeProblem();
+		problem.Category.ShouldBe(ErrorCategory.Erased);
+		problem.Receipt.ShouldBe(receipt);
+	}
+
+	[Fact]
+	void Decode_leaves_receipt_null_when_metadata_is_absent()
+	{
+		new Problem { Category = ErrorCategory.Erased }
+			.ToRpcException()
+			.DecodeProblem()
+			.Receipt.ShouldBeNull();
+	}
 }

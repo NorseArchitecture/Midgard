@@ -6,5 +6,8 @@
 		<NorseRef Include="Abstractions.Backend">
 			<Repo>Asgard</Repo>
 		</NorseRef>
+		<NorseRef Include="Primitives">
+			<Repo>Svartalfheim</Repo>
+		</NorseRef>
 	</ItemGroup>
 </Project>

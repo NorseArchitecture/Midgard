@@ -116,6 +116,7 @@ sealed class SystemTextJsonSerializer : ISerializer
 			DefaultIgnoreCondition = serializeNulls ?
 				JsonIgnoreCondition.Never :
 				JsonIgnoreCondition.WhenWritingNull,
-			WriteIndented = prettyPrint
+			WriteIndented = prettyPrint,
+			Converters = { new MaskedValueJsonConverterFactory() }
 		};
 }

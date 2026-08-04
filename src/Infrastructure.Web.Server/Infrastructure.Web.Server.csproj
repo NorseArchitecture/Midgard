@@ -20,6 +20,7 @@
 			Include="../../gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj"
 			OutputItemType="Analyzer"
 			ReferenceOutputAssembly="false" />
+		<ProjectReference Include="../Infrastructure.Backend/Infrastructure.Backend.csproj" />
 		<ProjectReference Include="../Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" />
 	</ItemGroup>
 	<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">

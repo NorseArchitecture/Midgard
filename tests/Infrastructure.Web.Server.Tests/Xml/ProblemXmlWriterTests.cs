@@ -76,6 +76,25 @@ public sealed class ProblemXmlWriterTests
 	}
 
 	[Fact]
+	void Writes_receipt_and_severed_at_extension_scalars()
+	{
+		var receiptId = Guid.NewGuid();
+		ProblemDetails problem = new()
+		{
+			Title = "Erased",
+			Status = 410,
+			Extensions =
+			{
+				["receipt"] = receiptId,
+				["severedAt"] = "2026-08-03T12:00:00.0000000+00:00"
+			}
+		};
+		var xml = WriteToString(problem);
+		xml.ShouldContain($"<receipt>{receiptId}</receipt>");
+		xml.ShouldContain("<severedAt>2026-08-03T12:00:00.0000000+00:00</severedAt>");
+	}
+
+	[Fact]
 	void A_null_writer_or_problem_is_refused_loudly()
 	{
 		using MemoryStream stream = new();
