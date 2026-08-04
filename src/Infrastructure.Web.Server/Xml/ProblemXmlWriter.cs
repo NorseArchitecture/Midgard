@@ -21,9 +21,9 @@ namespace Norse.Infrastructure.Web.Server.Xml;
 /// a <see cref="Guid"/>) and the <c>errors</c> array (<see cref="ProblemErrorEntry"/> entries, spec
 /// §11.1's <c>[{path, detail}]</c> shape — GrpcControllerBase's fold and the <c>ModelState</c>-driven 400
 /// factory both populate it with this exact type, so JSON and XML render the identical payload by
-/// construction). A future extension member (the <c>Erased</c> 410 fold's Syn receipt reference, spec
-/// §4.3) gets its own case added here when it ships — no speculative generic reflection-driven object
-/// graph writer ahead of a second real shape ever needing one.
+/// construction). The <c>Erased</c> 410 fold's receipt extensions (2026-08-03 PII spec §2.4) ship as
+/// two scalars — a <see cref="Guid"/> and a pre-formatted round-trip timestamp string — deliberately, so
+/// the scalar default renders them and no bespoke case was ever needed.
 /// </remarks>
 public static class ProblemXmlWriter
 {
