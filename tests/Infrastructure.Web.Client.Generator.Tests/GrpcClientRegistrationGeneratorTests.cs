@@ -29,9 +29,24 @@ public sealed class GrpcClientRegistrationGeneratorTests
 	void Emits_CreateGrpcService_over_an_intercepted_invoker()
 	{
 		var generated = Generate(Contract);
-		generated.ShouldContain("global::Grpc.Core.Interceptors.ChannelExtensions.Intercept(");
+		generated.ShouldContain("global::Grpc.Core.Interceptors.CallInvokerExtensions.Intercept(");
 		generated.ShouldContain("new global::Norse.Infrastructure.Web.Client.Grpc.OutcomeClientInterceptor()");
 		generated.ShouldContain("global::ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService<global::Norse.AuthN.Services.IAuthenticationService>(invoker)");
+	}
+
+	[Fact]
+	void Emits_a_CallInvoker_overload_as_the_primary_registration_surface()
+	{
+		var generated = Generate(Contract);
+		generated.ShouldContain("global::Grpc.Core.CallInvoker callInvoker");
+	}
+
+	[Fact]
+	void The_GrpcChannel_overload_delegates_to_the_CallInvoker_overload()
+	{
+		var generated = Generate(Contract);
+		generated.ShouldContain("global::Grpc.Net.Client.GrpcChannel channel");
+		generated.ShouldContain("AddNorseGrpcClients(services, channel.CreateCallInvoker())");
 	}
 
 	[Fact]

@@ -31,20 +31,29 @@ static class ClientRegistrationEmitter
 				}
 
 				/// <summary>
-				/// Registers every discovered Norse contract's proxy over <paramref name="channel"/>, decoded
-				/// through OutcomeClientInterceptor — the host builds the channel (base address, credentials,
-				/// gRPC-Web handler are host policy), this method does the rest.
+				/// Registers every discovered Norse contract's proxy over <paramref name="callInvoker"/>, decoded
+				/// through OutcomeClientInterceptor — the host builds the invoker (base address, credentials,
+				/// transport are host policy), this method does the rest.
 				/// </summary>
 				public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection AddNorseGrpcClients(
 					this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,
-					global::Grpc.Net.Client.GrpcChannel channel)
+					global::Grpc.Core.CallInvoker callInvoker)
 				{
 					RegisterNorseOutcomeSurrogates();
-					var invoker = global::Grpc.Core.Interceptors.ChannelExtensions.Intercept(
-						channel, new global::Norse.Infrastructure.Web.Client.Grpc.OutcomeClientInterceptor());
+					var invoker = global::Grpc.Core.Interceptors.CallInvokerExtensions.Intercept(
+						callInvoker, new global::Norse.Infrastructure.Web.Client.Grpc.OutcomeClientInterceptor());
 			{{AddClients(contractTypeNames)}}
 					return services;
 				}
+
+				/// <summary>
+				/// Convenience overload over a <see cref="global::Grpc.Net.Client.GrpcChannel"/> — delegates to
+				/// the <see cref="global::Grpc.Core.CallInvoker"/> overload via the channel's own invoker.
+				/// </summary>
+				public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection AddNorseGrpcClients(
+					this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,
+					global::Grpc.Net.Client.GrpcChannel channel) =>
+					AddNorseGrpcClients(services, channel.CreateCallInvoker());
 			}
 			#pragma warning restore CS1591
 			""");
