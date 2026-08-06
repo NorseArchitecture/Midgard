@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Authors>Norse Architecture</Authors>
+		<Description>Norse.Infrastructure.Web.Grpc.Analyzers: NORSE080 bans any direct RuntimeTypeModel.Add/.Add&lt;T&gt;/.IsDefined invocation outside Norse.Infrastructure.Web.Grpc.WireModelRegistrationGuard itself -- the check-then-act and flag-first shapes those methods invite are the defect class filed 2026-08-03 (Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md) and found live five times, including inside a hand-rolled test fixture, before this rule existed. Not realm-scoped: every consumer, test projects included, must go through the guard. Delivered to every realm by the Ginnungagap scatter; packed standalone (analyzers/dotnet/cs) for the same no-opt-out reason Architecture.Analyzers is -- attachment contingent on referencing a host package would let a consumer opt out by simply not taking that dependency.</Description>
+		<!-- Deliberate override of gen/Directory.Build.props' repo-wide IsPackable=false — see the note
+		     above this project file in the plan/PR that added it. This analyzer needs no-opt-out reach,
+		     which a bundled-into-a-host-package generator cannot provide. -->
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<IsPackable>true</IsPackable>
+		<MinVerTagPrefix>v</MinVerTagPrefix>
+		<!-- NU5128 fires for any analyzer-only package (no lib/ folder) — IncludeBuildOutput=false means
+		     this package never has one, by design. -->
+		<NoWarn>$(NoWarn);NU5128</NoWarn>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Include="../../LICENSE" Pack="true" PackagePath="\" Condition="Exists('../../LICENSE')" />
+		<None Include="bin/$(Configuration)/netstandard2.0/$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs/" Visible="false" />
+		<PackageReference Include="MinVer" Version="*">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+</Project>
