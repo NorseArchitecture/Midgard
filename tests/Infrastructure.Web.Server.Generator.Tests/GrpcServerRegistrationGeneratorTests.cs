@@ -86,6 +86,14 @@ public sealed class GrpcServerRegistrationGeneratorTests
 	}
 
 	[Fact]
+	void RegisterNorseOutcomeSurrogates_uses_a_blocking_guard_not_a_flag_first_race()
+	{
+		var generated = Generate(Contract);
+		generated.ShouldNotContain("Interlocked.Exchange");
+		generated.ShouldContain("global::System.Threading.LazyThreadSafetyMode.ExecutionAndPublication");
+	}
+
+	[Fact]
 	void NORSE020_fires_when_the_implementation_is_absent()
 	{
 		var withoutImplementation = Contract.Replace(
