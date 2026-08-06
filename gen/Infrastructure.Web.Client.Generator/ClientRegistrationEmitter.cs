@@ -27,7 +27,7 @@ static class ClientRegistrationEmitter
 						{
 							var model = global::ProtoBuf.Meta.RuntimeTypeModel.Default;
 							global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);
-					{{SurrogateGuards(payloads)}}
+			{{SurrogateGuards(payloads)}}
 						});
 
 				/// <summary>
