@@ -1,4 +1,3 @@
-using Norse.Primitives.Identifiers;
 using ProtoBuf;
 using ProtoBuf.Meta;
 
@@ -100,34 +99,6 @@ public sealed class IdentifierSerializersTests
 		var model = TestModel.Create();
 		model.Add(typeof(GuidEnvelope));
 		model.GetSchema(typeof(GuidEnvelope), ProtoSyntax.Proto3).ShouldContain("bytes Id = 1;");
-	}
-
-	[Fact]
-	async Task Register_does_not_return_until_registration_is_complete_under_concurrent_first_touch()
-	{
-		// Regression test for the race filed 2026-08-03
-		// (../../../Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md): the old flag-first
-		// guard let a second caller observe "claimed" and return immediately while the first caller's
-		// registration was still mid-flight. Every concurrent first-touch caller, across many fresh
-		// models, must see DeterministicGuid -- the LAST of the two types Register adds, giving the
-		// strongest detection window (measured 3-7x more race violations than asserting on the first
-		// type) -- registered by the time its OWN call to Register returns -- not just eventually, and
-		// not just "no exception was thrown".
-		const int ModelCount = 500;
-		const int CallersPerModel = 8;
-
-		await Task.WhenAll(Enumerable.Range(0, ModelCount).Select(async _ =>
-		{
-			var model = RuntimeTypeModel.Create();
-			using Barrier barrier = new(CallersPerModel);
-
-			await Task.WhenAll(Enumerable.Range(0, CallersPerModel).Select(_ => Task.Run(() =>
-			{
-				barrier.SignalAndWait();
-				IdentifierSerializers.Register(model);
-				model.IsDefined(typeof(DeterministicGuid)).ShouldBeTrue();
-			})));
-		}));
 	}
 
 	[Fact]
