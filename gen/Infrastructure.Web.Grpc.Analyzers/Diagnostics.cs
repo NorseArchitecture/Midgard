@@ -16,6 +16,6 @@ static class Diagnostics
 
 	public static readonly DiagnosticDescriptor WireModelMutatedOutsideGuard = new(
 		"NORSE080", "RuntimeTypeModel mutated outside the registration guard",
-		"'{0}' mutates a shared RuntimeTypeModel directly -- registration must go through WireModelRegistrationGuard.EnsureRegistered, the only call site proven safe under concurrent first touch", Category,
+		"'{0}' mutates a shared RuntimeTypeModel directly — registration must go through WireModelRegistrationGuard.EnsureRegistered, the only call site proven safe under concurrent first touch", Category,
 		DiagnosticSeverity.Error, isEnabledByDefault: true, customTags: WellKnownDiagnosticTags.NotConfigurable);
 }
