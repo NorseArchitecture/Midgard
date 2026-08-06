@@ -46,7 +46,10 @@ public static class ResultSerializers
 	// converters and generated XML writer align on the same literal within this change series.
 	internal const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
-	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = [];
+	// Lazy<T> with ExecutionAndPublication, not a flag-first guard: a second caller for the same
+	// model blocks until the winning caller's registration completes instead of racing a half-built
+	// model (../../../Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md).
+	static readonly ConditionalWeakTable<RuntimeTypeModel, Lazy<bool>> _registered = [];
 
 	/// <summary>
 	/// Registers <see cref="Result{T}"/> surrogates for every scalar type in the platform's closed
@@ -63,33 +66,37 @@ public static class ResultSerializers
 	public static void Register(RuntimeTypeModel model)
 	{
 		ArgumentNullException.ThrowIfNull(model);
-		if (!_registered.TryAdd(model, model))
-			return;
-
-		model.AfterApplyDefaultBehaviour += (_, e) => RegisterEnumResults(model, e);
-		model.Add(typeof(DateTimeOffset), applyDefaultBehaviour: false).SerializerType = typeof(DateTimeOffsetSerializer);
-
-		RegisterScalar<bool>(model);
-		RegisterScalar<byte>(model);
-		RegisterScalar<sbyte>(model);
-		RegisterScalar<short>(model);
-		RegisterScalar<ushort>(model);
-		RegisterScalar<int>(model);
-		RegisterScalar<uint>(model);
-		RegisterScalar<long>(model);
-		RegisterScalar<ulong>(model);
-		RegisterScalar<float>(model);
-		RegisterScalar<double>(model);
-		RegisterScalar<decimal>(model);
-		RegisterScalar<char>(model);
-		RegisterScalar<string>(model);
-		RegisterScalar<Guid>(model);
-		RegisterScalar<DateOnly>(model);
-		RegisterScalar<DateTime>(model);
-		RegisterScalar<DateTimeOffset>(model);
-		RegisterScalar<TimeOnly>(model);
-		RegisterScalar<TimeSpan>(model);
+		_ = _registered.GetValue(model, CreateGuard).Value;
 	}
+
+	static Lazy<bool> CreateGuard(RuntimeTypeModel model) =>
+		new(() =>
+		{
+			model.AfterApplyDefaultBehaviour += (_, e) => RegisterEnumResults(model, e);
+			model.Add(typeof(DateTimeOffset), applyDefaultBehaviour: false).SerializerType = typeof(DateTimeOffsetSerializer);
+
+			RegisterScalar<bool>(model);
+			RegisterScalar<byte>(model);
+			RegisterScalar<sbyte>(model);
+			RegisterScalar<short>(model);
+			RegisterScalar<ushort>(model);
+			RegisterScalar<int>(model);
+			RegisterScalar<uint>(model);
+			RegisterScalar<long>(model);
+			RegisterScalar<ulong>(model);
+			RegisterScalar<float>(model);
+			RegisterScalar<double>(model);
+			RegisterScalar<decimal>(model);
+			RegisterScalar<char>(model);
+			RegisterScalar<string>(model);
+			RegisterScalar<Guid>(model);
+			RegisterScalar<DateOnly>(model);
+			RegisterScalar<DateTime>(model);
+			RegisterScalar<DateTimeOffset>(model);
+			RegisterScalar<TimeOnly>(model);
+			RegisterScalar<TimeSpan>(model);
+			return true;
+		}, LazyThreadSafetyMode.ExecutionAndPublication);
 
 	static void RegisterScalar<T>(RuntimeTypeModel model) where T : notnull, ISpanParsable<T> =>
 		model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>);
