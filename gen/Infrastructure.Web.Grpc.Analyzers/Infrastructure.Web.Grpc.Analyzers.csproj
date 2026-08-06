@@ -1,28 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Authors>Norse Architecture</Authors>
-		<Description>Norse.Infrastructure.Web.Grpc.Analyzers: NORSE080 bans any direct RuntimeTypeModel.Add/.Add&lt;T&gt; invocation outside Norse.Infrastructure.Web.Grpc.WireModelRegistrationGuard itself -- the check-then-act and flag-first shapes an unguarded Add invites are the defect class filed 2026-08-03 (Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md) and found live five times, including inside a hand-rolled test fixture, before this rule existed. Not realm-scoped: every consumer, test projects included, must go through the guard. Delivered to every realm by the Ginnungagap scatter; packed standalone (analyzers/dotnet/cs) for the same no-opt-out reason Architecture.Analyzers is -- attachment contingent on referencing a host package would let a consumer opt out by simply not taking that dependency.</Description>
-		<!-- Deliberate override of gen/Directory.Build.props' repo-wide IsPackable=false — see the note
-		     above this project file in the plan/PR that added it. This analyzer needs no-opt-out reach,
-		     which a bundled-into-a-host-package generator cannot provide. -->
-		<IncludeBuildOutput>false</IncludeBuildOutput>
-		<IsPackable>true</IsPackable>
-		<!-- MinVer stamping lives in the scattered src/ props, which this gen/ project never imports —
-		     without it here, pack falls to the SDK default 1.0.0 and silently leaves the release train.
-		     Most generators ride shotgun in a host package and never need this; the one gen project that
-		     packs standalone carries its own stamping (matches Architecture.Analyzers.csproj). -->
-		<MinVerTagPrefix>v</MinVerTagPrefix>
-		<!-- NU5128 fires for any analyzer-only package (no lib/ folder) — IncludeBuildOutput=false means
-		     this package never has one, by design. -->
-		<NoWarn>$(NoWarn);NU5128</NoWarn>
-		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<Description>Norse.Infrastructure.Web.Grpc.Analyzers: NORSE080 bans any direct RuntimeTypeModel.Add/.Add&lt;T&gt; invocation outside Norse.Infrastructure.Web.Grpc.WireModelRegistrationGuard itself -- the check-then-act and flag-first shapes an unguarded Add invites are the defect class filed 2026-08-03 (Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md) and found live five times, including inside a hand-rolled test fixture, before this rule existed. Bundled into Norse.Infrastructure.Web.Grpc's package (analyzers/dotnet/cs/), never referenced or packed standalone -- every consumer of that package is, by construction, exactly the set of code that could plausibly call RuntimeTypeModel.Add.</Description>
 	</PropertyGroup>
-	<ItemGroup>
-		<None Include="../../LICENSE" Pack="true" PackagePath="\" Condition="Exists('../../LICENSE')" />
-		<None Include="bin/$(Configuration)/netstandard2.0/$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs/" Visible="false" />
-		<PackageReference Include="MinVer" Version="*">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-	</ItemGroup>
 </Project>
