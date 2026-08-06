@@ -55,9 +55,7 @@ public static class ResultSerializers
 	/// cannot be enumerated here — instead every contract type entering the model after this call is
 	/// swept for <c>Result&lt;TEnum&gt;</c>/<c>Result&lt;TEnum&gt;?</c> members, each registered on
 	/// first sight, the same must-run-before-contract-types contract
-	/// <see cref="IdentifierSerializers.Register"/> documents. Idempotent per model. A registration
-	/// failure is cached and rethrown to every subsequent caller for this model, never silently
-	/// treated as success.
+	/// <see cref="IdentifierSerializers.Register"/> documents. Idempotent per model.
 	/// </summary>
 	public static void Register(RuntimeTypeModel model) =>
 		model.EnsureRegistered(typeof(ResultSerializers), () =>
@@ -104,8 +102,11 @@ public static class ResultSerializers
 			if (!valueType.IsEnum)
 				continue;
 			model.EnsureRegistered(memberType, () =>
-				model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
-					typeof(ResultEnumSerializer<>).MakeGenericType(valueType));
+			{
+				if (!model.IsDefined(memberType))
+					model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
+						typeof(ResultEnumSerializer<>).MakeGenericType(valueType);
+			});
 		}
 	}
 }

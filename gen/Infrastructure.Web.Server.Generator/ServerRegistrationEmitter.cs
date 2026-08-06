@@ -26,8 +26,8 @@ static class ServerRegistrationEmitter
 						() =>
 						{
 							var model = global::ProtoBuf.Meta.RuntimeTypeModel.Default;
-							global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);
-			{{SurrogateGuards(payloads)}}
+								global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);
+				{{SurrogateGuards(payloads)}}
 						});
 
 				/// <summary>Maps every discovered Norse gRPC service with gRPC-Web enabled, registering surrogates first.</summary>

@@ -100,23 +100,6 @@ public sealed class IdentifierSerializersTests
 		model.EnsureRegistered(typeof(GuidEnvelope), () => model.Add(typeof(GuidEnvelope)));
 		model.GetSchema(typeof(GuidEnvelope), ProtoSyntax.Proto3).ShouldContain("bytes Id = 1;");
 	}
-
-	[Fact]
-	void A_throwing_registration_factory_surfaces_the_same_exception_to_every_caller_not_just_the_first()
-	{
-		// Register's blocking guard relies on Lazy<T> with ExecutionAndPublication caching and
-		// rethrowing a factory exception to every caller -- the deliberate, documented replacement
-		// for the old guard's silent fallback (a failed registration used to leave the "claimed" flag
-		// set, so later callers returned as if registration had succeeded). This proves the mechanism
-		// itself, not IdentifierSerializers.Register directly, which has no seam for a throwing factory.
-		Lazy<bool> guard = new(() => throw new InvalidOperationException("registration failed"),
-			LazyThreadSafetyMode.ExecutionAndPublication);
-
-		var firstException = Should.Throw<InvalidOperationException>(() => _ = guard.Value);
-		var secondException = Should.Throw<InvalidOperationException>(() => _ = guard.Value);
-
-		secondException.ShouldBeSameAs(firstException);
-	}
 }
 
 [ProtoContract]

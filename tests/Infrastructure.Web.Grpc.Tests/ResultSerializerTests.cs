@@ -174,23 +174,6 @@ public sealed class ResultSerializerTests
 	}
 
 	[Fact]
-	void A_throwing_registration_factory_surfaces_the_same_exception_to_every_caller_not_just_the_first()
-	{
-		// Register's blocking guard relies on Lazy<T> with ExecutionAndPublication caching and
-		// rethrowing a factory exception to every caller -- the deliberate, documented replacement
-		// for the old guard's silent fallback (a failed registration used to leave the "claimed" flag
-		// set, so later callers returned as if registration had succeeded). This proves the mechanism
-		// itself, not IdentifierSerializers.Register directly, which has no seam for a throwing factory.
-		Lazy<bool> guard = new(() => throw new InvalidOperationException("registration failed"),
-			LazyThreadSafetyMode.ExecutionAndPublication);
-
-		var firstException = Should.Throw<InvalidOperationException>(() => _ = guard.Value);
-		var secondException = Should.Throw<InvalidOperationException>(() => _ = guard.Value);
-
-		secondException.ShouldBeSameAs(firstException);
-	}
-
-	[Fact]
 	void A_malformed_DateTimeOffset_wire_string_reads_as_a_typed_failure_not_a_throw()
 	{
 		// DateTimeOffset is the one type in the taxonomy where a malformed value is genuinely

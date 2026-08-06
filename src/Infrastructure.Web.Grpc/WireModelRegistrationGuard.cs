@@ -28,7 +28,13 @@ public static class WireModelRegistrationGuard
 		/// swallowed.
 		/// </summary>
 		/// <param name="key">Identifies the registration; independent keys on the same model never block each other.</param>
-		/// <param name="register">Runs exactly once, the first time this (model, key) pair is touched.</param>
+		/// <param name="register">
+		/// Runs exactly once, the first time this (model, key) pair is touched. Must not, directly or
+		/// transitively, call <see cref="EnsureRegistered"/> again for the same (model, key) pair —
+		/// <see cref="Lazy{T}"/> treats that as recursive initialization and throws
+		/// <see cref="InvalidOperationException"/>, which is then cached and rethrown to every
+		/// subsequent caller for that pair, same as any other factory exception.
+		/// </param>
 		public void EnsureRegistered(Type key, Action register)
 		{
 			ArgumentNullException.ThrowIfNull(model);
