@@ -29,7 +29,8 @@ public static class IdentifierSerializers
 	/// Registers the wire law on <paramref name="model"/>. Idempotent and safe under concurrent first
 	/// call per model — a concurrent caller blocks until registration completes rather than observing a
 	/// half-built model. Must run before contract types enter the model — the sweep only sees types
-	/// added after registration.
+	/// added after registration. A registration failure is cached and rethrown to every subsequent
+	/// caller for this model, never silently treated as success.
 	/// </summary>
 	public static void Register(RuntimeTypeModel model)
 	{

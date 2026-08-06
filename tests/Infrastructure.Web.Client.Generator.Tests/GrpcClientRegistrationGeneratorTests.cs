@@ -148,6 +148,15 @@ public sealed class GrpcClientRegistrationGeneratorTests
 		var generated = Generate(Contract);
 		generated.ShouldNotContain("Interlocked.Exchange");
 		generated.ShouldContain("global::System.Threading.LazyThreadSafetyMode.ExecutionAndPublication");
+
+		// The actual registration work must live INSIDE the lazy-guarded factory method, not
+		// accidentally sit outside it where a concurrent caller could reach it unguarded.
+		var coreMethodIndex = generated.IndexOf("RegisterNorseOutcomeSurrogatesCore()", StringComparison.Ordinal);
+		var registerCallIndex = generated.IndexOf(
+			"global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);",
+			StringComparison.Ordinal);
+		coreMethodIndex.ShouldBeGreaterThan(-1);
+		registerCallIndex.ShouldBeGreaterThan(coreMethodIndex);
 	}
 
 	[Fact]

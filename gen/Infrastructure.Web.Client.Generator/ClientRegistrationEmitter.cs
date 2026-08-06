@@ -19,7 +19,8 @@ static class ClientRegistrationEmitter
 			public static class NorseGrpcClientRegistration
 			{
 				// Blocking, not flag-first: a concurrent caller waits for registration to finish instead of
-				// observing a "claimed" flag and proceeding against a half-built RuntimeTypeModel.Default.
+				// observing a "claimed" flag and proceeding against a half-built RuntimeTypeModel.Default
+				// (../../../Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md).
 				static readonly global::System.Lazy<bool> _surrogatesRegistered = new(
 					RegisterNorseOutcomeSurrogatesCore, global::System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
 
