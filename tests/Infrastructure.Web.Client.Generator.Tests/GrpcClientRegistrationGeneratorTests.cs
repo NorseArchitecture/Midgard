@@ -143,6 +143,14 @@ public sealed class GrpcClientRegistrationGeneratorTests
 	}
 
 	[Fact]
+	void RegisterNorseOutcomeSurrogates_uses_a_blocking_guard_not_a_flag_first_race()
+	{
+		var generated = Generate(Contract);
+		generated.ShouldNotContain("Interlocked.Exchange");
+		generated.ShouldContain("global::System.Threading.LazyThreadSafetyMode.ExecutionAndPublication");
+	}
+
+	[Fact]
 	void Emitted_source_compiles_cleanly_against_real_protobuf_net_grpc_and_client_references()
 	{
 		var (_, outputCompilation) = Run(Contract);
