@@ -174,6 +174,52 @@ public sealed class ResultSerializerTests
 	}
 
 	[Fact]
+	async Task Register_does_not_return_until_registration_is_complete_under_concurrent_first_touch()
+	{
+		// Regression test for the race filed 2026-08-03
+		// (../../../Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md), same defect shape
+		// as IdentifierSerializers.Register (see IdentifierSerializersTests.cs for the sibling test):
+		// the old flag-first guard let a second caller observe "claimed" and return immediately while
+		// the first caller's registration was still mid-flight. Every concurrent first-touch caller,
+		// across many fresh models, must see Result<TimeSpan> -- the LAST scalar Register adds, giving
+		// the strongest detection window (measured 3-7x more race violations than asserting on the
+		// first type) -- registered by the time its OWN call to Register returns -- not just
+		// eventually, and not just "no exception was thrown".
+		const int ModelCount = 500;
+		const int CallersPerModel = 8;
+
+		await Task.WhenAll(Enumerable.Range(0, ModelCount).Select(async _ =>
+		{
+			var model = RuntimeTypeModel.Create();
+			using Barrier barrier = new(CallersPerModel);
+
+			await Task.WhenAll(Enumerable.Range(0, CallersPerModel).Select(_ => Task.Run(() =>
+			{
+				barrier.SignalAndWait();
+				ResultSerializers.Register(model);
+				model.IsDefined(typeof(Result<TimeSpan>)).ShouldBeTrue();
+			})));
+		}));
+	}
+
+	[Fact]
+	void A_throwing_registration_factory_surfaces_the_same_exception_to_every_caller_not_just_the_first()
+	{
+		// Register's blocking guard relies on Lazy<T> with ExecutionAndPublication caching and
+		// rethrowing a factory exception to every caller -- the deliberate, documented replacement
+		// for the old guard's silent fallback (a failed registration used to leave the "claimed" flag
+		// set, so later callers returned as if registration had succeeded). This proves the mechanism
+		// itself, not IdentifierSerializers.Register directly, which has no seam for a throwing factory.
+		Lazy<bool> guard = new(() => throw new InvalidOperationException("registration failed"),
+			LazyThreadSafetyMode.ExecutionAndPublication);
+
+		var firstException = Should.Throw<InvalidOperationException>(() => _ = guard.Value);
+		var secondException = Should.Throw<InvalidOperationException>(() => _ = guard.Value);
+
+		secondException.ShouldBeSameAs(firstException);
+	}
+
+	[Fact]
 	void A_malformed_DateTimeOffset_wire_string_reads_as_a_typed_failure_not_a_throw()
 	{
 		// DateTimeOffset is the one type in the taxonomy where a malformed value is genuinely

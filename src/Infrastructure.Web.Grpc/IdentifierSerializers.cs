@@ -20,24 +20,34 @@ namespace Norse.Infrastructure.Web.Grpc;
 /// </remarks>
 public static class IdentifierSerializers
 {
-	static readonly ConditionalWeakTable<RuntimeTypeModel, RuntimeTypeModel> _registered = [];
+	// Lazy<T> with ExecutionAndPublication, not a flag-first guard: a second caller for the same model
+	// blocks until the winning caller's registration completes instead of racing a half-built model
+	// (../../../Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md).
+	static readonly ConditionalWeakTable<RuntimeTypeModel, Lazy<bool>> _registered = [];
 
 	/// <summary>
-	/// Registers the wire law on <paramref name="model"/>. Idempotent per model. Must run before
-	/// contract types enter the model — the sweep only sees types added after registration.
+	/// Registers the wire law on <paramref name="model"/>. Idempotent and safe under concurrent first
+	/// call per model — a concurrent caller blocks until registration completes rather than observing a
+	/// half-built model. Must run before contract types enter the model — the sweep only sees types
+	/// added after registration. A registration failure is cached and rethrown to every subsequent
+	/// caller for this model, never silently treated as success.
 	/// </summary>
 	public static void Register(RuntimeTypeModel model)
 	{
 		ArgumentNullException.ThrowIfNull(model);
-		if (!_registered.TryAdd(model, model))
-			return;
-
-		model.AfterApplyDefaultBehaviour += ApplyWireLaw;
-		model.Add(typeof(SequentialGuid), applyDefaultBehaviour: false).SerializerType =
-			typeof(SequentialGuidSerializer);
-		model.Add(typeof(DeterministicGuid), applyDefaultBehaviour: false).SerializerType =
-			typeof(DeterministicGuidSerializer);
+		_ = _registered.GetValue(model, CreateGuard).Value;
 	}
+
+	static Lazy<bool> CreateGuard(RuntimeTypeModel model) =>
+		new(() =>
+		{
+			model.AfterApplyDefaultBehaviour += ApplyWireLaw;
+			model.Add(typeof(SequentialGuid), applyDefaultBehaviour: false).SerializerType =
+				typeof(SequentialGuidSerializer);
+			model.Add(typeof(DeterministicGuid), applyDefaultBehaviour: false).SerializerType =
+				typeof(DeterministicGuidSerializer);
+			return true;
+		}, LazyThreadSafetyMode.ExecutionAndPublication);
 
 	static void ApplyWireLaw(object? sender, TypeAddedEventArgs e)
 	{
