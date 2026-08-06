@@ -88,7 +88,8 @@ public static class ResultSerializers
 		});
 
 	static void RegisterScalar<T>(RuntimeTypeModel model) where T : notnull, ISpanParsable<T> =>
-		model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>);
+		model.EnsureRegistered(typeof(Result<T>), () =>
+			model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>));
 
 	[UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "ResultEnumSerializer<TEnum> is fully generic over enum types with no member dependencies beyond the enum itself; contract types that reach this sweep are already rooted by the model registration that triggered it.")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Same posture as ResultJsonConverterFactory: the enum set is contract-declared and discovery-driven; AOT source-generation for it is a future increment.")]
@@ -100,10 +101,11 @@ public static class ResultSerializers
 			if (!memberType.IsGenericType || memberType.GetGenericTypeDefinition() != typeof(Result<>))
 				continue;
 			var valueType = memberType.GetGenericArguments()[0];
-			if (!valueType.IsEnum || model.IsDefined(memberType))
+			if (!valueType.IsEnum)
 				continue;
-			model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
-				typeof(ResultEnumSerializer<>).MakeGenericType(valueType);
+			model.EnsureRegistered(memberType, () =>
+				model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
+					typeof(ResultEnumSerializer<>).MakeGenericType(valueType));
 		}
 	}
 }
