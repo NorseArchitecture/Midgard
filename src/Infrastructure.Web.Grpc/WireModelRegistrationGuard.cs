@@ -34,8 +34,8 @@ public static class WireModelRegistrationGuard
 			ArgumentNullException.ThrowIfNull(model);
 			ArgumentNullException.ThrowIfNull(key);
 			ArgumentNullException.ThrowIfNull(register);
-			var perModel = _guards.GetValue(model, static _ => new ConcurrentDictionary<Type, Lazy<bool>>());
-			_ = perModel.GetOrAdd(key, _ => new Lazy<bool>(() =>
+			var perModel = _guards.GetValue(model, static _ => new());
+			_ = perModel.GetOrAdd(key, _ => new(() =>
 			{
 				register();
 				return true;

@@ -49,6 +49,20 @@ public sealed class WireModelRegistrationGuardTests
 		Should.Throw<ArgumentNullException>(() => WireModelRegistrationGuard.EnsureRegistered(null!, typeof(string), () => { }));
 
 	[Fact]
+	void Throws_on_a_null_key()
+	{
+		var model = RuntimeTypeModel.Create();
+		Should.Throw<ArgumentNullException>(() => model.EnsureRegistered(null!, () => { }));
+	}
+
+	[Fact]
+	void Throws_on_a_null_register()
+	{
+		var model = RuntimeTypeModel.Create();
+		Should.Throw<ArgumentNullException>(() => model.EnsureRegistered(typeof(string), null!));
+	}
+
+	[Fact]
 	async Task Every_concurrent_first_touch_caller_blocks_until_registration_completes()
 	{
 		// Regression coverage for the general primitive, generalizing the site-specific concurrency
