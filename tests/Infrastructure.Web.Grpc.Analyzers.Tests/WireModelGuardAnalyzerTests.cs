@@ -18,19 +18,6 @@ public sealed class WireModelGuardAnalyzerTests
 		}
 		""";
 
-	const string DirectIsDefinedOutsideGuard =
-		"""
-		using ProtoBuf.Meta;
-
-		namespace App;
-
-		static class Leak
-		{
-			public static bool Register(RuntimeTypeModel model) =>
-				model.IsDefined(typeof(string));
-		}
-		""";
-
 	[Fact]
 	async Task Strikes_norse080_on_a_direct_Add_call_outside_the_guard()
 	{
@@ -40,15 +27,27 @@ public sealed class WireModelGuardAnalyzerTests
 	}
 
 	[Fact]
-	async Task Strikes_norse080_on_a_direct_IsDefined_call_outside_the_guard()
+	async Task Does_not_strike_on_a_bare_IsDefined_read_with_no_paired_Add()
 	{
-		// Split from the Add case (rather than asserting an aggregate count of 2 against a fixture that
-		// calls both) so a regression that breaks IsDefined binding specifically — e.g. a future protobuf-net
-		// upgrade moving it to yet another base type — fails with a message naming IsDefined, not a bare
-		// count mismatch.
+		// A read-only check never mutates the model, so it can't itself cause the TOCTOU race this rule
+		// exists to close -- and since Add is banned outside the guard, nothing can write unguarded either
+		// way, so a preceding IsDefined read is inert regardless. Mirrors the real, legitimate pattern in
+		// Yggdrasil's CompositionTests.cs (RuntimeTypeModel.Default.IsDefined(...).ShouldBeTrue()).
+		const string BareReadOnlyIsDefined =
+			"""
+			using ProtoBuf.Meta;
+
+			namespace App;
+
+			static class ReadOnly
+			{
+				public static bool CheckOnly(RuntimeTypeModel model) =>
+					model.IsDefined(typeof(string));
+			}
+			""";
 		var diagnostics = await AnalyzerTestHarness.GetDiagnosticsAsync(
-			new WireModelGuardAnalyzer(), "App", [], DirectIsDefinedOutsideGuard);
-		diagnostics.ShouldContain(d => d.Id == "NORSE080" && d.GetMessage(CultureInfo.InvariantCulture).Contains("IsDefined", StringComparison.Ordinal));
+			new WireModelGuardAnalyzer(), "App", [], BareReadOnlyIsDefined);
+		diagnostics.ShouldBeEmpty();
 	}
 
 	[Fact]

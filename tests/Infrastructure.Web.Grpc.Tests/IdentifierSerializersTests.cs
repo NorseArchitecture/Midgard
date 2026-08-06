@@ -30,7 +30,7 @@ public sealed class IdentifierSerializersTests
 	void Sweeps_a_type_added_explicitly_to_the_model()
 	{
 		var model = TestModel.Create();
-		model.Add(typeof(GuidEnvelope));
+		model.EnsureRegistered(typeof(GuidEnvelope), () => model.Add(typeof(GuidEnvelope)));
 		var payload = TestModel.Serialize(model, new GuidEnvelope { Id = _knownGuid });
 		Convert.ToHexString(payload).ShouldBe(KnownWireHex);
 	}
@@ -97,7 +97,7 @@ public sealed class IdentifierSerializersTests
 	void Renders_Guid_members_as_bytes_fields_in_the_schema()
 	{
 		var model = TestModel.Create();
-		model.Add(typeof(GuidEnvelope));
+		model.EnsureRegistered(typeof(GuidEnvelope), () => model.Add(typeof(GuidEnvelope)));
 		model.GetSchema(typeof(GuidEnvelope), ProtoSyntax.Proto3).ShouldContain("bytes Id = 1;");
 	}
 
