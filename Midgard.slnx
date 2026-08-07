@@ -27,6 +27,7 @@
 	<Folder Name="/gen/">
 		<File Path="gen/Directory.Build.props" />
 		<File Path="gen/Infrastructure.Web.Grpc.Generator.Shared/ContractDiscovery.cs" />
+		<File Path="gen/Infrastructure.Web.Grpc.Generator.Shared/ComponentDiscovery.cs" />
 		<Project Path="gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
 		<Project Path="gen/Infrastructure.Web.Client.Generator/Infrastructure.Web.Client.Generator.csproj" />
 		<Project Path="gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj" />
@@ -44,6 +45,7 @@
 		<Project Path="tests/Infrastructure.Web.Client.Tests/Infrastructure.Web.Client.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Server.Generator.Tests/Infrastructure.Web.Server.Generator.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Client.Generator.Tests/Infrastructure.Web.Client.Generator.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Web.Grpc.Generator.Shared.Tests/Infrastructure.Web.Grpc.Generator.Shared.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Grpc.Tests/Infrastructure.Web.Grpc.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Persistence.EntityFramework.Tests/Infrastructure.Persistence.EntityFramework.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Server.Xml.Generator.Tests/Infrastructure.Web.Server.Xml.Generator.Tests.csproj" />

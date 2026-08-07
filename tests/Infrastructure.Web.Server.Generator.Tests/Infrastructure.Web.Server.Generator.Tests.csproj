@@ -6,6 +6,7 @@
 		<NorseRef Include="Abstractions.Contracts">
 			<Repo>Asgard</Repo>
 		</NorseRef>
+		<PackageReference Include="FluentValidation" Version="12.*" />
 		<PackageReference Include="Grpc.AspNetCore.Web" Version="2.*" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
 		<PackageReference Include="protobuf-net" Version="*" />

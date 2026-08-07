@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<!-- CA1716 (identifiers should not match keywords reserved in other CLS languages): this
+		     project's RootNamespace parity-names it with gen/Infrastructure.Web.Grpc.Generator.Shared
+		     (VB.NET reserves "Shared"), and the public [Fact]-bearing test class necessarily lives in
+		     that namespace: structural, not a naming choice this project can make differently. -->
+		<NoWarn>$(NoWarn);CA1716</NoWarn>
+	</PropertyGroup>
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="12.*" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
+		<Compile Include="../../gen/Infrastructure.Web.Grpc.Generator.Shared/ComponentDiscovery.cs" Link="Shared/ComponentDiscovery.cs" />
+	</ItemGroup>
+</Project>
