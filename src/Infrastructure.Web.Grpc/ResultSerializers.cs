@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using Norse.Primitives;
 using ProtoBuf.Meta;
 
@@ -46,11 +45,6 @@ public static class ResultSerializers
 	// converters and generated XML writer align on the same literal within this change series.
 	internal const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
-	// Lazy<T> with ExecutionAndPublication, not a flag-first guard: a second caller for the same
-	// model blocks until the winning caller's registration completes instead of racing a half-built
-	// model (../../../Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md).
-	static readonly ConditionalWeakTable<RuntimeTypeModel, Lazy<bool>> _registered = [];
-
 	/// <summary>
 	/// Registers <see cref="Result{T}"/> surrogates for every scalar type in the platform's closed
 	/// taxonomy on <paramref name="model"/>, the general wire law for bare
@@ -61,18 +55,10 @@ public static class ResultSerializers
 	/// cannot be enumerated here — instead every contract type entering the model after this call is
 	/// swept for <c>Result&lt;TEnum&gt;</c>/<c>Result&lt;TEnum&gt;?</c> members, each registered on
 	/// first sight, the same must-run-before-contract-types contract
-	/// <see cref="IdentifierSerializers.Register"/> documents. Idempotent per model. A registration
-	/// failure is cached and rethrown to every subsequent caller for this model, never silently
-	/// treated as success.
+	/// <see cref="IdentifierSerializers.Register"/> documents. Idempotent per model.
 	/// </summary>
-	public static void Register(RuntimeTypeModel model)
-	{
-		ArgumentNullException.ThrowIfNull(model);
-		_ = _registered.GetValue(model, CreateGuard).Value;
-	}
-
-	static Lazy<bool> CreateGuard(RuntimeTypeModel model) =>
-		new(() =>
+	public static void Register(RuntimeTypeModel model) =>
+		model.EnsureRegistered(typeof(ResultSerializers), () =>
 		{
 			model.AfterApplyDefaultBehaviour += (_, e) => RegisterEnumResults(model, e);
 			model.Add(typeof(DateTimeOffset), applyDefaultBehaviour: false).SerializerType = typeof(DateTimeOffsetSerializer);
@@ -97,11 +83,11 @@ public static class ResultSerializers
 			RegisterScalar<DateTimeOffset>(model);
 			RegisterScalar<TimeOnly>(model);
 			RegisterScalar<TimeSpan>(model);
-			return true;
-		}, LazyThreadSafetyMode.ExecutionAndPublication);
+		});
 
 	static void RegisterScalar<T>(RuntimeTypeModel model) where T : notnull, ISpanParsable<T> =>
-		model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>);
+		model.EnsureRegistered(typeof(Result<T>), () =>
+			model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>));
 
 	[UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "ResultEnumSerializer<TEnum> is fully generic over enum types with no member dependencies beyond the enum itself; contract types that reach this sweep are already rooted by the model registration that triggered it.")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Same posture as ResultJsonConverterFactory: the enum set is contract-declared and discovery-driven; AOT source-generation for it is a future increment.")]
@@ -113,10 +99,14 @@ public static class ResultSerializers
 			if (!memberType.IsGenericType || memberType.GetGenericTypeDefinition() != typeof(Result<>))
 				continue;
 			var valueType = memberType.GetGenericArguments()[0];
-			if (!valueType.IsEnum || model.IsDefined(memberType))
+			if (!valueType.IsEnum)
 				continue;
-			model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
-				typeof(ResultEnumSerializer<>).MakeGenericType(valueType);
+			model.EnsureRegistered(memberType, () =>
+			{
+				if (!model.IsDefined(memberType))
+					model.Add(memberType, applyDefaultBehaviour: false).SerializerType =
+						typeof(ResultEnumSerializer<>).MakeGenericType(valueType);
+			});
 		}
 	}
 }

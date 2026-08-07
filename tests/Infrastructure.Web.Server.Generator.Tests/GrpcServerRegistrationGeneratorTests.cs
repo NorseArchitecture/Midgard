@@ -86,20 +86,12 @@ public sealed class GrpcServerRegistrationGeneratorTests
 	}
 
 	[Fact]
-	void RegisterNorseOutcomeSurrogates_uses_a_blocking_guard_not_a_flag_first_race()
+	void RegisterNorseOutcomeSurrogates_delegates_to_the_shared_WireModelRegistrationGuard()
 	{
 		var generated = Generate(Contract);
 		generated.ShouldNotContain("Interlocked.Exchange");
-		generated.ShouldContain("global::System.Threading.LazyThreadSafetyMode.ExecutionAndPublication");
-
-		// The actual registration work must live INSIDE the lazy-guarded factory method, not
-		// accidentally sit outside it where a concurrent caller could reach it unguarded.
-		var coreMethodIndex = generated.IndexOf("RegisterNorseOutcomeSurrogatesCore()", StringComparison.Ordinal);
-		var registerCallIndex = generated.IndexOf(
-			"global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);",
-			StringComparison.Ordinal);
-		coreMethodIndex.ShouldBeGreaterThan(-1);
-		registerCallIndex.ShouldBeGreaterThan(coreMethodIndex);
+		generated.ShouldNotContain("LazyThreadSafetyMode");
+		generated.ShouldContain("global::Norse.Infrastructure.Web.Grpc.WireModelRegistrationGuard.EnsureRegistered(");
 	}
 
 	[Fact]

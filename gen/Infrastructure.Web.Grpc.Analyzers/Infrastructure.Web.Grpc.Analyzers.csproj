@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Web.Grpc.Analyzers: NORSE080 bans any direct RuntimeTypeModel.Add/.Add&lt;T&gt; invocation outside Norse.Infrastructure.Web.Grpc.WireModelRegistrationGuard itself -- the check-then-act and flag-first shapes an unguarded Add invites are the defect class filed 2026-08-03 (Glitnir/docs/Midgard/2026-08-03-surrogate-guard-race-filing.md) and found live five times, including inside a hand-rolled test fixture, before this rule existed. Bundled into Norse.Infrastructure.Web.Grpc's package (analyzers/dotnet/cs/), never referenced or packed standalone -- every consumer of that package is, by construction, exactly the set of code that could plausibly call RuntimeTypeModel.Add.</Description>
+	</PropertyGroup>
+</Project>
