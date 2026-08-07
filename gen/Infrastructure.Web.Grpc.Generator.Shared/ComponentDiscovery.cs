@@ -101,11 +101,15 @@ static class ComponentDiscovery
 	/// payload that makes it a route: <c>@page</c> needs horizontal whitespace then an opening quote
 	/// whose closing quote lands on the same line, and <c>@attribute</c> needs its line to name
 	/// <c>Route</c> or <c>RouteAttribute</c> as an attribute being constructed. Requiring the payload
-	/// is what keeps the bare words in prose from counting. Razor comments (<c>@* ... *@</c>) and HTML
-	/// comments (<c>&lt;!-- ... --&gt;</c>) are skipped, including across lines; an unterminated opener
-	/// is treated as ordinary text rather than swallowing the rest of the file, so a stray <c>&lt;!--</c>
-	/// can never hide a real directive below it. <c>@@page</c>/<c>@@attribute</c> are Razor's escape for
-	/// a literal <c>@</c> and never match, nor does an identifier continuation such as <c>@pageSize</c>.
+	/// is what keeps the bare words in prose from counting. Only Razor comments (<c>@* ... *@</c>) are
+	/// skipped, including across lines; an unterminated opener is treated as ordinary text rather than
+	/// swallowing the rest of the file. HTML comments (<c>&lt;!-- ... --&gt;</c>) are deliberately NOT
+	/// skipped: Razor's directive/transition scanning runs independently of HTML structure, so
+	/// <c>&lt;!-- @page "/x" --&gt;</c> still compiles as a live route -- treating the HTML markers as
+	/// opaque would hide a real directive behind purely client-rendering markup, trading a false
+	/// negative for cosmetic symmetry with the Razor-comment case. <c>@@page</c>/<c>@@attribute</c> are
+	/// Razor's escape for a literal <c>@</c> and never match, nor does an identifier continuation such
+	/// as <c>@pageSize</c>.
 	/// </para>
 	/// <para>
 	/// This does not tokenize C#, so a <c>@page "..."</c> sequence sitting at the start of a line
@@ -126,7 +130,7 @@ static class ComponentDiscovery
 		{
 			var current = text[index];
 
-			if (current == '\n')
+			if (current is '\n' or '\r')
 			{
 				atLineStart = true;
 				index++;
@@ -147,14 +151,11 @@ static class ComponentDiscovery
 		return false;
 	}
 
-	/// <summary>How many characters the token at <paramref name="index"/> occupies: a whole Razor or HTML comment, both characters of an escaped <c>@@</c>, or a single character otherwise.</summary>
+	/// <summary>How many characters the token at <paramref name="index"/> occupies: a whole Razor comment, both characters of an escaped <c>@@</c>, or a single character otherwise. HTML comment markers (<c>&lt;!--</c>/<c>--&gt;</c>) are deliberately not treated as a skippable span here -- see the "HTML comments are deliberately NOT skipped" note on <see cref="DeclaresRazorRoute"/>.</summary>
 	static int SkipLength(string text, int index)
 	{
 		if (Matches(text, index, "@*"))
 			return CommentLength(text, index, 2, "*@");
-
-		if (Matches(text, index, "<!--"))
-			return CommentLength(text, index, 4, "-->");
 
 		// "@@" is Razor's escape for a literal '@' -- "@@page" renders as text, never a directive.
 		return Matches(text, index, "@@") ? 2 : 1;
@@ -214,7 +215,10 @@ static class ComponentDiscovery
 	/// namespace-qualified. The character before the name must not be an identifier character, so an
 	/// unrelated <c>[MyRoute(...)]</c> never matches; the open paren is required because
 	/// <c>RouteAttribute</c> has no parameterless form, and demanding it keeps a bare mention from
-	/// counting.
+	/// counting. C# permits whitespace (and comments) between an attribute name and its argument-list
+	/// open paren, so <c>Route (...)</c>/<c>RouteAttribute (...)</c> (space before <c>(</c>) are legal
+	/// and must still match -- horizontal whitespace is skipped before the <c>(</c> check, but the
+	/// parenthesis itself remains mandatory.
 	/// </summary>
 	static bool NamesRouteAttribute(string text, int from, int end)
 	{
@@ -224,11 +228,21 @@ static class ComponentDiscovery
 				continue;
 
 			var after = index + RouteAttributeSimpleName.Length;
-			if (Matches(text, after, "(") || Matches(text, after, "Attribute("))
+			if (HasArgumentListAfter(text, after) || (Matches(text, after, "Attribute") && HasArgumentListAfter(text, after + "Attribute".Length)))
 				return true;
 		}
 
 		return false;
+	}
+
+	/// <summary>Whether an argument-list open paren follows <paramref name="after"/>, skipping any horizontal whitespace in between -- <c>RouteAttribute)</c> is required to still not match, so a bare name with no parens at all is never accepted.</summary>
+	static bool HasArgumentListAfter(string text, int after)
+	{
+		var index = after;
+		while (IsHorizontalWhitespace(text, index))
+			index++;
+
+		return Matches(text, index, "(");
 	}
 
 	static bool IsIdentifierCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';

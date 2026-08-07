@@ -268,9 +268,16 @@ public sealed class ComponentDiscoveryTests
 	[InlineData("""@@page "/not-a-route" """, false)]
 	// Identifier continuation -- a C# expression rendering a variable named pageSize.
 	[InlineData("<p>@pageSize \"items\"</p>", false)]
-	// Commented out, both ways.
+	// Commented out via a real Razor comment only -- @* *@ is the sole comment form that suppresses
+	// directive detection.
 	[InlineData("@* @page \"/disabled\" *@", false)]
-	[InlineData("<!--\n@page \"/disabled\"\n-->", false)]
+	// HTML comments do NOT suppress Razor directive processing: the Razor engine's directive scanning
+	// is independent of HTML structure, so a @page wrapped in <!-- --> still compiles as a live route
+	// and must still be detected -- this is the behavior-reversing case Codex's PR #64 review flagged.
+	[InlineData("<!--\n@page \"/disabled\"\n-->", true)]
+	// A genuine non-directive HTML comment must not spuriously match now that <!-- --> is no longer
+	// treated as an opaque skippable span.
+	[InlineData("<!-- TODO: remove this section -->", false)]
 	// The word without a route template declares nothing.
 	[InlineData("<p>Use @page to declare a route.</p>", false)]
 	[InlineData("@page\n", false)]
@@ -278,6 +285,9 @@ public sealed class ComponentDiscoveryTests
 	[InlineData("<h1>x</h1> @page \"/mid-line\"", false)]
 	// An unterminated comment opener must not swallow the directive below it.
 	[InlineData("<!-- unclosed\n@page \"/Error\"", true)]
+	// Classic-Mac-style CR-only line endings: the main loop must reset atLineStart on '\r' too, not
+	// just '\n', or a directive on any line after the first is invisible.
+	[InlineData("@using System\r@page \"/a\"", true)]
 	void DeclaresRazorRoute_recognizes_only_a_real_page_directive(string razor, bool expected) =>
 		ComponentDiscovery.DeclaresRazorRoute(SourceText.From(razor)).ShouldBe(expected);
 
@@ -291,6 +301,10 @@ public sealed class ComponentDiscoveryTests
 	[InlineData("@attribute [Route(RouteTemplates.Home)]", true)]
 	// The explicit attribute-suffixed spelling is equally legal.
 	[InlineData("""@attribute [RouteAttribute("/x")] """, true)]
+	// C# permits whitespace between an attribute name and its argument-list open paren -- both
+	// spellings must still match with a space before "(".
+	[InlineData("""@attribute [Route (Routes.Home)] """, true)]
+	[InlineData("""@attribute [RouteAttribute ("/x")] """, true)]
 	// Namespace-qualified, and alongside another attribute in the same list.
 	[InlineData("""@attribute [Microsoft.AspNetCore.Components.Route("/x")] """, true)]
 	[InlineData("""@attribute [Authorize, Route("/x")] """, true)]
@@ -312,7 +326,8 @@ public sealed class ComponentDiscoveryTests
 	[InlineData("""@@attribute [Route("/x")] """, false)]
 	[InlineData("""<h1>x</h1> @attribute [Route("/x")] """, false)]
 	[InlineData("""@* @attribute [Route("/x")] *@""", false)]
-	[InlineData("<!--\n@attribute [Route(\"/x\")]\n-->", false)]
+	// HTML comments do NOT suppress directive processing -- see the @page case above for why.
+	[InlineData("<!--\n@attribute [Route(\"/x\")]\n-->", true)]
 	// The attribute must land on the directive's own line.
 	[InlineData("@attribute\n[Route(\"/x\")]", false)]
 	void DeclaresRazorRoute_recognizes_a_route_declared_by_attribute_directive(string razor, bool expected) =>
