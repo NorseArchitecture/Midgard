@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Norse.Infrastructure.Web.Client.Generator.Tests;
 
@@ -154,6 +155,38 @@ public sealed class ClientComponentRegistrationEmitterTests
 		generated.ShouldNotContain("namespace My_App;");
 	}
 
+	// A routable page declared the way real Blazor projects declare one -- a .razor file carrying an
+	// @page directive, reaching the compiler as an AdditionalFile, never as a C# [Route] type. The
+	// Razor SDK's generator turns it into one, but it shares this generator's pass and Roslyn hands
+	// every generator in a pass the original pre-generation compilation, so the semantic walk can
+	// never see it. Without the AdditionalFiles channel the WASM client's own pages go unrouted.
+	[Fact]
+	void Router_list_reaches_the_compilations_own_assembly_when_only_a_razor_page_declares_its_routes()
+	{
+		const string CounterRazor = """
+			@page "/counter"
+
+			<h1>Counter</h1>
+			""";
+		var generated = GenerateWithRazorPages([CounterRazor], RoutesAdditionalAssembliesSource);
+
+		generated.ShouldContain("typeof(global::Norse.Hosting.Web.Client.NorseClientComponentRegistration).Assembly,");
+	}
+
+	// A .razor file with no @page directive is a component, not a page -- no route, no entry.
+	[Fact]
+	void Router_list_leaves_the_compilations_own_assembly_out_when_its_razor_files_declare_no_page()
+	{
+		const string ChildRazor = """
+			<div class="child">@ChildContent</div>
+
+			@code { [Parameter] public RenderFragment? ChildContent { get; set; } }
+			""";
+		var generated = GenerateWithRazorPages([ChildRazor], RoutesAdditionalAssembliesSource);
+
+		generated.ShouldNotContain("NorseClientComponentRegistration).Assembly");
+	}
+
 	[Fact]
 	void Emitted_source_compiles_cleanly_against_real_FluentValidation_and_DependencyInjection_references()
 	{
@@ -193,6 +226,31 @@ public sealed class ClientComponentRegistrationEmitterTests
 	static string Generate(params string[] sources)
 	{
 		var (_, outputCompilation) = Run(sources);
+		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+
+	// Feeds .razor files in through the driver's additionalTexts channel rather than as compilation
+	// sources -- the only channel a real build has for them, and the reason the semantic walk alone
+	// can't see the pages they declare.
+	static string GenerateWithRazorPages(string[] razorPages, params string[] sources)
+	{
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
+			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
+			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+
+		var compilation = CSharpCompilation.Create(
+			"Norse.Hosting.Web.Client",
+			[.. sources.Select(s => CSharpSyntaxTree.ParseText(s))],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create(
+				generators: [new ClientComponentRegistrationGenerator().AsSourceGenerator()],
+				additionalTexts: razorPages.Select((page, i) => (AdditionalText)new RazorAdditionalText($"Pages/Page{i}.razor", page)),
+				parseOptions: null,
+				optionsProvider: null)
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
 	}
 
@@ -236,6 +294,14 @@ public sealed class ClientComponentRegistrationEmitterTests
 
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
 	}
+}
+
+/// <summary>Minimal in-memory <see cref="AdditionalText"/> standing in for a .razor file the Razor SDK adds to <c>@(AdditionalFiles)</c>.</summary>
+sealed class RazorAdditionalText(string path, string text) : AdditionalText
+{
+	public override string Path { get; } = path;
+
+	public override SourceText GetText(CancellationToken cancellationToken = default) => SourceText.From(text);
 }
 
 /// <summary>Minimal test double for MSBuild's build_property.* interop -- reports a single configured <c>build_property.RootNamespace</c> value from AnalyzerConfigOptionsProvider.GlobalOptions and nothing else.</summary>

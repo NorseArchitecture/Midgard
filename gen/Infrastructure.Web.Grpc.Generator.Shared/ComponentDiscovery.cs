@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Norse.Infrastructure.Web.Grpc.Generator.Shared;
 
@@ -17,6 +18,10 @@ static class ComponentDiscovery
 	const string RouteAttributeMetadataName = "Microsoft.AspNetCore.Components.RouteAttribute";
 	const string RoutesMetadataName = "Norse.Hosting.Web.Components.Routes";
 	const string RoutesAdditionalAssembliesMetadataName = "Norse.Hosting.Web.Components.RoutesAdditionalAssemblies";
+	const string RazorComponentExtension = ".razor";
+	const string PageDirective = "@page";
+	const string AttributeDirective = "@attribute";
+	const string RouteAttributeSimpleName = "Route";
 
 	/// <summary>
 	/// Discovers every FluentValidation validator and Blazor-routable assembly visible to
@@ -25,8 +30,16 @@ static class ComponentDiscovery
 	/// <c>compilation.SourceModule.ReferencedAssemblySymbols</c>, each swept via a recursive walk of
 	/// its global namespace). References <c>ContractDiscovery</c> by name only (no <c>cref</c>) --
 	/// not every consumer linking this file also links ContractDiscovery.cs.
+	/// <para>
+	/// <paramref name="ownAssemblyDeclaresRazorRoutes"/> carries the half of route discovery the
+	/// semantic walk structurally cannot reach, sourced from <see cref="RazorRouteDeclarationProvider"/>
+	/// -- see <see cref="ComponentDiscoveryResult.RequiresOwnAssemblyRouterEntry"/> for why it exists
+	/// and <see cref="DeclaresRazorRoute(SourceText)"/> for how it's determined. Required rather than
+	/// defaulted: a consumer that forgets to wire the provider would otherwise silently reintroduce
+	/// the exact gap it closes.
+	/// </para>
 	/// </summary>
-	public static ComponentDiscoveryResult Discover(Compilation compilation)
+	public static ComponentDiscoveryResult Discover(Compilation compilation, bool ownAssemblyDeclaresRazorRoutes)
 	{
 		var format = SymbolDisplayFormat.FullyQualifiedFormat;
 		IAssemblySymbol[] assemblies = [compilation.Assembly, .. compilation.SourceModule.ReferencedAssemblySymbols];
@@ -35,8 +48,209 @@ static class ComponentDiscovery
 		var (routableMarkers, routesHolderMarker, routesHolderIsOwnAssembly, ownAssemblyRoutableMarker) = DiscoverRoutes(compilation, assemblies, format);
 		var routesAdditionalAssembliesTypeExists = compilation.GetTypeByMetadataName(RoutesAdditionalAssembliesMetadataName) is not null;
 
-		return new ComponentDiscoveryResult(validators, routableMarkers, routesHolderMarker, routesHolderIsOwnAssembly, routesAdditionalAssembliesTypeExists, ownAssemblyRoutableMarker);
+		return new ComponentDiscoveryResult(
+			validators,
+			routableMarkers,
+			routesHolderMarker,
+			routesHolderIsOwnAssembly,
+			routesAdditionalAssembliesTypeExists,
+			ownAssemblyRoutableMarker,
+			// Same exclusion the per-assembly walk in DiscoverRoutes already applies to the routes-holder
+			// assembly, applied to the Razor-sourced half for the same reason: when the compilation's own
+			// assembly IS the Routes holder, the Router's AppAssembly already covers it, and naming it a
+			// second time via AdditionalAssemblies makes Blazor throw on duplicate route discovery.
+			ownAssemblyDeclaresRazorRoutes && !routesHolderIsOwnAssembly);
 	}
+
+	/// <summary>
+	/// The compilation's own <c>.razor</c> files, reduced to a single "does this project declare at
+	/// least one routable page" flag for <see cref="Discover"/>.
+	/// <para>
+	/// This is the only channel that answers the question. A <c>.razor</c> page becomes a
+	/// <c>[Route]</c>-attributed type solely through the Razor SDK's own incremental generator, which
+	/// is registered on the same compilation as this one and therefore runs in the same generation
+	/// pass -- and Roslyn hands every generator in a pass the original, pre-generation compilation, so
+	/// no generator ever observes another's output. The semantic walk in <see cref="DiscoverRoutes"/>
+	/// consequently sees a referenced assembly's pages (already real metadata, generated during
+	/// <em>that</em> assembly's own build) but never the compiling project's own. The raw file text is
+	/// what remains, and it is genuinely available: <c>Microsoft.NET.Sdk.Razor.SourceGenerators.targets</c>
+	/// adds every <c>RazorComponentWithTargetPath</c> item to <c>@(AdditionalFiles)</c>, which is
+	/// exactly how the Razor generator itself receives them.
+	/// </para>
+	/// <para>
+	/// <c>.cshtml</c> is deliberately not scanned: <c>@page</c> there declares a Razor Pages endpoint,
+	/// a different routing mechanism entirely, and contributes nothing to a Blazor <c>Router</c>.
+	/// </para>
+	/// </summary>
+	public static IncrementalValueProvider<bool> RazorRouteDeclarationProvider(IncrementalGeneratorInitializationContext context) =>
+		context.AdditionalTextsProvider
+			.Where(static text => text.Path.EndsWith(RazorComponentExtension, StringComparison.OrdinalIgnoreCase))
+			.Select(static (text, cancellationToken) => text.GetText(cancellationToken) is { } source && DeclaresRazorRoute(source))
+			.Collect()
+			.Select(static (declarations, _) => declarations.Contains(true));
+
+	/// <summary>
+	/// Whether <paramref name="source"/> -- the raw text of a <c>.razor</c> file -- carries at least one
+	/// route directive, in either of the two forms Blazor accepts: <c>@page "/template"</c>, or
+	/// <c>@attribute [Route(...)]</c>. The second is not a curiosity: <c>@page</c> only accepts a
+	/// literal template, so routing from a shared <c>const</c> string is spelled
+	/// <c>@attribute [Route(RouteTemplates.Home)]</c> and is the standard way to do it. Both come from
+	/// the same co-resident Razor generator and are equally invisible to the semantic walk.
+	/// <para>
+	/// A directive is recognized only as the first non-whitespace token on its line, and only with the
+	/// payload that makes it a route: <c>@page</c> needs horizontal whitespace then an opening quote
+	/// whose closing quote lands on the same line, and <c>@attribute</c> needs its line to name
+	/// <c>Route</c> or <c>RouteAttribute</c> as an attribute being constructed. Requiring the payload
+	/// is what keeps the bare words in prose from counting. Only Razor comments (<c>@* ... *@</c>) are
+	/// skipped, including across lines; an unterminated opener is treated as ordinary text rather than
+	/// swallowing the rest of the file. HTML comments (<c>&lt;!-- ... --&gt;</c>) are deliberately NOT
+	/// skipped: Razor's directive/transition scanning runs independently of HTML structure, so
+	/// <c>&lt;!-- @page "/x" --&gt;</c> still compiles as a live route -- treating the HTML markers as
+	/// opaque would hide a real directive behind purely client-rendering markup, trading a false
+	/// negative for cosmetic symmetry with the Razor-comment case. <c>@@page</c>/<c>@@attribute</c> are
+	/// Razor's escape for a literal <c>@</c> and never match, nor does an identifier continuation such
+	/// as <c>@pageSize</c>.
+	/// </para>
+	/// <para>
+	/// This does not tokenize C#, so a <c>@page "..."</c> sequence sitting at the start of a line
+	/// inside a multi-line string literal in an <c>@code</c> block reads as a directive. That
+	/// asymmetry is deliberate and safe in this direction: a false positive only adds an assembly with
+	/// no routes to the Router's scan list, which discovers nothing and changes no behavior, whereas a
+	/// false negative leaves a real page unreachable. Correctness is never traded for it -- only a
+	/// no-op.
+	/// </para>
+	/// </summary>
+	public static bool DeclaresRazorRoute(SourceText source)
+	{
+		var text = source.ToString();
+		var index = 0;
+		var atLineStart = true;
+
+		while (index < text.Length)
+		{
+			var current = text[index];
+
+			if (current is '\n' or '\r')
+			{
+				atLineStart = true;
+				index++;
+				continue;
+			}
+
+			if (atLineStart && current == '@' && (IsPageDirective(text, index) || IsRouteAttributeDirective(text, index)))
+				return true;
+
+			// Only leading whitespace keeps a line at its start; everything else, including a comment or an
+			// escaped '@', puts the scan mid-line -- and comments are consumed whole below, so nothing
+			// inside one is ever read as a directive.
+			if (!char.IsWhiteSpace(current))
+				atLineStart = false;
+			index += SkipLength(text, index);
+		}
+
+		return false;
+	}
+
+	/// <summary>How many characters the token at <paramref name="index"/> occupies: a whole Razor comment, both characters of an escaped <c>@@</c>, or a single character otherwise. HTML comment markers (<c>&lt;!--</c>/<c>--&gt;</c>) are deliberately not treated as a skippable span here -- see the "HTML comments are deliberately NOT skipped" note on <see cref="DeclaresRazorRoute"/>.</summary>
+	static int SkipLength(string text, int index)
+	{
+		if (Matches(text, index, "@*"))
+			return CommentLength(text, index, 2, "*@");
+
+		// "@@" is Razor's escape for a literal '@' -- "@@page" renders as text, never a directive.
+		return Matches(text, index, "@@") ? 2 : 1;
+	}
+
+	/// <summary>The span of a comment opened at <paramref name="opener"/>, or a single character when it is never closed -- an unterminated opener is ordinary text, not a swallow-everything-below.</summary>
+	static int CommentLength(string text, int opener, int openerLength, string terminator)
+	{
+		var close = text.IndexOf(terminator, opener + openerLength, StringComparison.Ordinal);
+		return close < 0 ? 1 : close + terminator.Length - opener;
+	}
+
+	/// <summary>Whether the <c>@</c> at <paramref name="at"/> opens a <c>@page</c> directive carrying a single-line quoted route template.</summary>
+	static bool IsPageDirective(string text, int at)
+	{
+		if (!Matches(text, at, PageDirective))
+			return false;
+
+		var index = at + PageDirective.Length;
+		// Word boundary: "@pageSize" is a C# expression, and "@page" alone declares no route.
+		if (!IsHorizontalWhitespace(text, index))
+			return false;
+
+		while (IsHorizontalWhitespace(text, index))
+			index++;
+
+		if (index >= text.Length || text[index] != '"')
+			return false;
+
+		var close = text.IndexOf('"', index + 1);
+		if (close < 0)
+			return false;
+
+		var newline = text.IndexOf('\n', index + 1);
+		return newline < 0 || close < newline;
+	}
+
+	/// <summary>Whether the <c>@</c> at <paramref name="at"/> opens an <c>@attribute</c> directive whose line constructs a <c>[Route(...)]</c> -- the form a page routed from a <c>const</c> template must use, since <c>@page</c> takes a literal only.</summary>
+	static bool IsRouteAttributeDirective(string text, int at)
+	{
+		if (!Matches(text, at, AttributeDirective))
+			return false;
+
+		var index = at + AttributeDirective.Length;
+		// Word boundary: "@attributeName" is a C# expression, not the directive.
+		if (!IsHorizontalWhitespace(text, index))
+			return false;
+
+		var newline = text.IndexOf('\n', index);
+		return NamesRouteAttribute(text, index, newline < 0 ? text.Length : newline);
+	}
+
+	/// <summary>
+	/// Whether the attribute list in <paramref name="text"/> between <paramref name="from"/> and
+	/// <paramref name="end"/> names <c>Microsoft.AspNetCore.Components.RouteAttribute</c> -- its
+	/// <c>[Route(...)]</c> spelling, its explicit <c>[RouteAttribute(...)]</c> spelling, or either one
+	/// namespace-qualified. The character before the name must not be an identifier character, so an
+	/// unrelated <c>[MyRoute(...)]</c> never matches; the open paren is required because
+	/// <c>RouteAttribute</c> has no parameterless form, and demanding it keeps a bare mention from
+	/// counting. C# permits whitespace (and comments) between an attribute name and its argument-list
+	/// open paren, so <c>Route (...)</c>/<c>RouteAttribute (...)</c> (space before <c>(</c>) are legal
+	/// and must still match -- horizontal whitespace is skipped before the <c>(</c> check, but the
+	/// parenthesis itself remains mandatory.
+	/// </summary>
+	static bool NamesRouteAttribute(string text, int from, int end)
+	{
+		for (var index = text.IndexOf(RouteAttributeSimpleName, from, StringComparison.Ordinal); index >= 0 && index < end; index = text.IndexOf(RouteAttributeSimpleName, index + 1, StringComparison.Ordinal))
+		{
+			if (index > 0 && IsIdentifierCharacter(text[index - 1]))
+				continue;
+
+			var after = index + RouteAttributeSimpleName.Length;
+			if (HasArgumentListAfter(text, after) || (Matches(text, after, "Attribute") && HasArgumentListAfter(text, after + "Attribute".Length)))
+				return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>Whether an argument-list open paren follows <paramref name="after"/>, skipping any horizontal whitespace in between -- <c>RouteAttribute)</c> is required to still not match, so a bare name with no parens at all is never accepted.</summary>
+	static bool HasArgumentListAfter(string text, int after)
+	{
+		var index = after;
+		while (IsHorizontalWhitespace(text, index))
+			index++;
+
+		return Matches(text, index, "(");
+	}
+
+	static bool IsIdentifierCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
+
+	static bool IsHorizontalWhitespace(string text, int at) => at < text.Length && (text[at] == ' ' || text[at] == '\t');
+
+	static bool Matches(string text, int at, string value) =>
+		at + value.Length <= text.Length && string.CompareOrdinal(text, at, value, 0, value.Length) == 0;
 
 	/// <summary>
 	/// A non-abstract named type implementing <c>FluentValidation.IValidator&lt;T&gt;</c>, matched by
@@ -186,14 +400,32 @@ static class ComponentDiscovery
 	}
 }
 
-/// <summary>Discovered validators, routable-assembly markers, and the routes-holder assembly's own marker (plus whether that holder assembly is the discovering compilation's own), plus whether a routing composition seam (<c>RoutesAdditionalAssemblies</c>) is present for Tasks 4/5 to emit against.</summary>
+/// <summary>Discovered validators, routable-assembly markers, and the routes-holder assembly's own marker (plus whether that holder assembly is the discovering compilation's own), plus whether a routing composition seam (<c>RoutesAdditionalAssemblies</c>) is present for Tasks 4/5 to emit against. <c>OwnAssemblyDeclaresRazorRoutes</c> closes out the record: whether the compilation's own <c>.razor</c> sources declare at least one <c>@page</c> route and the compilation is not itself the routes holder — the half of own-assembly route discovery <c>OwnAssemblyRoutableMarker</c> structurally cannot cover, since a Razor page only becomes a <c>[Route]</c>-attributed type through a generator sharing this one's pass.</summary>
 sealed record ComponentDiscoveryResult(
 	ImmutableArray<ValidatorModel> Validators,
 	ImmutableArray<string> RoutableAssemblyMarkers,
 	string? RoutesHolderMarker,
 	bool RoutesHolderIsOwnAssembly,
 	bool RoutesAdditionalAssembliesTypeExists,
-	string? OwnAssemblyRoutableMarker);
+	string? OwnAssemblyRoutableMarker,
+	bool OwnAssemblyDeclaresRazorRoutes)
+{
+	/// <summary>
+	/// Whether the Router registration must name the compilation's own assembly through the generated
+	/// registration class rather than a discovered page type. True only when the own assembly declares
+	/// Razor routes that nothing already in <see cref="RoutableAssemblyMarkers"/> represents: a
+	/// C#-declared <c>[Route]</c> type in the same assembly makes <see cref="OwnAssemblyRoutableMarker"/>
+	/// non-null and already puts that assembly in the list, and naming it twice makes Blazor throw on
+	/// duplicate route discovery. The generated class is the marker precisely because no Razor page type
+	/// is nameable at generation time — but any type in the assembly identifies it equally well, since
+	/// the emitted registration only ever reads <c>typeof(...).Assembly</c>.
+	/// <para>
+	/// Deliberately absent from the endpoint half of composition: <c>MapRazorComponents&lt;App&gt;</c>'s
+	/// implicit root already covers the host's own assembly there.
+	/// </para>
+	/// </summary>
+	public bool RequiresOwnAssemblyRouterEntry => OwnAssemblyDeclaresRazorRoutes && OwnAssemblyRoutableMarker is null;
+}
 
 /// <summary>A discovered FluentValidation validator -- both names global::-qualified.</summary>
 sealed record ValidatorModel(string ValidatorTypeName, string RequestTypeName);

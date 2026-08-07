@@ -25,7 +25,13 @@ public sealed class ServerComponentRegistrationGenerator : IIncrementalGenerator
 	/// <inheritdoc />
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-		var models = context.CompilationProvider.Combine(context.AnalyzerConfigOptionsProvider).Select(Discover);
+		var models = context.CompilationProvider
+			.Combine(context.AnalyzerConfigOptionsProvider)
+			// The compilation alone cannot answer whether this project's own .razor files declare routes
+			// -- the Razor SDK's generator shares this generation pass, so its [Route]-attributed output
+			// is invisible here. The raw .razor AdditionalFiles are the only channel that can.
+			.Combine(ComponentDiscovery.RazorRouteDeclarationProvider(context))
+			.Select(Discover);
 		context.RegisterSourceOutput(models, static (productionContext, result) =>
 		{
 			if (result.Discovery.Validators.IsEmpty && !result.Discovery.RoutesAdditionalAssembliesTypeExists)
@@ -35,12 +41,13 @@ public sealed class ServerComponentRegistrationGenerator : IIncrementalGenerator
 		});
 	}
 
-	static DiscoveryResult Discover((Compilation Compilation, AnalyzerConfigOptionsProvider Options) input, CancellationToken cancellationToken)
+	static DiscoveryResult Discover(((Compilation Compilation, AnalyzerConfigOptionsProvider Options) Semantic, bool OwnAssemblyDeclaresRazorRoutes) input, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 
-		var discovery = ComponentDiscovery.Discover(input.Compilation);
-		var rootNamespace = RootNamespaceResolution.Resolve(input.Compilation, input.Options);
+		var (compilation, options) = input.Semantic;
+		var discovery = ComponentDiscovery.Discover(compilation, input.OwnAssemblyDeclaresRazorRoutes);
+		var rootNamespace = RootNamespaceResolution.Resolve(compilation, options);
 		return new DiscoveryResult(rootNamespace, discovery);
 	}
 
