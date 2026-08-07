@@ -1,5 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="12.*" />
+		<!-- Standalone WASM-safe Blazor package (mirrors Asgard's Abstractions.Components.csproj),
+		     never FrameworkReference Microsoft.AspNetCore.App here: that pulls the whole ASP.NET
+		     Core shared framework and trips NU1510 (package pruning) against this project's own
+		     explicit Microsoft.Extensions.DependencyInjection/System.Security.Cryptography.Xml
+		     references, which the shared framework would otherwise supply implicitly. -->
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="11.*-*" />
 		<PackageReference Include="Grpc.Net.Client" Version="2.*" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.*-*" />
