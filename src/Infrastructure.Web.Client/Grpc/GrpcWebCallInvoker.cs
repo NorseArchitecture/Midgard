@@ -92,7 +92,16 @@ public sealed class GrpcWebCallInvoker : CallInvoker
 
 			var body = await httpResponse.Content.ReadAsByteArrayAsync(options.CancellationToken).ConfigureAwait(false);
 			var (payload, trailers) = ParseFrames(body);
-			state.Trailers = trailers ?? [];
+			// A trailers-only response carries no trailer frame at all — grpc-status, grpc-message and
+			// grpc-status-details-bin arrive as plain HTTP response headers, and the response body is
+			// empty. That is exactly what Grpc.AspNetCore.Server emits whenever a call fails before
+			// writing a message, which is every Failed(Problem) the platform produces. In that shape the
+			// response headers ARE the trailers (Grpc.Net.Client resolves it identically); dropping them
+			// leaves RpcException.Trailers empty, so RpcExceptionExtensions.DecodeProblem finds no
+			// grpc-status-details-bin and degrades every business failure to ErrorCategory.Fault. Read a
+			// second time rather than reusing the ResponseHeaders instance: Metadata is mutable and
+			// nothing freezes it, so handing the same object to both would alias them.
+			state.Trailers = trailers ?? ReadMetadata(httpResponse.Headers);
 
 			var status = ResolveStatus(trailers, httpResponse.Headers);
 			state.Status = status;

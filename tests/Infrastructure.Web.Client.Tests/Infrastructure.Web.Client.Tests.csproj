@@ -3,6 +3,7 @@
 		<NorseRef Include="Abstractions.Contracts">
 			<Repo>Asgard</Repo>
 		</NorseRef>
+		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
