@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Norse.Infrastructure.Web.Server.Generator.Tests;
 
@@ -39,6 +40,21 @@ public sealed class ServerComponentRegistrationEmitterTests
 
 		[Route("/own")]
 		public sealed class OwnPage;
+		""";
+
+	// Norse.Hosting.Web.Components.Routes declared in the harness compilation's OWN sources, not a
+	// separate referenced assembly -- the fixture the "an in-compilation Routes holder is excluded
+	// from the endpoint list too" regression needs. Deliberately a standalone const, not combined with
+	// _routesHolderAssembly in the same Run(): having both in play at once would give the compilation
+	// two distinct "Norse.Hosting.Web.Components.Routes" candidates (one from source, one referenced)
+	// and GetTypeByMetadataName would see that as ambiguous.
+	const string OwnRoutesHolderSource = """
+		using Microsoft.AspNetCore.Components;
+
+		namespace Norse.Hosting.Web.Components;
+
+		[Route("/")]
+		public sealed class Routes;
 		""";
 
 	// Field declaration order matters here: static field initializers run top-to-bottom, and
@@ -160,6 +176,31 @@ public sealed class ServerComponentRegistrationEmitterTests
 		generated.ShouldContain("namespace Norse.Hosting.Web.Server;");
 	}
 
+	// An AssemblyName is not guaranteed to be a legal C# namespace token -- a hyphenated package id
+	// (common: "My-App") or a leading digit would otherwise land verbatim in `namespace {{...}};` and
+	// fail to compile for the consumer. No build_property.RootNamespace is configured here, so the
+	// fallback path (AssemblyName) is what gets sanitized.
+	[Fact]
+	void Sanitizes_an_assembly_name_that_is_not_a_legal_namespace_token()
+	{
+		var generated = GenerateWithAssemblyName("My-App.Web-Server", ValidatorSource);
+
+		generated.ShouldContain("namespace My_App.Web_Server;");
+	}
+
+	// build_property.RootNamespace -- MSBuild's actual RootNamespace property, read via the standard
+	// AnalyzerConfigOptionsProvider interop -- wins over AssemblyName when both are present, since the
+	// two can diverge freely (a renamed assembly, a hyphenated package id). The configured value is
+	// itself sanitized too, not just the AssemblyName fallback.
+	[Fact]
+	void Prefers_the_configured_RootNamespace_build_property_over_the_assembly_name_and_sanitizes_it_too()
+	{
+		var generated = GenerateWithRootNamespaceProperty("Configured.Root-Namespace", "My-App", ValidatorSource);
+
+		generated.ShouldContain("namespace Configured.Root_Namespace;");
+		generated.ShouldNotContain("namespace My_App;");
+	}
+
 	// The brief's exact expected shape: the Routes-holder assembly and the referenced routable
 	// assembly, in that order, fed to Razor endpoint discovery via AddAdditionalAssemblies.
 	[Fact]
@@ -213,6 +254,22 @@ public sealed class ServerComponentRegistrationEmitterTests
 		routerBlock.ShouldContain("typeof(global::Fake.OwnPage).Assembly");
 	}
 
+	// Regression: when Norse.Hosting.Web.Components.Routes lives in the compilation's OWN assembly
+	// (not a referenced one), the routes-holder assembly IS the compilation's own assembly --
+	// DiscoverRoutes excludes the routes-holder assembly from the per-assembly walk before
+	// OwnAssemblyRoutableMarker is computed, so that marker comes back null with nothing left to
+	// filter RoutesHolderMarker against. Unconditionally including RoutesHolderMarker in the endpoint
+	// list would slip the compilation's own assembly through -- redundant with (and a potential
+	// double-discovery source alongside) MapRazorComponents<App>'s implicit root.
+	[Fact]
+	void Endpoint_list_excludes_an_in_compilation_Routes_holder_the_same_way_it_excludes_an_out_of_compilation_one()
+	{
+		var generated = GenerateWithOwnRoutesHolder();
+
+		generated.ShouldNotContain("typeof(global::Norse.Hosting.Web.Components.Routes).Assembly");
+		generated.ShouldContain("AddAdditionalAssemblies(builder);");
+	}
+
 	[Fact]
 	void Emitted_source_compiles_cleanly_against_real_ASP_NET_Core_FluentValidation_and_DependencyInjection_references()
 	{
@@ -249,9 +306,93 @@ public sealed class ServerComponentRegistrationEmitterTests
 		return (diagnostics, outputCompilation);
 	}
 
+	// Deliberately not routed through Run(): that helper adds _routesHolderAssembly (a SEPARATE
+	// referenced assembly also declaring Norse.Hosting.Web.Components.Routes) whenever
+	// RoutesAdditionalAssembliesSource is present, which would give the compilation two distinct
+	// candidates for that metadata name and make GetTypeByMetadataName ambiguous -- this fixture needs
+	// Routes to live only in the compilation's own sources.
+	static string GenerateWithOwnRoutesHolder()
+	{
+		MetadataReference[] references = [.. ReferenceAssemblies.Net110, .. _extraReferences];
+		var compilation = CSharpCompilation.Create(
+			"Norse.Hosting.Web.Server",
+			[CSharpSyntaxTree.ParseText(RoutesAdditionalAssembliesSource), CSharpSyntaxTree.ParseText(OwnRoutesHolderSource)],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create([new ServerComponentRegistrationGenerator().AsSourceGenerator()])
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
+		return outputCompilation.SyntaxTrees.Skip(2).Select(tree => tree.ToString()).Single();
+	}
+
 	static string Generate(params string[] sources)
 	{
 		var (_, outputCompilation) = Run(sources);
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+
+	// Deliberately not routed through Run()/Generate(): those hardcode the harness compilation's
+	// AssemblyName to "Norse.Hosting.Web.Server" (always a legal token), which is exactly what these
+	// two sanitization fixtures need to vary.
+	static string GenerateWithAssemblyName(string assemblyName, params string[] sources)
+	{
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
+			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly, _routesHolderAssembly]
+			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+
+		var compilation = CSharpCompilation.Create(
+			assemblyName,
+			[.. sources.Select(s => CSharpSyntaxTree.ParseText(s))],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create([new ServerComponentRegistrationGenerator().AsSourceGenerator()])
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
+		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+
+	static string GenerateWithRootNamespaceProperty(string rootNamespace, string assemblyName, params string[] sources)
+	{
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
+			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly, _routesHolderAssembly]
+			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+
+		var compilation = CSharpCompilation.Create(
+			assemblyName,
+			[.. sources.Select(s => CSharpSyntaxTree.ParseText(s))],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create(
+				[new ServerComponentRegistrationGenerator().AsSourceGenerator()],
+				optionsProvider: new TestAnalyzerConfigOptionsProvider(rootNamespace))
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
+		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+}
+
+/// <summary>Minimal test double for MSBuild's build_property.* interop -- reports a single configured <c>build_property.RootNamespace</c> value from AnalyzerConfigOptionsProvider.GlobalOptions and nothing else.</summary>
+sealed class TestAnalyzerConfigOptionsProvider(string rootNamespace) : AnalyzerConfigOptionsProvider
+{
+	public override AnalyzerConfigOptions GlobalOptions { get; } = new TestAnalyzerConfigOptions(rootNamespace);
+	public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => GlobalOptions;
+	public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => GlobalOptions;
+}
+
+sealed class TestAnalyzerConfigOptions(string rootNamespace) : AnalyzerConfigOptions
+{
+	public override bool TryGetValue(string key, out string value)
+	{
+		if (key == "build_property.RootNamespace")
+		{
+			value = rootNamespace;
+			return true;
+		}
+
+		value = "";
+		return false;
 	}
 }

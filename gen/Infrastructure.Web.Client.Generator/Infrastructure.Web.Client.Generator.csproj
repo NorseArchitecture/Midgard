@@ -8,5 +8,6 @@
 		</NorseRef>
 		<Compile Include="../Infrastructure.Web.Grpc.Generator.Shared/ContractDiscovery.cs" Link="Shared/ContractDiscovery.cs" />
 		<Compile Include="../Infrastructure.Web.Grpc.Generator.Shared/ComponentDiscovery.cs" Link="Shared/ComponentDiscovery.cs" />
+		<Compile Include="../Infrastructure.Web.Grpc.Generator.Shared/RootNamespaceResolution.cs" Link="Shared/RootNamespaceResolution.cs" />
 	</ItemGroup>
 </Project>

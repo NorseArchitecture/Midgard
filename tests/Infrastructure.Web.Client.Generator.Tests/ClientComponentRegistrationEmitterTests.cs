@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Norse.Infrastructure.Web.Client.Generator.Tests;
 
@@ -128,6 +129,31 @@ public sealed class ClientComponentRegistrationEmitterTests
 		generated.ShouldContain("namespace Norse.Hosting.Web.Client;");
 	}
 
+	// An AssemblyName is not guaranteed to be a legal C# namespace token -- a hyphenated package id
+	// (common: "My-App") or a leading digit would otherwise land verbatim in `namespace {{...}};` and
+	// fail to compile for the consumer. No build_property.RootNamespace is configured here, so the
+	// fallback path (AssemblyName) is what gets sanitized.
+	[Fact]
+	void Sanitizes_an_assembly_name_that_is_not_a_legal_namespace_token()
+	{
+		var generated = GenerateWithAssemblyName("My-App.Web-Client", ValidatorSource);
+
+		generated.ShouldContain("namespace My_App.Web_Client;");
+	}
+
+	// build_property.RootNamespace -- MSBuild's actual RootNamespace property, read via the standard
+	// AnalyzerConfigOptionsProvider interop -- wins over AssemblyName when both are present, since the
+	// two can diverge freely (a renamed assembly, a hyphenated package id). The configured value is
+	// itself sanitized too, not just the AssemblyName fallback.
+	[Fact]
+	void Prefers_the_configured_RootNamespace_build_property_over_the_assembly_name_and_sanitizes_it_too()
+	{
+		var generated = GenerateWithRootNamespaceProperty("Configured.Root-Namespace", "My-App", ValidatorSource);
+
+		generated.ShouldContain("namespace Configured.Root_Namespace;");
+		generated.ShouldNotContain("namespace My_App;");
+	}
+
 	[Fact]
 	void Emitted_source_compiles_cleanly_against_real_FluentValidation_and_DependencyInjection_references()
 	{
@@ -168,5 +194,69 @@ public sealed class ClientComponentRegistrationEmitterTests
 	{
 		var (_, outputCompilation) = Run(sources);
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+
+	// Deliberately not routed through Run()/Generate(): those hardcode the harness compilation's
+	// AssemblyName to "Norse.Hosting.Web.Client" (always a legal token), which is exactly what these
+	// two sanitization fixtures need to vary.
+	static string GenerateWithAssemblyName(string assemblyName, params string[] sources)
+	{
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
+			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
+			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+
+		var compilation = CSharpCompilation.Create(
+			assemblyName,
+			[.. sources.Select(s => CSharpSyntaxTree.ParseText(s))],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create([new ClientComponentRegistrationGenerator().AsSourceGenerator()])
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
+		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+
+	static string GenerateWithRootNamespaceProperty(string rootNamespace, string assemblyName, params string[] sources)
+	{
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
+			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
+			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+
+		var compilation = CSharpCompilation.Create(
+			assemblyName,
+			[.. sources.Select(s => CSharpSyntaxTree.ParseText(s))],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create(
+				[new ClientComponentRegistrationGenerator().AsSourceGenerator()],
+				optionsProvider: new TestAnalyzerConfigOptionsProvider(rootNamespace))
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
+		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+	}
+}
+
+/// <summary>Minimal test double for MSBuild's build_property.* interop -- reports a single configured <c>build_property.RootNamespace</c> value from AnalyzerConfigOptionsProvider.GlobalOptions and nothing else.</summary>
+sealed class TestAnalyzerConfigOptionsProvider(string rootNamespace) : AnalyzerConfigOptionsProvider
+{
+	public override AnalyzerConfigOptions GlobalOptions { get; } = new TestAnalyzerConfigOptions(rootNamespace);
+	public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => GlobalOptions;
+	public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => GlobalOptions;
+}
+
+sealed class TestAnalyzerConfigOptions(string rootNamespace) : AnalyzerConfigOptions
+{
+	public override bool TryGetValue(string key, out string value)
+	{
+		if (key == "build_property.RootNamespace")
+		{
+			value = rootNamespace;
+			return true;
+		}
+
+		value = "";
+		return false;
 	}
 }

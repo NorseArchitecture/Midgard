@@ -66,15 +66,20 @@ static class ServerComponentRegistrationEmitter
 	// exclusion rules: the Routes-holder assembly is included here (RouteRegistration excludes it,
 	// since the Router's AppAssembly already covers it) but the compilation's own assembly is excluded
 	// here (MapRazorComponents<App>'s implicit root already covers it -- RouteRegistration has no such
-	// exception). Gated on the same RoutesAdditionalAssembliesTypeExists seam as RouteRegistration:
-	// the two mechanisms are Yggdrasil's paired composition seam, on or off together.
+	// exception). That own-assembly exclusion has to reach the Routes-holder marker too: when
+	// Norse.Hosting.Web.Components.Routes is declared in the compilation's own assembly (not a
+	// referenced one), RoutesHolderIsOwnAssembly is true and the holder marker is the same
+	// implicit-root case OwnAssemblyRoutableMarker exists to exclude -- including it unconditionally
+	// would double it up with MapRazorComponents<App>'s own root. Gated on the same
+	// RoutesAdditionalAssembliesTypeExists seam as RouteRegistration: the two mechanisms are
+	// Yggdrasil's paired composition seam, on or off together.
 	static string EndpointRegistration(ComponentDiscoveryResult result)
 	{
 		if (!result.RoutesAdditionalAssembliesTypeExists)
 			return string.Empty;
 
 		List<string> markers = [];
-		if (result.RoutesHolderMarker is not null)
+		if (result.RoutesHolderMarker is not null && !result.RoutesHolderIsOwnAssembly)
 			markers.Add(result.RoutesHolderMarker);
 		markers.AddRange(result.RoutableAssemblyMarkers.Where(m => m != result.OwnAssemblyRoutableMarker));
 

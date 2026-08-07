@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using Norse.Abstractions.Emit;
 using Norse.Infrastructure.Web.Grpc.Generator.Shared;
@@ -19,7 +20,7 @@ public sealed class ClientComponentRegistrationGenerator : IIncrementalGenerator
 	/// <inheritdoc />
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-		var models = context.CompilationProvider.Select(Discover);
+		var models = context.CompilationProvider.Combine(context.AnalyzerConfigOptionsProvider).Select(Discover);
 		context.RegisterSourceOutput(models, static (productionContext, result) =>
 		{
 			if (result.Discovery.Validators.IsEmpty && !result.Discovery.RoutesAdditionalAssembliesTypeExists)
@@ -29,12 +30,12 @@ public sealed class ClientComponentRegistrationGenerator : IIncrementalGenerator
 		});
 	}
 
-	static DiscoveryResult Discover(Compilation compilation, CancellationToken cancellationToken)
+	static DiscoveryResult Discover((Compilation Compilation, AnalyzerConfigOptionsProvider Options) input, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 
-		var discovery = ComponentDiscovery.Discover(compilation);
-		var rootNamespace = compilation.AssemblyName ?? "Norse.Generated";
+		var discovery = ComponentDiscovery.Discover(input.Compilation);
+		var rootNamespace = RootNamespaceResolution.Resolve(input.Compilation, input.Options);
 		return new DiscoveryResult(rootNamespace, discovery);
 	}
 
