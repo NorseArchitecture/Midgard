@@ -135,6 +135,32 @@ public sealed class GrpcWebCallInvokerTests
 	}
 
 	[Fact]
+	async Task A_trailers_only_response_surfaces_its_headers_as_the_calls_trailers()
+	{
+		// The shape Grpc.AspNetCore.Server + Grpc.AspNetCore.Web actually emit for every business
+		// failure: the call throws before writing a message, so there is no trailer frame and no body
+		// at all — grpc-status, grpc-message and grpc-status-details-bin ride the HTTP response headers.
+		// The rich-error detail DecodeProblem reads lives only there, so a trailers-only response whose
+		// headers are not promoted to trailers decodes as ErrorCategory.Fault no matter what the server
+		// said.
+		var serverException = new Problem { Category = ErrorCategory.InvalidCredentials }.ToRpcException();
+		using HttpResponseMessage response = new(HttpStatusCode.OK) { Content = new ByteArrayContent([]) };
+		response.Content.Headers.ContentType = new("application/grpc-web+proto");
+		response.Headers.Add("grpc-status", $"{(int)serverException.StatusCode}");
+		response.Headers.Add("grpc-message", serverException.Status.Detail);
+		foreach (var entry in serverException.Trailers)
+			response.Headers.Add(entry.Key, Convert.ToBase64String(entry.ValueBytes));
+		using RecordingHandler handler = new(response);
+		var invoker = CreateInvoker(handler);
+
+		var thrown = await Should.ThrowAsync<RpcException>(
+			invoker.AsyncUnaryCall(Method(), null, new CallOptions(), "ping").ResponseAsync);
+
+		thrown.StatusCode.ShouldBe(StatusCode.Unauthenticated);
+		thrown.DecodeProblem().Category.ShouldBe(ErrorCategory.InvalidCredentials);
+	}
+
+	[Fact]
 	async Task A_non_success_http_status_throws_unavailable()
 	{
 		using var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new ByteArrayContent([]) };
