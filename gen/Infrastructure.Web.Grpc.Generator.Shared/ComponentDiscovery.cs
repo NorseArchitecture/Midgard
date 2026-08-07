@@ -32,10 +32,10 @@ static class ComponentDiscovery
 		IAssemblySymbol[] assemblies = [compilation.Assembly, .. compilation.SourceModule.ReferencedAssemblySymbols];
 
 		var validators = DiscoverValidators(compilation, assemblies, format);
-		var (routableMarkers, routesHolderMarker) = DiscoverRoutes(compilation, assemblies, format);
+		var (routableMarkers, routesHolderMarker, ownAssemblyRoutableMarker) = DiscoverRoutes(compilation, assemblies, format);
 		var routesAdditionalAssembliesTypeExists = compilation.GetTypeByMetadataName(RoutesAdditionalAssembliesMetadataName) is not null;
 
-		return new ComponentDiscoveryResult(validators, routableMarkers, routesHolderMarker, routesAdditionalAssembliesTypeExists);
+		return new ComponentDiscoveryResult(validators, routableMarkers, routesHolderMarker, routesAdditionalAssembliesTypeExists, ownAssemblyRoutableMarker);
 	}
 
 	/// <summary>A non-abstract named type implementing <c>FluentValidation.IValidator&lt;T&gt;</c>, matched by symbol on the interface's original definition. Empty (not an error) when FluentValidation isn't referenced.</summary>
@@ -73,9 +73,13 @@ static class ComponentDiscovery
 	/// type itself -- always unambiguous, unlike a per-assembly first-of-many pick) and excluded from
 	/// <see cref="ComponentDiscoveryResult.RoutableAssemblyMarkers"/> entirely: the Router's
 	/// <c>AppAssembly</c> already covers it, and Blazor throws on duplicate route discovery if it also
-	/// shows up in <c>AdditionalAssemblies</c>.
+	/// shows up in <c>AdditionalAssemblies</c>. Also reports, separately again, whichever of those
+	/// markers (if any) belongs to <paramref name="compilation"/>'s own assembly -- Task 5's Razor
+	/// endpoint discovery excludes it (<c>MapRazorComponents&lt;App&gt;</c>'s implicit root already
+	/// covers it) even though Task 4/5's Router registration does not (the Router has no equivalent
+	/// implicit-root exception), so the two consumers need this split, not just the raw marker list.
 	/// </summary>
-	static (ImmutableArray<string> RoutableMarkers, string? RoutesHolderMarker) DiscoverRoutes(Compilation compilation, IAssemblySymbol[] assemblies, SymbolDisplayFormat format)
+	static (ImmutableArray<string> RoutableMarkers, string? RoutesHolderMarker, string? OwnAssemblyRoutableMarker) DiscoverRoutes(Compilation compilation, IAssemblySymbol[] assemblies, SymbolDisplayFormat format)
 	{
 		var routesType = compilation.GetTypeByMetadataName(RoutesMetadataName);
 		var routesHolderAssembly = routesType?.ContainingAssembly;
@@ -83,23 +87,32 @@ static class ComponentDiscovery
 
 		var routeAttribute = compilation.GetTypeByMetadataName(RouteAttributeMetadataName);
 		if (routeAttribute is null)
-			return ([], routesHolderMarker);
+			return ([], routesHolderMarker, null);
 
-		ImmutableArray<string> routableMarkers =
-		[
-			.. assemblies
+		var perAssemblyMarkers =
+			assemblies
 				.Where(a => !SymbolEqualityComparer.Default.Equals(a, routesHolderAssembly))
-				.Select(a => AllTypes(a.GlobalNamespace)
+				.Select(a => (Assembly: a, Marker: AllTypes(a.GlobalNamespace)
 					.Where(t => t.GetAttributes().Any(attr => SymbolEqualityComparer.Default.Equals(attr.AttributeClass, routeAttribute)))
 					.Select(t => t.ToDisplayString(format))
 					.OrderBy(name => name, StringComparer.Ordinal)
-					.FirstOrDefault())
-				.Where(marker => marker is not null)
-				.Select(marker => marker!)
+					.FirstOrDefault()))
+				.Where(x => x.Marker is not null)
+				.ToImmutableArray();
+
+		ImmutableArray<string> routableMarkers =
+		[
+			.. perAssemblyMarkers
+				.Select(x => x.Marker!)
 				.OrderBy(marker => marker, StringComparer.Ordinal)
 		];
 
-		return (routableMarkers, routesHolderMarker);
+		var ownAssemblyRoutableMarker = perAssemblyMarkers
+			.Where(x => SymbolEqualityComparer.Default.Equals(x.Assembly, compilation.Assembly))
+			.Select(x => x.Marker)
+			.FirstOrDefault();
+
+		return (routableMarkers, routesHolderMarker, ownAssemblyRoutableMarker);
 	}
 
 	/// <summary>Recursive walk of every named type reachable from <paramref name="root"/>, including nested namespaces -- same shape as <c>ContractDiscovery.AllTypes</c>, kept local rather than shared so this file has no compile-time dependency on ContractDiscovery.cs being linked into the same consumer.</summary>
@@ -119,7 +132,8 @@ sealed record ComponentDiscoveryResult(
 	ImmutableArray<ValidatorModel> Validators,
 	ImmutableArray<string> RoutableAssemblyMarkers,
 	string? RoutesHolderMarker,
-	bool RoutesAdditionalAssembliesTypeExists);
+	bool RoutesAdditionalAssembliesTypeExists,
+	string? OwnAssemblyRoutableMarker);
 
 /// <summary>A discovered FluentValidation validator -- both names global::-qualified.</summary>
 sealed record ValidatorModel(string ValidatorTypeName, string RequestTypeName);

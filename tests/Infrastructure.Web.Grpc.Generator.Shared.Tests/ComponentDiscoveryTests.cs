@@ -137,6 +137,40 @@ public sealed class ComponentDiscoveryTests
 		result.RoutesAdditionalAssembliesTypeExists.ShouldBeFalse();
 	}
 
+	// Task 5's endpoint-discovery exclusion rule (never the compilation's own assembly) needs a
+	// marker specifically identifying the compilation's own assembly, distinct from the full
+	// RoutableAssemblyMarkers list Task 4/5's Router registration consumes unfiltered.
+	[Fact]
+	void OwnAssemblyRoutableMarker_identifies_the_route_declared_in_the_compilation_itself()
+	{
+		const string OwnRoutablePage = """
+			using Microsoft.AspNetCore.Components;
+
+			namespace Own;
+
+			[Route("/own")]
+			public sealed class OwnPage;
+			""";
+		var compilation = HarnessCompilation(sources: [OwnRoutablePage], references: [_routableAssembly]);
+
+		var result = ComponentDiscovery.Discover(compilation);
+
+		result.OwnAssemblyRoutableMarker.ShouldBe("global::Own.OwnPage");
+		// The router side has no equivalent exclusion -- the own-assembly marker still shows up
+		// alongside the referenced assembly's marker in the unfiltered list.
+		result.RoutableAssemblyMarkers.ShouldBe(["global::Own.OwnPage", "global::RoutableAsm.WidgetPage"]);
+	}
+
+	[Fact]
+	void OwnAssemblyRoutableMarker_is_null_when_the_compilation_itself_declares_no_routable_type()
+	{
+		var compilation = HarnessCompilation(references: [_routableAssembly]);
+
+		var result = ComponentDiscovery.Discover(compilation);
+
+		result.OwnAssemblyRoutableMarker.ShouldBeNull();
+	}
+
 	static MetadataReference BuildReferenceAssembly(string assemblyName, string source) =>
 		CSharpCompilation.Create(
 			assemblyName,
