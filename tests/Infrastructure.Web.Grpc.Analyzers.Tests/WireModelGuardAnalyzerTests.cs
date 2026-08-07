@@ -116,6 +116,96 @@ public sealed class WireModelGuardAnalyzerTests
 	}
 
 	[Fact]
+	async Task Strikes_on_an_Add_nested_in_the_key_argument_not_the_register_callback()
+	{
+		// 2026-08-06 review fold-in: the exemption is scoped to the register callback specifically, not
+		// "anywhere lexically under an EnsureRegistered invocation" — an Add evaluated while building the
+		// key argument runs BEFORE the guard takes hold, so it is an unguarded mutation like any other.
+		const string AddInsideKeyArgument =
+			"""
+			using System;
+			using ProtoBuf.Meta;
+			using Norse.Infrastructure.Web.Grpc;
+
+			namespace App;
+
+			static class Sneaky
+			{
+				public static void Register(RuntimeTypeModel model) =>
+					model.EnsureRegistered(model.Add(typeof(string), applyDefaultBehaviour: false).Type, () => { });
+			}
+			""";
+		var diagnostics = await AnalyzerTestHarness.GetDiagnosticsAsync(
+			new WireModelGuardAnalyzer(), "App",
+			[MetadataReference.CreateFromFile(typeof(WireModelRegistrationGuard).Assembly.Location)],
+			AddInsideKeyArgument);
+		diagnostics.ShouldContain(d => d.Id == "NORSE080");
+	}
+
+	[Fact]
+	async Task Strikes_when_the_callback_mutates_a_different_model_than_the_guard_protects()
+	{
+		// 2026-08-06 review fold-in: the guard synchronizes the (model, key) pair it is invoked on, so an
+		// Add against a provably different model inside the callback is unprotected — the guard records
+		// completion against firstModel while secondModel mutates with no synchronization at all.
+		const string CrossedModels =
+			"""
+			using System;
+			using ProtoBuf.Meta;
+			using Norse.Infrastructure.Web.Grpc;
+
+			namespace App;
+
+			static class Crossed
+			{
+				public static void Register(RuntimeTypeModel firstModel, RuntimeTypeModel secondModel) =>
+					firstModel.EnsureRegistered(typeof(Crossed), () =>
+						secondModel.Add(typeof(string), applyDefaultBehaviour: false));
+			}
+			""";
+		var diagnostics = await AnalyzerTestHarness.GetDiagnosticsAsync(
+			new WireModelGuardAnalyzer(), "App",
+			[MetadataReference.CreateFromFile(typeof(WireModelRegistrationGuard).Assembly.Location)],
+			CrossedModels);
+		diagnostics.ShouldContain(d => d.Id == "NORSE080");
+	}
+
+	[Fact]
+	async Task Stays_silent_when_the_callback_Adds_through_a_local_copy_of_the_guarded_model()
+	{
+		// Pins the shape both generator emitters actually produce: the guard is invoked on
+		// RuntimeTypeModel.Default and the callback re-reads Default into a local before mutating it.
+		// The receiver-match check must chase that one-level local initializer, or NORSE080 convicts the
+		// platform's own generated registration code.
+		const string LocalCopyOfGuardedModel =
+			"""
+			using System;
+			using ProtoBuf.Meta;
+			using Norse.Infrastructure.Web.Grpc;
+
+			namespace App;
+
+			static class Generated
+			{
+				public static void Register() =>
+					WireModelRegistrationGuard.EnsureRegistered(
+						RuntimeTypeModel.Default,
+						typeof(Generated),
+						() =>
+						{
+							var model = RuntimeTypeModel.Default;
+							model.Add(typeof(string), applyDefaultBehaviour: false);
+						});
+			}
+			""";
+		var diagnostics = await AnalyzerTestHarness.GetDiagnosticsAsync(
+			new WireModelGuardAnalyzer(), "App",
+			[MetadataReference.CreateFromFile(typeof(WireModelRegistrationGuard).Assembly.Location)],
+			LocalCopyOfGuardedModel);
+		diagnostics.ShouldBeEmpty();
+	}
+
+	[Fact]
 	async Task Does_not_strike_on_unrelated_Add_members_only_the_real_RuntimeTypeModel_Add()
 	{
 		// Pins the receiver-type boundary: List<T>.Add and MetaType.Add share the banned member NAME but

@@ -8,9 +8,10 @@
 		</NorseRef>
 		<PackageReference Include="protobuf-net" Version="3.*" />
 	</ItemGroup>
-	<ItemGroup>
-		<ProjectReference Include="../../gen/Infrastructure.Web.Grpc.Analyzers/Infrastructure.Web.Grpc.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-	</ItemGroup>
+	<!--
+		The analyzer attaches via the realm-root Directory.Build.targets (every Midgard project, all
+		modes), not a csproj-level reference here — only the packaging step below is this project's own.
+	-->
 	<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">
 		<MSBuild Projects="../../gen/Infrastructure.Web.Grpc.Analyzers/Infrastructure.Web.Grpc.Analyzers.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
 		<ItemGroup>
