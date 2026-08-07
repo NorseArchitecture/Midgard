@@ -281,6 +281,43 @@ public sealed class ComponentDiscoveryTests
 	void DeclaresRazorRoute_recognizes_only_a_real_page_directive(string razor, bool expected) =>
 		ComponentDiscovery.DeclaresRazorRoute(SourceText.From(razor)).ShouldBe(expected);
 
+	// Blazor's second route-declaration form. @page takes a literal template only, so a page routed
+	// from a shared const has to say @attribute [Route(...)] -- the standard way to do it, and produced
+	// by the same co-resident Razor generator, so it is invisible to the semantic walk in exactly the
+	// same way @page is.
+	[Theory]
+	[InlineData("""@attribute [Route("/counter")] """, true)]
+	// The whole reason the form exists: a const template @page cannot accept.
+	[InlineData("@attribute [Route(RouteTemplates.Home)]", true)]
+	// The explicit attribute-suffixed spelling is equally legal.
+	[InlineData("""@attribute [RouteAttribute("/x")] """, true)]
+	// Namespace-qualified, and alongside another attribute in the same list.
+	[InlineData("""@attribute [Microsoft.AspNetCore.Components.Route("/x")] """, true)]
+	[InlineData("""@attribute [Authorize, Route("/x")] """, true)]
+	// Found after other directives, the way a real page orders them.
+	[InlineData("@using System\n@attribute [Route(Routes.Home)]\n<h1>Home</h1>", true)]
+	// An @attribute that declares something other than a route contributes none.
+	[InlineData("@attribute [Authorize]", false)]
+	[InlineData("@attribute [StreamRendering]", false)]
+	// An unrelated attribute whose name merely ends in "Route".
+	[InlineData("""@attribute [MyRoute("/x")] """, false)]
+	// A bare mention with no attribute construction.
+	[InlineData("<p>Use @attribute [Route] for const templates.</p>", false)]
+	// The attribute-splat expression, which really does sit alone on an indented line in markup (e.g.
+	// Himinbjörg's PasskeySubmit.razor) -- "@attributes" only clears "@attribute" by its trailing 's',
+	// so the word boundary is what stops it, not luck.
+	[InlineData("<FluentButton\n\t@attributes=\"AdditionalAttributes\">x</FluentButton>", false)]
+	// Same disciplines the @page form gets: word boundary, escape, line start, comments.
+	[InlineData("""@attributeName [Route("/x")] """, false)]
+	[InlineData("""@@attribute [Route("/x")] """, false)]
+	[InlineData("""<h1>x</h1> @attribute [Route("/x")] """, false)]
+	[InlineData("""@* @attribute [Route("/x")] *@""", false)]
+	[InlineData("<!--\n@attribute [Route(\"/x\")]\n-->", false)]
+	// The attribute must land on the directive's own line.
+	[InlineData("@attribute\n[Route(\"/x\")]", false)]
+	void DeclaresRazorRoute_recognizes_a_route_declared_by_attribute_directive(string razor, bool expected) =>
+		ComponentDiscovery.DeclaresRazorRoute(SourceText.From(razor)).ShouldBe(expected);
+
 	[Fact]
 	void Excludes_an_internal_validator_declared_in_a_referenced_assembly()
 	{

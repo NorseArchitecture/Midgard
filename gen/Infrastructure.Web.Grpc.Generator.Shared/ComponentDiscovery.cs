@@ -20,6 +20,8 @@ static class ComponentDiscovery
 	const string RoutesAdditionalAssembliesMetadataName = "Norse.Hosting.Web.Components.RoutesAdditionalAssemblies";
 	const string RazorComponentExtension = ".razor";
 	const string PageDirective = "@page";
+	const string AttributeDirective = "@attribute";
+	const string RouteAttributeSimpleName = "Route";
 
 	/// <summary>
 	/// Discovers every FluentValidation validator and Blazor-routable assembly visible to
@@ -89,16 +91,21 @@ static class ComponentDiscovery
 
 	/// <summary>
 	/// Whether <paramref name="source"/> -- the raw text of a <c>.razor</c> file -- carries at least one
-	/// <c>@page</c> route directive.
+	/// route directive, in either of the two forms Blazor accepts: <c>@page "/template"</c>, or
+	/// <c>@attribute [Route(...)]</c>. The second is not a curiosity: <c>@page</c> only accepts a
+	/// literal template, so routing from a shared <c>const</c> string is spelled
+	/// <c>@attribute [Route(RouteTemplates.Home)]</c> and is the standard way to do it. Both come from
+	/// the same co-resident Razor generator and are equally invisible to the semantic walk.
 	/// <para>
-	/// A directive is recognized only as the first non-whitespace token on its line, followed by
-	/// horizontal whitespace and an opening quote whose closing quote lands on the same line: every
-	/// <c>@page</c> is <c>@page "/some/template"</c>, and requiring the quoted template is what keeps
-	/// the word <c>@page</c> in prose from counting. Razor comments (<c>@* ... *@</c>) and HTML
+	/// A directive is recognized only as the first non-whitespace token on its line, and only with the
+	/// payload that makes it a route: <c>@page</c> needs horizontal whitespace then an opening quote
+	/// whose closing quote lands on the same line, and <c>@attribute</c> needs its line to name
+	/// <c>Route</c> or <c>RouteAttribute</c> as an attribute being constructed. Requiring the payload
+	/// is what keeps the bare words in prose from counting. Razor comments (<c>@* ... *@</c>) and HTML
 	/// comments (<c>&lt;!-- ... --&gt;</c>) are skipped, including across lines; an unterminated opener
 	/// is treated as ordinary text rather than swallowing the rest of the file, so a stray <c>&lt;!--</c>
-	/// can never hide a real directive below it. <c>@@page</c> is Razor's escape for a literal <c>@</c>
-	/// and never matches, nor does an identifier continuation such as <c>@pageSize</c>.
+	/// can never hide a real directive below it. <c>@@page</c>/<c>@@attribute</c> are Razor's escape for
+	/// a literal <c>@</c> and never match, nor does an identifier continuation such as <c>@pageSize</c>.
 	/// </para>
 	/// <para>
 	/// This does not tokenize C#, so a <c>@page "..."</c> sequence sitting at the start of a line
@@ -126,7 +133,7 @@ static class ComponentDiscovery
 				continue;
 			}
 
-			if (atLineStart && current == '@' && IsPageDirective(text, index))
+			if (atLineStart && current == '@' && (IsPageDirective(text, index) || IsRouteAttributeDirective(text, index)))
 				return true;
 
 			// Only leading whitespace keeps a line at its start; everything else, including a comment or an
@@ -184,6 +191,47 @@ static class ComponentDiscovery
 		var newline = text.IndexOf('\n', index + 1);
 		return newline < 0 || close < newline;
 	}
+
+	/// <summary>Whether the <c>@</c> at <paramref name="at"/> opens an <c>@attribute</c> directive whose line constructs a <c>[Route(...)]</c> -- the form a page routed from a <c>const</c> template must use, since <c>@page</c> takes a literal only.</summary>
+	static bool IsRouteAttributeDirective(string text, int at)
+	{
+		if (!Matches(text, at, AttributeDirective))
+			return false;
+
+		var index = at + AttributeDirective.Length;
+		// Word boundary: "@attributeName" is a C# expression, not the directive.
+		if (!IsHorizontalWhitespace(text, index))
+			return false;
+
+		var newline = text.IndexOf('\n', index);
+		return NamesRouteAttribute(text, index, newline < 0 ? text.Length : newline);
+	}
+
+	/// <summary>
+	/// Whether the attribute list in <paramref name="text"/> between <paramref name="from"/> and
+	/// <paramref name="end"/> names <c>Microsoft.AspNetCore.Components.RouteAttribute</c> -- its
+	/// <c>[Route(...)]</c> spelling, its explicit <c>[RouteAttribute(...)]</c> spelling, or either one
+	/// namespace-qualified. The character before the name must not be an identifier character, so an
+	/// unrelated <c>[MyRoute(...)]</c> never matches; the open paren is required because
+	/// <c>RouteAttribute</c> has no parameterless form, and demanding it keeps a bare mention from
+	/// counting.
+	/// </summary>
+	static bool NamesRouteAttribute(string text, int from, int end)
+	{
+		for (var index = text.IndexOf(RouteAttributeSimpleName, from, StringComparison.Ordinal); index >= 0 && index < end; index = text.IndexOf(RouteAttributeSimpleName, index + 1, StringComparison.Ordinal))
+		{
+			if (index > 0 && IsIdentifierCharacter(text[index - 1]))
+				continue;
+
+			var after = index + RouteAttributeSimpleName.Length;
+			if (Matches(text, after, "(") || Matches(text, after, "Attribute("))
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool IsIdentifierCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
 
 	static bool IsHorizontalWhitespace(string text, int at) => at < text.Length && (text[at] == ' ' || text[at] == '\t');
 

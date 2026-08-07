@@ -312,13 +312,32 @@ public sealed class ServerComponentRegistrationEmitterTests
 		EndpointArguments(generated).ShouldNotContain("NorseServerComponentRegistration");
 	}
 
+	// Blazor's other route-declaration form, end to end. @page takes a literal template only, so a page
+	// routed from a shared const says @attribute [Route(...)] instead -- same co-resident Razor
+	// generator, same invisibility to the semantic walk, same gap.
+	[Fact]
+	void Router_list_reaches_the_compilations_own_assembly_when_a_razor_page_routes_by_attribute_directive()
+	{
+		const string ConstRoutedRazorPage = """
+			@attribute [Route(RouteTemplates.Home)]
+
+			<h1>Home</h1>
+			""";
+		var generated = GenerateWithRazorPages([ConstRoutedRazorPage], RoutesAdditionalAssembliesSource);
+
+		RouterBlock(generated).ShouldContain("typeof(global::Norse.Hosting.Web.Server.NorseServerComponentRegistration).Assembly");
+	}
+
 	// A .razor file with no @page directive is a component, not a page -- it contributes no route, so
 	// it must not drag the own assembly into the Router's scan list.
 	[Fact]
 	void Router_list_leaves_the_compilations_own_assembly_out_when_its_razor_files_declare_no_page()
 	{
+		// Carries an @attribute directive too -- a non-route one, so the attribute form's recognizer has
+		// to actually read what is being constructed rather than fire on the directive keyword.
 		const string LayoutRazor = """
 			@inherits LayoutComponentBase
+			@attribute [Authorize]
 
 			<div class="page">@Body</div>
 			""";
