@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Norse.Infrastructure.Web.Grpc.Generator.Shared.Tests;
 
@@ -112,7 +113,7 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation(sources: [ValidatorSource], references: [_referencedValidatorAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		// Ascending ordinal by ValidatorTypeName, per ComponentDiscoveryResult's own contract ("ordered
 		// by ValidatorTypeName, ordinal") -- "Own" < "Referenced" ordinally, so Own sorts first.
@@ -127,7 +128,7 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation(references: [_routableAssembly, _plainAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.RoutableAssemblyMarkers.ShouldHaveSingleItem();
 		result.RoutableAssemblyMarkers.ShouldContain("global::RoutableAsm.WidgetPage");
@@ -138,7 +139,7 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation(references: [_routesHolderAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.RoutesHolderMarker.ShouldBe("global::Norse.Hosting.Web.Components.Routes");
 		result.RoutableAssemblyMarkers.ShouldNotContain(result.RoutesHolderMarker);
@@ -150,7 +151,7 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation(references: [_routableAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.RoutesHolderMarker.ShouldBeNull();
 	}
@@ -160,7 +161,7 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation();
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.RoutesAdditionalAssembliesTypeExists.ShouldBeFalse();
 	}
@@ -181,7 +182,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [OwnRoutablePage], references: [_routableAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.OwnAssemblyRoutableMarker.ShouldBe("global::Own.OwnPage");
 		// The router side has no equivalent exclusion -- the own-assembly marker still shows up
@@ -194,17 +195,98 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation(references: [_routableAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.OwnAssemblyRoutableMarker.ShouldBeNull();
 	}
+
+	// The gap OwnAssemblyDeclaresRazorRoutes exists to close: a .razor page in the compilation's own
+	// project has no [Route] type for the semantic walk to find (the Razor SDK's generator shares this
+	// generator's pass), so the marker stays null and the Router entry has to come from elsewhere.
+	[Fact]
+	void RequiresOwnAssemblyRouterEntry_when_only_a_razor_page_declares_the_own_assemblys_routes()
+	{
+		var compilation = HarnessCompilation(references: [_routableAssembly]);
+
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: true);
+
+		result.OwnAssemblyRoutableMarker.ShouldBeNull();
+		result.RequiresOwnAssemblyRouterEntry.ShouldBeTrue();
+	}
+
+	// A C#-declared [Route] type already puts the own assembly in RoutableAssemblyMarkers; a second
+	// entry for the same assembly makes Blazor throw on duplicate route discovery.
+	[Fact]
+	void RequiresOwnAssemblyRouterEntry_is_false_when_a_Route_type_already_represents_the_own_assembly()
+	{
+		const string OwnRoutablePage = """
+			using Microsoft.AspNetCore.Components;
+
+			namespace Own;
+
+			[Route("/own")]
+			public sealed class OwnPage;
+			""";
+		var compilation = HarnessCompilation(sources: [OwnRoutablePage]);
+
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: true);
+
+		result.RequiresOwnAssemblyRouterEntry.ShouldBeFalse();
+	}
+
+	// Same exclusion the per-assembly semantic walk already applies to the routes-holder assembly: the
+	// Router's AppAssembly covers it, so naming it again via AdditionalAssemblies double-discovers.
+	[Fact]
+	void RequiresOwnAssemblyRouterEntry_is_false_when_the_compilation_itself_holds_Routes()
+	{
+		const string OwnRoutesHolder = """
+			namespace Norse.Hosting.Web.Components;
+
+			public sealed class Routes;
+			""";
+		var compilation = HarnessCompilation(sources: [OwnRoutesHolder]);
+
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: true);
+
+		result.RoutesHolderIsOwnAssembly.ShouldBeTrue();
+		result.OwnAssemblyDeclaresRazorRoutes.ShouldBeFalse();
+		result.RequiresOwnAssemblyRouterEntry.ShouldBeFalse();
+	}
+
+	[Theory]
+	// The shape every Blazor page and every project template uses.
+	[InlineData("""@page "/Error" """, true)]
+	// Leading whitespace is the only thing Razor permits before a directive.
+	[InlineData("\t  @page \"/counter/{id:int}\"\n<h1>Counter</h1>", true)]
+	// A file may open with a Razor comment before its directives.
+	[InlineData("@* the error page *@\n@page \"/Error\"", true)]
+	// A second @page (multi-route pages are legal) is found even when the first line is a @using.
+	[InlineData("@using System\n@page \"/a\"\n@page \"/b\"", true)]
+	// A component, not a page -- the single most common .razor file in any project.
+	[InlineData("@inherits LayoutComponentBase\n<div>@Body</div>", false)]
+	// "@@" is Razor's escape for a literal '@': this renders the text "@page", declares nothing.
+	[InlineData("""@@page "/not-a-route" """, false)]
+	// Identifier continuation -- a C# expression rendering a variable named pageSize.
+	[InlineData("<p>@pageSize \"items\"</p>", false)]
+	// Commented out, both ways.
+	[InlineData("@* @page \"/disabled\" *@", false)]
+	[InlineData("<!--\n@page \"/disabled\"\n-->", false)]
+	// The word without a route template declares nothing.
+	[InlineData("<p>Use @page to declare a route.</p>", false)]
+	[InlineData("@page\n", false)]
+	// A directive must be the first token on its line.
+	[InlineData("<h1>x</h1> @page \"/mid-line\"", false)]
+	// An unterminated comment opener must not swallow the directive below it.
+	[InlineData("<!-- unclosed\n@page \"/Error\"", true)]
+	void DeclaresRazorRoute_recognizes_only_a_real_page_directive(string razor, bool expected) =>
+		ComponentDiscovery.DeclaresRazorRoute(SourceText.From(razor)).ShouldBe(expected);
 
 	[Fact]
 	void Excludes_an_internal_validator_declared_in_a_referenced_assembly()
 	{
 		var compilation = HarnessCompilation(references: [_internalValidatorAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.Validators.ShouldNotContain(v => v.ValidatorTypeName == "global::Referenced.InternalValidator");
 	}
@@ -214,7 +296,7 @@ public sealed class ComponentDiscoveryTests
 	{
 		var compilation = HarnessCompilation(references: [_internalRoutedAssembly]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.RoutableAssemblyMarkers.ShouldBeEmpty();
 	}
@@ -236,7 +318,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [Source]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.Validators.ShouldBeEmpty();
 	}
@@ -268,7 +350,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [Source]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.Validators.ShouldBeEmpty();
 	}
@@ -291,7 +373,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [Source]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.Validators.Select(v => v.ValidatorTypeName).ShouldContain("global::Own.ImplicitCtorValidator");
 	}
@@ -313,7 +395,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [Source]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.Validators.Select(v => v.ValidatorTypeName).ShouldContain("global::Own.Container.NestedValidator");
 	}
@@ -334,7 +416,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [Source]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.RoutableAssemblyMarkers.ShouldContain("global::Own.PageContainer.NestedPage");
 	}
@@ -364,7 +446,7 @@ public sealed class ComponentDiscoveryTests
 			""";
 		var compilation = HarnessCompilation(sources: [Source]);
 
-		var result = ComponentDiscovery.Discover(compilation);
+		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
 		result.Validators.ShouldContain(v => v.ValidatorTypeName == "global::Own.MultiValidator" && v.RequestTypeName == "global::Own.RequestA");
 		result.Validators.ShouldContain(v => v.ValidatorTypeName == "global::Own.MultiValidator" && v.RequestTypeName == "global::Own.RequestB");

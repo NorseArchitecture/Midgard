@@ -23,7 +23,7 @@ static class ClientComponentRegistrationEmitter
 					this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)
 				{
 			{{ValidatorRegistrations(result)}}
-			{{RouteRegistration(result)}}
+			{{RouteRegistration(rootNamespace, result)}}
 					return services;
 				}
 			}
@@ -47,13 +47,20 @@ static class ClientComponentRegistrationEmitter
 	// Emitted only when Norse.Hosting.Web.Components.RoutesAdditionalAssemblies is resolvable --
 	// non-Yggdrasil consumers get validators-only output. One AddSingleton call carrying every
 	// discovered routable assembly marker, not one call per assembly: Blazor's Router takes a single
-	// AdditionalAssemblies collection, so the registration mirrors that shape exactly.
-	static string RouteRegistration(ComponentDiscoveryResult result)
+	// AdditionalAssemblies collection, so the registration mirrors that shape exactly. When the own
+	// assembly's routes come only from .razor pages, no page type is nameable here at all (the Razor
+	// generator shares this pass), so this class itself stands in as that assembly's marker -- the
+	// registration only ever reads typeof(...).Assembly, so any type in the assembly serves identically.
+	static string RouteRegistration(string rootNamespace, ComponentDiscoveryResult result)
 	{
 		if (!result.RoutesAdditionalAssembliesTypeExists)
 			return string.Empty;
 
-		var markers = string.Join("\n", result.RoutableAssemblyMarkers.Select(m => $"\t\t\t\ttypeof({m}).Assembly,"));
-		return $"\t\t// router discovery\n\t\tglobal::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(\n\t\t\tservices, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([\n{markers}\n\t\t\t]));";
+		List<string> markers = [.. result.RoutableAssemblyMarkers];
+		if (result.RequiresOwnAssemblyRouterEntry)
+			markers.Add($"global::{rootNamespace}.NorseClientComponentRegistration");
+
+		var joined = string.Join("\n", markers.Select(m => $"\t\t\t\ttypeof({m}).Assembly,"));
+		return $"\t\t// router discovery\n\t\tglobal::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(\n\t\t\tservices, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([\n{joined}\n\t\t\t]));";
 	}
 }

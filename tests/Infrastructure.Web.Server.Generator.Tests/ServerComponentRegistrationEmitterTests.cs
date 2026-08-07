@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Norse.Infrastructure.Web.Server.Generator.Tests;
 
@@ -40,6 +41,20 @@ public sealed class ServerComponentRegistrationEmitterTests
 
 		[Route("/own")]
 		public sealed class OwnPage;
+		""";
+
+	// A routable page declared the way real Blazor hosts declare one -- a .razor file carrying an
+	// @page directive, reaching the compiler as an AdditionalFile (the Razor SDK's
+	// Microsoft.NET.Sdk.Razor.SourceGenerators.targets adds every RazorComponentWithTargetPath item to
+	// @(AdditionalFiles)), never as a C# [Route] type. Yggdrasil's own
+	// Hosting.Web.Server/Components/Pages/Error.razor is this shape verbatim.
+	const string ErrorRazorPage = """
+		@page "/Error"
+		@using System.Diagnostics
+
+		<PageTitle>Error</PageTitle>
+
+		<h1 class="text-danger">Error.</h1>
 		""";
 
 	// Norse.Hosting.Web.Components.Routes declared in the harness compilation's OWN sources, not a
@@ -270,6 +285,74 @@ public sealed class ServerComponentRegistrationEmitterTests
 		generated.ShouldContain("AddAdditionalAssemblies(builder);");
 	}
 
+	// The defect this fixture exists for. A .razor page belonging to the compilation ITSELF becomes a
+	// [Route]-attributed type only via the Razor SDK's own incremental generator, which runs in the
+	// SAME generation pass as this one -- and Roslyn hands every generator in a pass the original,
+	// pre-generation compilation, so that type is structurally invisible here (verified against the
+	// real Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator: a probe generator sharing its
+	// pass sees zero routed types while the post-run compilation carries them). The semantic walk can
+	// therefore never mark the own assembly routable for a .razor-only host, and the Router never
+	// learns to scan it. The own assembly is reached through the generated registration class instead
+	// of a page type precisely because no page type is nameable at generation time.
+	[Fact]
+	void Router_list_reaches_the_compilations_own_assembly_when_only_a_razor_page_declares_its_routes()
+	{
+		var generated = GenerateWithRazorPages([ErrorRazorPage], RoutesAdditionalAssembliesSource);
+
+		RouterBlock(generated).ShouldContain("typeof(global::Norse.Hosting.Web.Server.NorseServerComponentRegistration).Assembly");
+	}
+
+	// The endpoint half needs no such repair and must not get one: MapRazorComponents<App>'s implicit
+	// root already covers the host's own assembly, so adding it here would double-discover every page.
+	[Fact]
+	void Endpoint_list_still_excludes_the_compilations_own_assembly_when_a_razor_page_declares_its_routes()
+	{
+		var generated = GenerateWithRazorPages([ErrorRazorPage], RoutesAdditionalAssembliesSource);
+
+		EndpointArguments(generated).ShouldNotContain("NorseServerComponentRegistration");
+	}
+
+	// A .razor file with no @page directive is a component, not a page -- it contributes no route, so
+	// it must not drag the own assembly into the Router's scan list.
+	[Fact]
+	void Router_list_leaves_the_compilations_own_assembly_out_when_its_razor_files_declare_no_page()
+	{
+		const string LayoutRazor = """
+			@inherits LayoutComponentBase
+
+			<div class="page">@Body</div>
+			""";
+		var generated = GenerateWithRazorPages([LayoutRazor], RoutesAdditionalAssembliesSource);
+
+		RouterBlock(generated).ShouldNotContain("NorseServerComponentRegistration");
+	}
+
+	// A C#-declared [Route] type already puts the own assembly in RoutableAssemblyMarkers; a .razor
+	// page alongside it must not add a SECOND entry for the same assembly -- Blazor throws on
+	// duplicate route discovery.
+	[Fact]
+	void Router_list_names_the_compilations_own_assembly_once_when_both_a_razor_page_and_a_Route_type_declare_routes()
+	{
+		var generated = GenerateWithRazorPages([ErrorRazorPage], RoutesAdditionalAssembliesSource, OwnRoutablePageSource);
+
+		var routerBlock = RouterBlock(generated);
+		routerBlock.ShouldContain("typeof(global::Fake.OwnPage).Assembly");
+		routerBlock.ShouldNotContain("NorseServerComponentRegistration");
+	}
+
+	// The own-assembly marker is the generated class naming itself, which no other emission path
+	// produces -- a self-reference that has to actually resolve, not merely look plausible.
+	[Fact]
+	void Emitted_source_compiles_cleanly_when_the_own_assemblys_marker_is_the_generated_class_itself()
+	{
+		var outputCompilation = CompileWithRazorPages([ErrorRazorPage], RoutesAdditionalAssembliesSource);
+
+		var errors = outputCompilation.GetDiagnostics(TestContext.Current.CancellationToken)
+			.Where(d => d.Severity == DiagnosticSeverity.Error)
+			.ToArray();
+		errors.ShouldBeEmpty(string.Join("\n", errors.Select(e => e.ToString())));
+	}
+
 	[Fact]
 	void Emitted_source_compiles_cleanly_against_real_ASP_NET_Core_FluentValidation_and_DependencyInjection_references()
 	{
@@ -332,6 +415,48 @@ public sealed class ServerComponentRegistrationEmitterTests
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
 	}
 
+	// Feeds .razor files in through the driver's additionalTexts channel rather than as compilation
+	// sources -- the only channel a real build has for them, and the reason the semantic walk alone
+	// can't see the pages they declare.
+	static Compilation CompileWithRazorPages(string[] razorPages, params string[] sources)
+	{
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
+			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly, _routesHolderAssembly]
+			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+
+		var compilation = CSharpCompilation.Create(
+			"Norse.Hosting.Web.Server",
+			[.. sources.Select(s => CSharpSyntaxTree.ParseText(s))],
+			references,
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		_ = CSharpGeneratorDriver.Create(
+				generators: [new ServerComponentRegistrationGenerator().AsSourceGenerator()],
+				additionalTexts: razorPages.Select((page, i) => (AdditionalText)new RazorAdditionalText($"Components/Pages/Page{i}.razor", page)),
+				parseOptions: null,
+				optionsProvider: null)
+			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
+
+		return outputCompilation;
+	}
+
+	static string GenerateWithRazorPages(string[] razorPages, params string[] sources) =>
+		CompileWithRazorPages(razorPages, sources).SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
+
+	static string RouterBlock(string generated)
+	{
+		var start = generated.IndexOf("new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([", StringComparison.Ordinal);
+		start.ShouldBeGreaterThan(-1);
+		return generated[start..generated.IndexOf("]));", start, StringComparison.Ordinal)];
+	}
+
+	static string EndpointArguments(string generated)
+	{
+		var start = generated.IndexOf("AddAdditionalAssemblies(builder", StringComparison.Ordinal);
+		start.ShouldBeGreaterThan(-1);
+		return generated[start..generated.IndexOf(");", start, StringComparison.Ordinal)];
+	}
+
 	// Deliberately not routed through Run()/Generate(): those hardcode the harness compilation's
 	// AssemblyName to "Norse.Hosting.Web.Server" (always a legal token), which is exactly what these
 	// two sanitization fixtures need to vary.
@@ -372,6 +497,14 @@ public sealed class ServerComponentRegistrationEmitterTests
 
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
 	}
+}
+
+/// <summary>Minimal in-memory <see cref="AdditionalText"/> standing in for a .razor file the Razor SDK adds to <c>@(AdditionalFiles)</c>.</summary>
+sealed class RazorAdditionalText(string path, string text) : AdditionalText
+{
+	public override string Path { get; } = path;
+
+	public override SourceText GetText(CancellationToken cancellationToken = default) => SourceText.From(text);
 }
 
 /// <summary>Minimal test double for MSBuild's build_property.* interop -- reports a single configured <c>build_property.RootNamespace</c> value from AnalyzerConfigOptionsProvider.GlobalOptions and nothing else.</summary>

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Norse.Infrastructure.Web.Grpc.Generator.Shared;
 
@@ -17,6 +18,8 @@ static class ComponentDiscovery
 	const string RouteAttributeMetadataName = "Microsoft.AspNetCore.Components.RouteAttribute";
 	const string RoutesMetadataName = "Norse.Hosting.Web.Components.Routes";
 	const string RoutesAdditionalAssembliesMetadataName = "Norse.Hosting.Web.Components.RoutesAdditionalAssemblies";
+	const string RazorComponentExtension = ".razor";
+	const string PageDirective = "@page";
 
 	/// <summary>
 	/// Discovers every FluentValidation validator and Blazor-routable assembly visible to
@@ -25,8 +28,16 @@ static class ComponentDiscovery
 	/// <c>compilation.SourceModule.ReferencedAssemblySymbols</c>, each swept via a recursive walk of
 	/// its global namespace). References <c>ContractDiscovery</c> by name only (no <c>cref</c>) --
 	/// not every consumer linking this file also links ContractDiscovery.cs.
+	/// <para>
+	/// <paramref name="ownAssemblyDeclaresRazorRoutes"/> carries the half of route discovery the
+	/// semantic walk structurally cannot reach, sourced from <see cref="RazorRouteDeclarationProvider"/>
+	/// -- see <see cref="ComponentDiscoveryResult.RequiresOwnAssemblyRouterEntry"/> for why it exists
+	/// and <see cref="DeclaresRazorRoute(SourceText)"/> for how it's determined. Required rather than
+	/// defaulted: a consumer that forgets to wire the provider would otherwise silently reintroduce
+	/// the exact gap it closes.
+	/// </para>
 	/// </summary>
-	public static ComponentDiscoveryResult Discover(Compilation compilation)
+	public static ComponentDiscoveryResult Discover(Compilation compilation, bool ownAssemblyDeclaresRazorRoutes)
 	{
 		var format = SymbolDisplayFormat.FullyQualifiedFormat;
 		IAssemblySymbol[] assemblies = [compilation.Assembly, .. compilation.SourceModule.ReferencedAssemblySymbols];
@@ -35,8 +46,149 @@ static class ComponentDiscovery
 		var (routableMarkers, routesHolderMarker, routesHolderIsOwnAssembly, ownAssemblyRoutableMarker) = DiscoverRoutes(compilation, assemblies, format);
 		var routesAdditionalAssembliesTypeExists = compilation.GetTypeByMetadataName(RoutesAdditionalAssembliesMetadataName) is not null;
 
-		return new ComponentDiscoveryResult(validators, routableMarkers, routesHolderMarker, routesHolderIsOwnAssembly, routesAdditionalAssembliesTypeExists, ownAssemblyRoutableMarker);
+		return new ComponentDiscoveryResult(
+			validators,
+			routableMarkers,
+			routesHolderMarker,
+			routesHolderIsOwnAssembly,
+			routesAdditionalAssembliesTypeExists,
+			ownAssemblyRoutableMarker,
+			// Same exclusion the per-assembly walk in DiscoverRoutes already applies to the routes-holder
+			// assembly, applied to the Razor-sourced half for the same reason: when the compilation's own
+			// assembly IS the Routes holder, the Router's AppAssembly already covers it, and naming it a
+			// second time via AdditionalAssemblies makes Blazor throw on duplicate route discovery.
+			ownAssemblyDeclaresRazorRoutes && !routesHolderIsOwnAssembly);
 	}
+
+	/// <summary>
+	/// The compilation's own <c>.razor</c> files, reduced to a single "does this project declare at
+	/// least one routable page" flag for <see cref="Discover"/>.
+	/// <para>
+	/// This is the only channel that answers the question. A <c>.razor</c> page becomes a
+	/// <c>[Route]</c>-attributed type solely through the Razor SDK's own incremental generator, which
+	/// is registered on the same compilation as this one and therefore runs in the same generation
+	/// pass -- and Roslyn hands every generator in a pass the original, pre-generation compilation, so
+	/// no generator ever observes another's output. The semantic walk in <see cref="DiscoverRoutes"/>
+	/// consequently sees a referenced assembly's pages (already real metadata, generated during
+	/// <em>that</em> assembly's own build) but never the compiling project's own. The raw file text is
+	/// what remains, and it is genuinely available: <c>Microsoft.NET.Sdk.Razor.SourceGenerators.targets</c>
+	/// adds every <c>RazorComponentWithTargetPath</c> item to <c>@(AdditionalFiles)</c>, which is
+	/// exactly how the Razor generator itself receives them.
+	/// </para>
+	/// <para>
+	/// <c>.cshtml</c> is deliberately not scanned: <c>@page</c> there declares a Razor Pages endpoint,
+	/// a different routing mechanism entirely, and contributes nothing to a Blazor <c>Router</c>.
+	/// </para>
+	/// </summary>
+	public static IncrementalValueProvider<bool> RazorRouteDeclarationProvider(IncrementalGeneratorInitializationContext context) =>
+		context.AdditionalTextsProvider
+			.Where(static text => text.Path.EndsWith(RazorComponentExtension, StringComparison.OrdinalIgnoreCase))
+			.Select(static (text, cancellationToken) => text.GetText(cancellationToken) is { } source && DeclaresRazorRoute(source))
+			.Collect()
+			.Select(static (declarations, _) => declarations.Contains(true));
+
+	/// <summary>
+	/// Whether <paramref name="source"/> -- the raw text of a <c>.razor</c> file -- carries at least one
+	/// <c>@page</c> route directive.
+	/// <para>
+	/// A directive is recognized only as the first non-whitespace token on its line, followed by
+	/// horizontal whitespace and an opening quote whose closing quote lands on the same line: every
+	/// <c>@page</c> is <c>@page "/some/template"</c>, and requiring the quoted template is what keeps
+	/// the word <c>@page</c> in prose from counting. Razor comments (<c>@* ... *@</c>) and HTML
+	/// comments (<c>&lt;!-- ... --&gt;</c>) are skipped, including across lines; an unterminated opener
+	/// is treated as ordinary text rather than swallowing the rest of the file, so a stray <c>&lt;!--</c>
+	/// can never hide a real directive below it. <c>@@page</c> is Razor's escape for a literal <c>@</c>
+	/// and never matches, nor does an identifier continuation such as <c>@pageSize</c>.
+	/// </para>
+	/// <para>
+	/// This does not tokenize C#, so a <c>@page "..."</c> sequence sitting at the start of a line
+	/// inside a multi-line string literal in an <c>@code</c> block reads as a directive. That
+	/// asymmetry is deliberate and safe in this direction: a false positive only adds an assembly with
+	/// no routes to the Router's scan list, which discovers nothing and changes no behavior, whereas a
+	/// false negative leaves a real page unreachable. Correctness is never traded for it -- only a
+	/// no-op.
+	/// </para>
+	/// </summary>
+	public static bool DeclaresRazorRoute(SourceText source)
+	{
+		var text = source.ToString();
+		var index = 0;
+		var atLineStart = true;
+
+		while (index < text.Length)
+		{
+			var current = text[index];
+
+			if (current == '\n')
+			{
+				atLineStart = true;
+				index++;
+				continue;
+			}
+
+			if (atLineStart && current == '@' && IsPageDirective(text, index))
+				return true;
+
+			// Only leading whitespace keeps a line at its start; everything else, including a comment or an
+			// escaped '@', puts the scan mid-line -- and comments are consumed whole below, so nothing
+			// inside one is ever read as a directive.
+			if (!char.IsWhiteSpace(current))
+				atLineStart = false;
+			index += SkipLength(text, index);
+		}
+
+		return false;
+	}
+
+	/// <summary>How many characters the token at <paramref name="index"/> occupies: a whole Razor or HTML comment, both characters of an escaped <c>@@</c>, or a single character otherwise.</summary>
+	static int SkipLength(string text, int index)
+	{
+		if (Matches(text, index, "@*"))
+			return CommentLength(text, index, 2, "*@");
+
+		if (Matches(text, index, "<!--"))
+			return CommentLength(text, index, 4, "-->");
+
+		// "@@" is Razor's escape for a literal '@' -- "@@page" renders as text, never a directive.
+		return Matches(text, index, "@@") ? 2 : 1;
+	}
+
+	/// <summary>The span of a comment opened at <paramref name="opener"/>, or a single character when it is never closed -- an unterminated opener is ordinary text, not a swallow-everything-below.</summary>
+	static int CommentLength(string text, int opener, int openerLength, string terminator)
+	{
+		var close = text.IndexOf(terminator, opener + openerLength, StringComparison.Ordinal);
+		return close < 0 ? 1 : close + terminator.Length - opener;
+	}
+
+	/// <summary>Whether the <c>@</c> at <paramref name="at"/> opens a <c>@page</c> directive carrying a single-line quoted route template.</summary>
+	static bool IsPageDirective(string text, int at)
+	{
+		if (!Matches(text, at, PageDirective))
+			return false;
+
+		var index = at + PageDirective.Length;
+		// Word boundary: "@pageSize" is a C# expression, and "@page" alone declares no route.
+		if (!IsHorizontalWhitespace(text, index))
+			return false;
+
+		while (IsHorizontalWhitespace(text, index))
+			index++;
+
+		if (index >= text.Length || text[index] != '"')
+			return false;
+
+		var close = text.IndexOf('"', index + 1);
+		if (close < 0)
+			return false;
+
+		var newline = text.IndexOf('\n', index + 1);
+		return newline < 0 || close < newline;
+	}
+
+	static bool IsHorizontalWhitespace(string text, int at) => at < text.Length && (text[at] == ' ' || text[at] == '\t');
+
+	static bool Matches(string text, int at, string value) =>
+		at + value.Length <= text.Length && string.CompareOrdinal(text, at, value, 0, value.Length) == 0;
 
 	/// <summary>
 	/// A non-abstract named type implementing <c>FluentValidation.IValidator&lt;T&gt;</c>, matched by
@@ -186,14 +338,32 @@ static class ComponentDiscovery
 	}
 }
 
-/// <summary>Discovered validators, routable-assembly markers, and the routes-holder assembly's own marker (plus whether that holder assembly is the discovering compilation's own), plus whether a routing composition seam (<c>RoutesAdditionalAssemblies</c>) is present for Tasks 4/5 to emit against.</summary>
+/// <summary>Discovered validators, routable-assembly markers, and the routes-holder assembly's own marker (plus whether that holder assembly is the discovering compilation's own), plus whether a routing composition seam (<c>RoutesAdditionalAssemblies</c>) is present for Tasks 4/5 to emit against. <c>OwnAssemblyDeclaresRazorRoutes</c> closes out the record: whether the compilation's own <c>.razor</c> sources declare at least one <c>@page</c> route and the compilation is not itself the routes holder — the half of own-assembly route discovery <c>OwnAssemblyRoutableMarker</c> structurally cannot cover, since a Razor page only becomes a <c>[Route]</c>-attributed type through a generator sharing this one's pass.</summary>
 sealed record ComponentDiscoveryResult(
 	ImmutableArray<ValidatorModel> Validators,
 	ImmutableArray<string> RoutableAssemblyMarkers,
 	string? RoutesHolderMarker,
 	bool RoutesHolderIsOwnAssembly,
 	bool RoutesAdditionalAssembliesTypeExists,
-	string? OwnAssemblyRoutableMarker);
+	string? OwnAssemblyRoutableMarker,
+	bool OwnAssemblyDeclaresRazorRoutes)
+{
+	/// <summary>
+	/// Whether the Router registration must name the compilation's own assembly through the generated
+	/// registration class rather than a discovered page type. True only when the own assembly declares
+	/// Razor routes that nothing already in <see cref="RoutableAssemblyMarkers"/> represents: a
+	/// C#-declared <c>[Route]</c> type in the same assembly makes <see cref="OwnAssemblyRoutableMarker"/>
+	/// non-null and already puts that assembly in the list, and naming it twice makes Blazor throw on
+	/// duplicate route discovery. The generated class is the marker precisely because no Razor page type
+	/// is nameable at generation time — but any type in the assembly identifies it equally well, since
+	/// the emitted registration only ever reads <c>typeof(...).Assembly</c>.
+	/// <para>
+	/// Deliberately absent from the endpoint half of composition: <c>MapRazorComponents&lt;App&gt;</c>'s
+	/// implicit root already covers the host's own assembly there.
+	/// </para>
+	/// </summary>
+	public bool RequiresOwnAssemblyRouterEntry => OwnAssemblyDeclaresRazorRoutes && OwnAssemblyRoutableMarker is null;
+}
 
 /// <summary>A discovered FluentValidation validator -- both names global::-qualified.</summary>
 sealed record ValidatorModel(string ValidatorTypeName, string RequestTypeName);
