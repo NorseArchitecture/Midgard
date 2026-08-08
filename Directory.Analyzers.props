@@ -1,0 +1,15 @@
+<Project>
+	<!--
+		The realm's analyzer manifest — the single declaration of every Roslyn diagnostics
+		analyzer this realm ships. Realm-owned, never scattered. Consumed twice: Bifrost's
+		root Directory.Build.targets wildcard-imports every realm's manifest and attaches the
+		declared analyzers to all workspace compilations; the canonical realm-root
+		Directory.Build.targets imports this file in standalone mode and attaches them
+		realm-internally. Diagnostics-only by law — a generator never rides a manifest
+		(generators are consumer-declared via NorseRef Generator="true"). Doctrine:
+		Glitnir/docs/the-runes.md.
+	-->
+	<ItemGroup>
+		<NorseRealmAnalyzer Include="$(MSBuildThisFileDirectory)gen/Infrastructure.Web.Grpc.Analyzers/Infrastructure.Web.Grpc.Analyzers.csproj" />
+	</ItemGroup>
+</Project>
