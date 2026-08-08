@@ -27,21 +27,6 @@
 		Using Remove above). Spec:
 		Glitnir/docs/Platform/specs/2026-08-03-realm-dependency-law-compiler-enforcement-design.md
 	-->
-	<!--
-		NORSE080 (the wire-model registration guard) for project-reference consumers: an ordinary
-		ProjectReference's OutputItemType="Analyzer" does not propagate through a further
-		ProjectReference the way the NuGet package's analyzers/dotnet/cs asset propagates through the
-		whole reference closure — so Infrastructure.Web.Server, Infrastructure.Web.Client, and every
-		tests project referencing Infrastructure.Web.Grpc by project compiled unguarded Add calls
-		silently (found in PR #61 review, 2026-08-06; the same dev-mode gap Bifrost's root targets
-		plugs for Primitives.Analyzers, and test code is exactly where the original defect was found
-		live). Unconditional across the realm — internal references are plain ProjectReferences in
-		every mode, and the analyzer no-ops in projects that never touch RuntimeTypeModel. One
-		exclusion: the analyzer project itself (self-reference).
-	-->
-	<ItemGroup Condition="'$(MSBuildProjectName)' != 'Infrastructure.Web.Grpc.Analyzers'">
-		<ProjectReference Include="$(MSBuildThisFileDirectory)gen/Infrastructure.Web.Grpc.Analyzers/Infrastructure.Web.Grpc.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-	</ItemGroup>
 	<Choose>
 		<When Condition="'$(UseProjectReferences)' == 'true' OR '$(MSBuildProjectName)' == 'Architecture.Analyzers'">
 			<PropertyGroup />
