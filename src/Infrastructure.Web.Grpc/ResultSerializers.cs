@@ -83,11 +83,22 @@ public static class ResultSerializers
 			RegisterScalar<DateTimeOffset>(model);
 			RegisterScalar<TimeOnly>(model);
 			RegisterScalar<TimeSpan>(model);
+
+			// The forge's PII taxonomy (wire-stamped request scalars, spec 2026-08-08): wire form is
+			// the scalar's canonical WireValue string, read re-stamps through T.Parse.
+			RegisterPiiScalar<Norse.Primitives.Pii.EmailAddress>(model);
+			RegisterPiiScalar<Norse.Primitives.Pii.PersonalName>(model);
+			RegisterPiiScalar<Norse.Primitives.Pii.PhoneNumber>(model);
+			RegisterPiiScalar<Norse.Primitives.Pii.BirthDate>(model);
 		});
 
 	static void RegisterScalar<T>(RuntimeTypeModel model) where T : notnull, ISpanParsable<T> =>
 		model.EnsureRegistered(typeof(Result<T>), () =>
 			model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(ResultSerializer<T>));
+
+	static void RegisterPiiScalar<T>(RuntimeTypeModel model) where T : struct, Norse.Primitives.Pii.IPiiScalar<T> =>
+		model.EnsureRegistered(typeof(Result<T>), () =>
+			model.Add(typeof(Result<T>), applyDefaultBehaviour: false).SerializerType = typeof(PiiResultSerializer<T>));
 
 	[UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "ResultEnumSerializer<TEnum> is fully generic over enum types with no member dependencies beyond the enum itself; contract types that reach this sweep are already rooted by the model registration that triggered it.")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Same posture as ResultJsonConverterFactory: the enum set is contract-declared and discovery-driven; AOT source-generation for it is a future increment.")]
