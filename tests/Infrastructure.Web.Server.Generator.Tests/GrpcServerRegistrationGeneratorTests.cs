@@ -86,6 +86,22 @@ public sealed class GrpcServerRegistrationGeneratorTests
 	}
 
 	[Fact]
+	void Registers_the_result_serializers_alongside_the_identifier_serializers()
+	{
+		var generated = Generate(Contract);
+		var identifierIndex = generated.IndexOf(
+			"global::Norse.Infrastructure.Web.Grpc.IdentifierSerializers.Register(model);",
+			StringComparison.Ordinal);
+		var resultIndex = generated.IndexOf(
+			"global::Norse.Infrastructure.Web.Grpc.ResultSerializers.Register(model);",
+			StringComparison.Ordinal);
+		var surrogateIndex = generated.IndexOf(".SetSurrogate(", StringComparison.Ordinal);
+		identifierIndex.ShouldBeGreaterThan(-1);
+		resultIndex.ShouldBeGreaterThan(-1);
+		resultIndex.ShouldBeLessThan(surrogateIndex);
+	}
+
+	[Fact]
 	void RegisterNorseOutcomeSurrogates_delegates_to_the_shared_WireModelRegistrationGuard()
 	{
 		var generated = Generate(Contract);
