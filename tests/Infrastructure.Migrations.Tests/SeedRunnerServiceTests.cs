@@ -116,13 +116,6 @@ public sealed class SeedRunnerServiceTests
 		return services.BuildServiceProvider();
 	}
 
-	sealed class AlwaysEnabledLogger : ILogger<SeedRunnerService>
-	{
-		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-		public bool IsEnabled(LogLevel logLevel) => true;
-		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
-	}
-
 	[Fact]
 	void AddNorseSeedingRunner_registers_SeedRunnerService_as_hosted_service()
 	{
@@ -134,5 +127,16 @@ public sealed class SeedRunnerServiceTests
 
 		services.Any(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(SeedRunnerService))
 			.ShouldBeTrue();
+	}
+
+	sealed class AlwaysEnabledLogger : ILogger<SeedRunnerService>
+	{
+		public bool IsEnabled(LogLevel logLevel) => true;
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+			Func<TState, Exception?, string> formatter)
+		{
+		}
 	}
 }

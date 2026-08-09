@@ -5,11 +5,11 @@ using Norse.Abstractions.Web.Server.Facade;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Proves the JSON channel emits the identical <c>errors</c> payload shape the XML channel does (spec
-/// §11.1, §15's tri-protocol swoop doctrine) — <c>[{path, detail}]</c>, never
-/// <c>ValidationProblemDetails</c>' <c>IDictionary&lt;string, string[]&gt;</c>. Serializes with the same
-/// camelCase policy ASP.NET Core's default <c>JsonOptions</c> applies to every MVC JSON response, so
-/// this is proof about the real wire shape, not merely about the CLR type.
+///     Proves the JSON channel emits the identical <c>errors</c> payload shape the XML channel does (spec
+///     §11.1, §15's tri-protocol swoop doctrine) — <c>[{path, detail}]</c>, never
+///     <c>ValidationProblemDetails</c>' <c>IDictionary&lt;string, string[]&gt;</c>. Serializes with the same
+///     camelCase policy ASP.NET Core's default <c>JsonOptions</c> applies to every MVC JSON response, so
+///     this is proof about the real wire shape, not merely about the CLR type.
 /// </summary>
 public sealed class ProblemDetailsJsonParityTests
 {

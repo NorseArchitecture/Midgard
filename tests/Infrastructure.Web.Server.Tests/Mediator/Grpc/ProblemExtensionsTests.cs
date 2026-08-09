@@ -8,7 +8,10 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
 public sealed class ProblemExtensionsTests
 {
-	/// <summary>Reads the <c>grpc-status-details-bin</c> trailer off an <see cref="RpcException"/> and unpacks its <see cref="ErrorInfo"/> detail.</summary>
+	/// <summary>
+	///     Reads the <c>grpc-status-details-bin</c> trailer off an <see cref="RpcException" /> and unpacks its
+	///     <see cref="ErrorInfo" /> detail.
+	/// </summary>
 	static ErrorInfo DecodeErrorInfo(RpcException exception)
 	{
 		var trailer = exception.Trailers.Get("grpc-status-details-bin");
@@ -19,6 +22,7 @@ public sealed class ProblemExtensionsTests
 			if (detail.Is(ErrorInfo.Descriptor) && detail.TryUnpack<ErrorInfo>(out var errorInfo))
 				return errorInfo;
 		}
+
 		throw new InvalidOperationException("No ErrorInfo detail present on the trailer.");
 	}
 
@@ -37,7 +41,11 @@ public sealed class ProblemExtensionsTests
 	[Fact]
 	void Validation_MapsTo_InvalidArgument()
 	{
-		var exception = new Problem { Category = ErrorCategory.Validation, Errors = new Dictionary<string, string[]> { ["Email"] = ["required"] } }.ToRpcException();
+		var exception = new Problem
+		{
+			Category = ErrorCategory.Validation,
+			Errors = new Dictionary<string, string[]> { ["Email"] = ["required"] }
+		}.ToRpcException();
 		exception.StatusCode.ShouldBe(StatusCode.InvalidArgument);
 	}
 

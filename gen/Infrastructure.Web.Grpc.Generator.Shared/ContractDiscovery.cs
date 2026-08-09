@@ -16,13 +16,13 @@ static class ContractDiscovery
 	const string ValueTaskMetadataName = "System.Threading.Tasks.ValueTask`1";
 
 	/// <summary>
-	/// Discovers every Norse gRPC contract visible to <paramref name="compilation"/> — its own
-	/// assembly plus every referenced assembly (PackageReference-mode parity, matching Asgard's
-	/// handler-registration generator). A Norse contract is an interface that carries
-	/// <c>[ServiceContract]</c>, is named <c>I{Context}Service</c>, and declares at least one method
-	/// whose return type is <c>Task&lt;Outcome&lt;T&gt;&gt;</c>/<c>ValueTask&lt;Outcome&lt;T&gt;&gt;</c>
-	/// — matched by symbol via <see cref="SymbolEqualityComparer"/> on the original definition, never
-	/// by unqualified name.
+	///     Discovers every Norse gRPC contract visible to <paramref name="compilation" /> — its own
+	///     assembly plus every referenced assembly (PackageReference-mode parity, matching Asgard's
+	///     handler-registration generator). A Norse contract is an interface that carries
+	///     <c>[ServiceContract]</c>, is named <c>I{Context}Service</c>, and declares at least one method
+	///     whose return type is <c>Task&lt;Outcome&lt;T&gt;&gt;</c>/<c>ValueTask&lt;Outcome&lt;T&gt;&gt;</c>
+	///     — matched by symbol via <see cref="SymbolEqualityComparer" /> on the original definition, never
+	///     by unqualified name.
 	/// </summary>
 	public static ImmutableArray<ContractModel> Discover(Compilation compilation)
 	{
@@ -45,7 +45,8 @@ static class ContractDiscovery
 					t.Name.Length > 1 &&
 					t.Name[0] == 'I' &&
 					t.Name.EndsWith("Service", StringComparison.Ordinal))
-				.Where(t => t.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, serviceContractAttribute)))
+				.Where(t => t.GetAttributes().Any(a =>
+					SymbolEqualityComparer.Default.Equals(a.AttributeClass, serviceContractAttribute)))
 				.Select(t => (Interface: t, Payloads: t.GetMembers().OfType<IMethodSymbol>()
 					.Select(m => ExtractOutcomePayload(m.ReturnType, outcomeType, taskType, valueTaskType))
 					.Where(p => p is not null)
@@ -58,19 +59,25 @@ static class ContractDiscovery
 		];
 	}
 
-	/// <summary>Distinct, ordinal-sorted global-qualified payload type names across every discovered contract — the surrogate registration set.</summary>
+	/// <summary>
+	///     Distinct, ordinal-sorted global-qualified payload type names across every discovered contract — the surrogate
+	///     registration set.
+	/// </summary>
 	public static ImmutableArray<string> DistinctPayloads(ImmutableArray<ContractModel> contracts) =>
-		[.. contracts
+	[
+		.. contracts
 			.SelectMany(c => c.PayloadTypeNames)
 			.Distinct(StringComparer.Ordinal)
-			.OrderBy(p => p, StringComparer.Ordinal)];
+			.OrderBy(p => p, StringComparer.Ordinal)
+	];
 
 	/// <summary>
-	/// NORSE021 belt-and-braces: payload type names that share a short (unqualified) name across
-	/// distinct, differently-namespaced full names. Emitters use fully-qualified names throughout, so
-	/// this never mis-emits — it exists purely as a dedup safety net on the surrogate set.
+	///     NORSE021 belt-and-braces: payload type names that share a short (unqualified) name across
+	///     distinct, differently-namespaced full names. Emitters use fully-qualified names throughout, so
+	///     this never mis-emits — it exists purely as a dedup safety net on the surrogate set.
 	/// </summary>
-	public static IEnumerable<(string ShortName, string[] FullNames)> PayloadShortNameCollisions(ImmutableArray<string> distinctPayloads) =>
+	public static IEnumerable<(string ShortName, string[] FullNames)> PayloadShortNameCollisions(
+		ImmutableArray<string> distinctPayloads) =>
 		distinctPayloads
 			.GroupBy(ShortName, StringComparer.Ordinal)
 			.Where(g => g.Count() > 1)
@@ -79,7 +86,8 @@ static class ContractDiscovery
 	static string ShortName(string globalQualifiedName) =>
 		globalQualifiedName.Substring(globalQualifiedName.LastIndexOf('.') + 1);
 
-	static ITypeSymbol? ExtractOutcomePayload(ITypeSymbol returnType, INamedTypeSymbol outcomeType, INamedTypeSymbol? taskType, INamedTypeSymbol? valueTaskType)
+	static ITypeSymbol? ExtractOutcomePayload(ITypeSymbol returnType, INamedTypeSymbol outcomeType,
+		INamedTypeSymbol? taskType, INamedTypeSymbol? valueTaskType)
 	{
 		if (returnType is not INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } wrapper)
 			return null;
@@ -98,7 +106,7 @@ static class ContractDiscovery
 			null;
 	}
 
-	/// <summary>Recursive walk of every named type reachable from <paramref name="root"/>, including nested namespaces.</summary>
+	/// <summary>Recursive walk of every named type reachable from <paramref name="root" />, including nested namespaces.</summary>
 	public static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol root)
 	{
 		foreach (var type in root.GetTypeMembers())
@@ -110,5 +118,12 @@ static class ContractDiscovery
 	}
 }
 
-/// <summary>A discovered Norse gRPC contract — the interface symbol (server-side implementation lookup only, never crosses an incremental-generator caching boundary) plus its global-qualified name and distinct, ordinal-sorted payload type names.</summary>
-sealed record ContractModel(INamedTypeSymbol InterfaceSymbol, string InterfaceName, ImmutableArray<string> PayloadTypeNames);
+/// <summary>
+///     A discovered Norse gRPC contract — the interface symbol (server-side implementation lookup only, never crosses
+///     an incremental-generator caching boundary) plus its global-qualified name and distinct, ordinal-sorted payload type
+///     names.
+/// </summary>
+sealed record ContractModel(
+	INamedTypeSymbol InterfaceSymbol,
+	string InterfaceName,
+	ImmutableArray<string> PayloadTypeNames);

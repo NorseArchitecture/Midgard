@@ -5,12 +5,6 @@ namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 public sealed class EnumLexicalTests
 {
-	enum TableStatus
-	{
-		Active = 1,
-		Inactive = 2
-	}
-
 	// Columns follow XmlCaseStyle's declared order: Camel, Pascal, Snake, Upper, Lower.
 	static readonly EnumNameTable _table = new(
 		typeof(TableStatus),
@@ -29,7 +23,9 @@ public sealed class EnumLexicalTests
 	void Format_throws_the_exact_undefined_message_for_an_undefined_value()
 	{
 		var value = (TableStatus)99;
-		var exception = Should.Throw<InvalidOperationException>(() => EnumLexical.Format(_table, value, (int)XmlCaseStyle.CamelCase));
+		var exception =
+			Should.Throw<InvalidOperationException>(() =>
+				EnumLexical.Format(_table, value, (int)XmlCaseStyle.CamelCase));
 		exception.Message.ShouldBe($"'{value}' is an undefined value of '{_table.EnumType}' and is illegal to write.");
 	}
 
@@ -109,4 +105,10 @@ public sealed class EnumLexicalTests
 		["active", "Active", "active", "ACTIVE", "active"],
 		["inactive", "Inactive", "inactive", "INACTIVE", "inactive"]
 	];
+
+	enum TableStatus
+	{
+		Active = 1,
+		Inactive = 2
+	}
 }

@@ -4,26 +4,26 @@ using Norse.Abstractions.Emit;
 namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 
 /// <summary>
-/// Emits the canonical Futhark XML writer for one contract shape (design spec §6): declaration-order
-/// attributes then declaration-order child elements, null scalars omitted, <c>Result&lt;T&gt;</c>
-/// unwrap-on-success (a failed or default <c>Result&lt;T&gt;</c> throws — the same platform-wide
-/// wording the JSON and gRPC legs use), enum values rendered through the shared runtime
-/// <c>EnumLexical.Format</c>/<c>EnumNameTable</c> mechanism (Task 8) — never a per-shape switch — and
-/// recursion into nested/collection complex members via their own generated shape classes — never a
-/// second writer, one recursive projection reused as both "the root" and "a fragment," which is
-/// exactly why this method never calls <c>WriteStartDocument</c>: the XML declaration is a
-/// whole-document fact the caller's <c>XmlWriterSettings</c> controls (Task 9), not something a
-/// per-type <c>Write</c> method can know about itself.
+///     Emits the canonical Futhark XML writer for one contract shape (design spec §6): declaration-order
+///     attributes then declaration-order child elements, null scalars omitted, <c>Result&lt;T&gt;</c>
+///     unwrap-on-success (a failed or default <c>Result&lt;T&gt;</c> throws — the same platform-wide
+///     wording the JSON and gRPC legs use), enum values rendered through the shared runtime
+///     <c>EnumLexical.Format</c>/<c>EnumNameTable</c> mechanism (Task 8) — never a per-shape switch — and
+///     recursion into nested/collection complex members via their own generated shape classes — never a
+///     second writer, one recursive projection reused as both "the root" and "a fragment," which is
+///     exactly why this method never calls <c>WriteStartDocument</c>: the XML declaration is a
+///     whole-document fact the caller's <c>XmlWriterSettings</c> controls (Task 9), not something a
+///     per-type <c>Write</c> method can know about itself.
 /// </summary>
 /// <remarks>
-/// <b>Reader emission is composed here too, as of Task 7.</b> <c>IXmlShape&lt;T&gt;</c> declares
-/// <c>Read</c>/<c>ReadObject</c> alongside <c>Write</c>/<c>WriteObject</c>, and <see cref="Emit"/>
-/// produces the single class implementing all four: the writer body stays exactly as this type builds
-/// it below, while the presence-aware, accumulating reader body (design spec §8) comes from
-/// <see cref="ReaderEmitter"/> — sharing this type's per-member wire-name arrays and, as of Task 8,
-/// the same <see cref="EnumTableReference"/> into the generated <c>NorseEnumNameRegistration</c> class
-/// rather than either emitter building a table of its own. One emitted file, one class, both
-/// directions — never a second writer and never a second reader.
+///     <b>Reader emission is composed here too, as of Task 7.</b> <c>IXmlShape&lt;T&gt;</c> declares
+///     <c>Read</c>/<c>ReadObject</c> alongside <c>Write</c>/<c>WriteObject</c>, and <see cref="Emit" />
+///     produces the single class implementing all four: the writer body stays exactly as this type builds
+///     it below, while the presence-aware, accumulating reader body (design spec §8) comes from
+///     <see cref="ReaderEmitter" /> — sharing this type's per-member wire-name arrays and, as of Task 8,
+///     the same <see cref="EnumTableReference" /> into the generated <c>NorseEnumNameRegistration</c> class
+///     rather than either emitter building a table of its own. One emitted file, one class, both
+///     directions — never a second writer and never a second reader.
 /// </remarks>
 static class WriterEmitter
 {
@@ -84,12 +84,12 @@ static class WriterEmitter
 	}
 
 	/// <summary>
-	/// Dispatches a scalar member's already-unwrapped value expression to its §7 lexical form.
-	/// <c>SymbolDisplayFormat.FullyQualifiedFormat</c>'s two rendering shapes are load-bearing
-	/// here and were verified empirically (a throwaway Roslyn probe), not assumed: special/keyword
-	/// types (<c>string</c>/<c>decimal</c>/<c>int</c>/<c>bool</c>/…) render as bare keywords with no
-	/// <c>global::</c> prefix; every other scalar type (<c>Guid</c>/<c>DateTime</c>/<c>DateOnly</c>/
-	/// <c>TimeOnly</c>/<c>TimeSpan</c>/<c>DateTimeOffset</c>/enums) renders fully <c>global::</c>-qualified.
+	///     Dispatches a scalar member's already-unwrapped value expression to its §7 lexical form.
+	///     <c>SymbolDisplayFormat.FullyQualifiedFormat</c>'s two rendering shapes are load-bearing
+	///     here and were verified empirically (a throwaway Roslyn probe), not assumed: special/keyword
+	///     types (<c>string</c>/<c>decimal</c>/<c>int</c>/<c>bool</c>/…) render as bare keywords with no
+	///     <c>global::</c> prefix; every other scalar type (<c>Guid</c>/<c>DateTime</c>/<c>DateOnly</c>/
+	///     <c>TimeOnly</c>/<c>TimeSpan</c>/<c>DateTimeOffset</c>/enums) renders fully <c>global::</c>-qualified.
 	/// </summary>
 	static string FormatExpression(MemberModel member, string valueExpression, string rootNamespace)
 	{
@@ -116,22 +116,22 @@ static class WriterEmitter
 	}
 
 	/// <summary>
-	/// Renders an enum member's write through the shared runtime mechanism — <c>EnumLexical.Format</c>
-	/// against the one <see cref="EnumTableReference"/> the generated <c>NorseEnumNameRegistration</c>
-	/// class declares for this enum type, generic-inferred from <paramref name="valueExpression"/>'s
-	/// own type (never an explicit type argument — <c>Format</c>'s <c>TEnum value</c> parameter makes
-	/// inference unambiguous, unlike <see cref="ReaderEmitter"/>'s <c>Parse</c> call, which has no
-	/// parameter of type <c>TEnum</c> and must specify one).
+	///     Renders an enum member's write through the shared runtime mechanism — <c>EnumLexical.Format</c>
+	///     against the one <see cref="EnumTableReference" /> the generated <c>NorseEnumNameRegistration</c>
+	///     class declares for this enum type, generic-inferred from <paramref name="valueExpression" />'s
+	///     own type (never an explicit type argument — <c>Format</c>'s <c>TEnum value</c> parameter makes
+	///     inference unambiguous, unlike <see cref="ReaderEmitter" />'s <c>Parse</c> call, which has no
+	///     parameter of type <c>TEnum</c> and must specify one).
 	/// </summary>
 	static string EnumFormatCall(MemberModel member, string valueExpression, string rootNamespace) =>
 		$"{XmlNs}.EnumLexical.Format({EnumTableReference(rootNamespace, member.ScalarTypeName!)}, {valueExpression}, (int)style)";
 
 	/// <summary>
-	/// The fully-qualified reference to one enum type's shared <c>EnumNameTable</c> field on the
-	/// generated <c>NorseEnumNameRegistration</c> class (<see cref="RegistrationEmitter"/>) — the one
-	/// place per host compilation each enum's table is declared, so every shape referencing the same
-	/// enum type (and the registry <see cref="RegistrationEmitter"/> builds for the JSON/OpenAPI legs)
-	/// all read the exact same instance, never a per-shape copy.
+	///     The fully-qualified reference to one enum type's shared <c>EnumNameTable</c> field on the
+	///     generated <c>NorseEnumNameRegistration</c> class (<see cref="RegistrationEmitter" />) — the one
+	///     place per host compilation each enum's table is declared, so every shape referencing the same
+	///     enum type (and the registry <see cref="RegistrationEmitter" /> builds for the JSON/OpenAPI legs)
+	///     all read the exact same instance, never a per-shape copy.
 	/// </summary>
 	internal static string EnumTableReference(string rootNamespace, string enumTypeName) =>
 		$"global::{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration.{SafeIdentifier(enumTypeName)}Table";
@@ -142,7 +142,9 @@ static class WriterEmitter
 		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
 			lines.Add($"\tstatic readonly string[] _{member.ClrName}AttrNames = {NamesLiteral(member.WireNames)};");
 
-		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
+		return lines.Count == 0 ?
+			string.Empty :
+			string.Join("\n", lines);
 	}
 
 	static string WriteAttributes(ShapeModel shape, string rootNamespace)
@@ -151,7 +153,9 @@ static class WriterEmitter
 		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
 			lines.Add(WriteAttribute(member, rootNamespace));
 
-		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
+		return lines.Count == 0 ?
+			string.Empty :
+			string.Join("\n", lines);
 	}
 
 	static string WriteAttribute(MemberModel member, string rootNamespace)
@@ -199,10 +203,14 @@ static class WriterEmitter
 				$"\t\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, rawVar, rootNamespace)});";
 		}
 
-		return $"\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"value.{member.ClrName}", rootNamespace)});";
+		return
+			$"\t\twriter.WriteAttributeString({attrNames}, {FormatExpression(member, $"value.{member.ClrName}", rootNamespace)});";
 	}
 
-	/// <summary>The local that captures a Result-wrapped member's unwrapped success case — <c>__{camelClrName}</c>, e.g. <c>__limit</c> for a member named <c>Limit</c>.</summary>
+	/// <summary>
+	///     The local that captures a Result-wrapped member's unwrapped success case — <c>__{camelClrName}</c>, e.g.
+	///     <c>__limit</c> for a member named <c>Limit</c>.
+	/// </summary>
 	static string UnwrapVar(MemberModel member) =>
 		$"__{char.ToLowerInvariant(member.ClrName[0])}{member.ClrName.Substring(1)}";
 
@@ -210,9 +218,13 @@ static class WriterEmitter
 	{
 		List<string> lines = [];
 		foreach (var member in shape.Members.Where(m => m.Kind != MemberKind.Scalar))
-			lines.Add(member.Kind == MemberKind.Collection ? WriteCollection(rootNamespace, member) : WriteComplex(rootNamespace, member));
+			lines.Add(member.Kind == MemberKind.Collection ?
+				WriteCollection(rootNamespace, member) :
+				WriteComplex(rootNamespace, member));
 
-		return lines.Count == 0 ? string.Empty : string.Join("\n", lines);
+		return lines.Count == 0 ?
+			string.Empty :
+			string.Join("\n", lines);
 	}
 
 	static string WriteCollection(string rootNamespace, MemberModel member)
@@ -241,22 +253,32 @@ static class WriterEmitter
 		return $"\t\t{memberShape}.Instance.Write(writer, value.{member.ClrName}, style);";
 	}
 
-	/// <summary>The unqualified type name a fully-qualified <c>global::</c>-prefixed name ends with — also the generated class's <c>{ShortName}XmlShape</c> prefix and the source-hint-name base <see cref="XmlShapeGenerator"/> uses.</summary>
+	/// <summary>
+	///     The unqualified type name a fully-qualified <c>global::</c>-prefixed name ends with — also the generated
+	///     class's <c>{ShortName}XmlShape</c> prefix and the source-hint-name base <see cref="XmlShapeGenerator" /> uses.
+	/// </summary>
 	internal static string ShortName(string fullyQualifiedName)
 	{
-		var withoutPrefix = fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
-			? fullyQualifiedName.Substring("global::".Length)
-			: fullyQualifiedName;
+		var withoutPrefix = fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal) ?
+			fullyQualifiedName.Substring("global::".Length) :
+			fullyQualifiedName;
 		var lastDot = withoutPrefix.LastIndexOf('.');
-		return lastDot < 0 ? withoutPrefix : withoutPrefix.Substring(lastDot + 1);
+		return lastDot < 0 ?
+			withoutPrefix :
+			withoutPrefix.Substring(lastDot + 1);
 	}
 
-	/// <summary>A fully-qualified name, flattened into a legal C# identifier fragment — the shared naming scheme both this emitter's <see cref="EnumTableReference"/> and <see cref="RegistrationEmitter"/>'s field declarations use, so the two sides always agree on one enum type's field name without either coordinating with the other beyond calling this same method.</summary>
+	/// <summary>
+	///     A fully-qualified name, flattened into a legal C# identifier fragment — the shared naming scheme both this
+	///     emitter's <see cref="EnumTableReference" /> and <see cref="RegistrationEmitter" />'s field declarations use, so the
+	///     two sides always agree on one enum type's field name without either coordinating with the other beyond calling this
+	///     same method.
+	/// </summary>
 	internal static string SafeIdentifier(string fullyQualifiedName)
 	{
-		var withoutPrefix = fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
-			? fullyQualifiedName.Substring("global::".Length)
-			: fullyQualifiedName;
+		var withoutPrefix = fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal) ?
+			fullyQualifiedName.Substring("global::".Length) :
+			fullyQualifiedName;
 		return withoutPrefix.Replace('.', '_').Replace('<', '_').Replace('>', '_');
 	}
 

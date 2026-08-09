@@ -7,22 +7,22 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 namespace Norse.Infrastructure.Web.Server.Xml;
 
 /// <summary>
-/// The library-controller tripwire (spec §3, ratified 2026-08-02): at application startup — before the
-/// host ever serves a request, never as a runtime 500 — enumerates every discovered
-/// <c>GrpcControllerBase</c> descendant via <see cref="ApplicationPartManager"/>'s
-/// <see cref="ControllerFeature"/> and asserts every body-bound action-parameter type and
-/// <c>ActionResult&lt;T&gt;</c> payload type carries a shape in the registry. This is the platform's
-/// answer to "shipped a reusable controller library, the generator silently generated nothing for it" —
-/// the same failure mode that once left <c>OutcomeServerInterceptor</c> implemented and unit-tested but
-/// never wired.
+///     The library-controller tripwire (spec §3, ratified 2026-08-02): at application startup — before the
+///     host ever serves a request, never as a runtime 500 — enumerates every discovered
+///     <c>GrpcControllerBase</c> descendant via <see cref="ApplicationPartManager" />'s
+///     <see cref="ControllerFeature" /> and asserts every body-bound action-parameter type and
+///     <c>ActionResult&lt;T&gt;</c> payload type carries a shape in the registry. This is the platform's
+///     answer to "shipped a reusable controller library, the generator silently generated nothing for it" —
+///     the same failure mode that once left <c>OutcomeServerInterceptor</c> implemented and unit-tested but
+///     never wired.
 /// </summary>
 /// <remarks>
-/// <c>Norse.Abstractions.Web.Server.Facade.GrpcControllerBase</c> does not exist on the platform yet
-/// (Task 10, Asgard, a different repo, dispatched later) — this filter therefore matches it by its
-/// fully-qualified name walked reflectively up the base-type chain, never a compile-time type
-/// reference, mirroring exactly how <c>XmlShapeGenerator</c> keys on the same string via
-/// <c>Compilation.GetTypeByMetadataName</c> at the Roslyn level. Once Asgard ships the real type, this
-/// string match keeps working unmodified.
+///     <c>Norse.Abstractions.Web.Server.Facade.GrpcControllerBase</c> does not exist on the platform yet
+///     (Task 10, Asgard, a different repo, dispatched later) — this filter therefore matches it by its
+///     fully-qualified name walked reflectively up the base-type chain, never a compile-time type
+///     reference, mirroring exactly how <c>XmlShapeGenerator</c> keys on the same string via
+///     <c>Compilation.GetTypeByMetadataName</c> at the Roslyn level. Once Asgard ships the real type, this
+///     string match keeps working unmodified.
 /// </remarks>
 sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 {
@@ -40,7 +40,9 @@ sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 		next(app);
 	};
 
-	[UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Controller types come from ApplicationPartManager's own ControllerFeature over the host's compiled assemblies — MVC's controller-discovery machinery already requires those types (and their public action methods) survive trimming, or MVC itself couldn't route to them; reflecting over the same types to enforce this tripwire adds no new trim risk.")]
+	[UnconditionalSuppressMessage("Trimming", "IL2075",
+		Justification =
+			"Controller types come from ApplicationPartManager's own ControllerFeature over the host's compiled assemblies — MVC's controller-discovery machinery already requires those types (and their public action methods) survive trimming, or MVC itself couldn't route to them; reflecting over the same types to enforce this tripwire adds no new trim risk.")]
 	void Validate(IServiceProvider services)
 	{
 		var partManager = services.GetRequiredService<ApplicationPartManager>();
@@ -52,7 +54,8 @@ sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 			if (!DerivesFromGrpcControllerBase(controllerType))
 				continue;
 
-			foreach (var method in controllerType.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+			foreach (var method in controllerType.GetMethods(BindingFlags.Public | BindingFlags.Instance |
+				BindingFlags.DeclaredOnly))
 			{
 				if (method.IsSpecialName || method.GetCustomAttribute<NonActionAttribute>() is not null)
 					continue;
@@ -69,16 +72,16 @@ sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 	}
 
 	/// <summary>
-	/// Mirrors <c>ClosureWalker.Analyze</c>'s own request-root rule (Task 5/6,
-	/// <c>Xml.Generator/ClosureWalker.cs</c>, the parameter loop feeding <c>requestRoots.Add</c>) at
-	/// the runtime/reflection layer: a parameter is body-bound if it carries an explicit
-	/// <c>[FromBody]</c>, OR — the implicit-binding convention MVC itself supports and the generator
-	/// already treats as body-bound — it carries none of the other explicit binding-source attributes,
-	/// is the method's only parameter, and its type falls outside the closed scalar taxonomy.
-	/// Independently maintained by design (compile-time Roslyn symbols vs. runtime reflection — no
-	/// code can be shared between the two), but the RULE must track <c>ClosureWalker</c>'s exactly: a
-	/// change there needs its mirror updated here too, the same discipline
-	/// <see cref="DerivesFromGrpcControllerBase"/> already applies to the metadata-name string match.
+	///     Mirrors <c>ClosureWalker.Analyze</c>'s own request-root rule (Task 5/6,
+	///     <c>Xml.Generator/ClosureWalker.cs</c>, the parameter loop feeding <c>requestRoots.Add</c>) at
+	///     the runtime/reflection layer: a parameter is body-bound if it carries an explicit
+	///     <c>[FromBody]</c>, OR — the implicit-binding convention MVC itself supports and the generator
+	///     already treats as body-bound — it carries none of the other explicit binding-source attributes,
+	///     is the method's only parameter, and its type falls outside the closed scalar taxonomy.
+	///     Independently maintained by design (compile-time Roslyn symbols vs. runtime reflection — no
+	///     code can be shared between the two), but the RULE must track <c>ClosureWalker</c>'s exactly: a
+	///     change there needs its mirror updated here too, the same discipline
+	///     <see cref="DerivesFromGrpcControllerBase" /> already applies to the metadata-name string match.
 	/// </summary>
 	static bool IsBodyBound(ParameterInfo parameter, int parameterCount)
 	{
@@ -94,7 +97,10 @@ sealed class XmlShapeTripwireStartupFilter : IStartupFilter
 		return !hasExplicitOtherSource && parameterCount == 1 && !IsSupportedScalar(parameter.ParameterType);
 	}
 
-	/// <summary>Mirrors <c>ClosureWalker.IsSupportedScalar</c>/<c>IsKnownScalarStruct</c> — the same closed taxonomy, checked reflectively instead of via <c>ITypeSymbol</c>.</summary>
+	/// <summary>
+	///     Mirrors <c>ClosureWalker.IsSupportedScalar</c>/<c>IsKnownScalarStruct</c> — the same closed taxonomy, checked
+	///     reflectively instead of via <c>ITypeSymbol</c>.
+	/// </summary>
 	static bool IsSupportedScalar(Type type)
 	{
 		if (type.IsEnum)

@@ -4,8 +4,8 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Json;
 
 /// <summary>
-/// Parity between the JSON lexical converters and <see cref="XmlLexical"/> — the §7 pinned forms must
-/// be byte-identical on both text channels, for the types where STJ's built-in defaults disagree.
+///     Parity between the JSON lexical converters and <see cref="XmlLexical" /> — the §7 pinned forms must
+///     be byte-identical on both text channels, for the types where STJ's built-in defaults disagree.
 /// </summary>
 public sealed class LexicalParityTests
 {
@@ -97,7 +97,8 @@ public sealed class LexicalParityTests
 	{
 		var options = NorseJsonTestOptions.Create();
 
-		var exception = Should.Throw<JsonException>(() => JsonSerializer.Deserialize<TimeSpan>("\"not a duration\"", options));
+		var exception =
+			Should.Throw<JsonException>(() => JsonSerializer.Deserialize<TimeSpan>("\"not a duration\"", options));
 		exception.Message.ShouldContain("not a duration");
 	}
 }

@@ -5,8 +5,8 @@ using ProtoBuf.Serializers;
 namespace Norse.Infrastructure.Web.Grpc;
 
 /// <summary>
-/// Puts <see cref="DeterministicGuid"/> on the wire as the canonical 16-byte RFC 9562 <c>bytes</c>
-/// payload; reads re-validate the version-5 bits via the wrapping constructor and fail loudly on garbage.
+///     Puts <see cref="DeterministicGuid" /> on the wire as the canonical 16-byte RFC 9562 <c>bytes</c>
+///     payload; reads re-validate the version-5 bits via the wrapping constructor and fail loudly on garbage.
 /// </summary>
 sealed class DeterministicGuidSerializer : ISerializer<DeterministicGuid>, ISerializer<DeterministicGuid?>
 {

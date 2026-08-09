@@ -5,9 +5,9 @@ using ProtoBuf.Serializers;
 namespace Norse.Infrastructure.Web.Grpc;
 
 /// <summary>
-/// Puts <see cref="SequentialGuid"/> on the wire as the canonical 16-byte RFC 9562 <c>bytes</c> payload:
-/// writes normalize to RFC order (SQL Server order never crosses the wire), reads re-validate the
-/// version-7 bits and rehydrate tagged <see cref="GuidByteOrder.Rfc9562"/>.
+///     Puts <see cref="SequentialGuid" /> on the wire as the canonical 16-byte RFC 9562 <c>bytes</c> payload:
+///     writes normalize to RFC order (SQL Server order never crosses the wire), reads re-validate the
+///     version-7 bits and rehydrate tagged <see cref="GuidByteOrder.Rfc9562" />.
 /// </summary>
 sealed class SequentialGuidSerializer : ISerializer<SequentialGuid>, ISerializer<SequentialGuid?>
 {

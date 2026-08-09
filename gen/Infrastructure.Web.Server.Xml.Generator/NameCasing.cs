@@ -3,12 +3,12 @@ using System.Text;
 namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 
 /// <summary>
-/// The five wire-name casing conventions Futhark projects element/attribute/enum-member names
-/// through. A compiler-process-local mirror of the runtime <c>XmlCaseStyle</c> enum living in
-/// <c>Norse.Infrastructure.Web.Server.Xml</c> (a different assembly, a different TFM, never
-/// referenced from here) — ordinal values line up 1:1 so a generated shape's five-entry name table
-/// can be indexed by <c>(int)</c> the runtime enum on the host side without this project ever taking
-/// a compile-time dependency on it.
+///     The five wire-name casing conventions Futhark projects element/attribute/enum-member names
+///     through. A compiler-process-local mirror of the runtime <c>XmlCaseStyle</c> enum living in
+///     <c>Norse.Infrastructure.Web.Server.Xml</c> (a different assembly, a different TFM, never
+///     referenced from here) — ordinal values line up 1:1 so a generated shape's five-entry name table
+///     can be indexed by <c>(int)</c> the runtime enum on the host side without this project ever taking
+///     a compile-time dependency on it.
 /// </summary>
 enum XmlCaseStyle
 {
@@ -20,15 +20,15 @@ enum XmlCaseStyle
 }
 
 /// <summary>
-/// Projects a PascalCase CLR identifier through Futhark's five wire-name casing conventions.
-/// Splits on Pascal word boundaries (a run of uppercase letters followed by a lowercase letter
-/// starts a new word, and a lowercase-to-uppercase transition starts a new word), then rejoins per
-/// style: camel/Pascal join with no separator (first word's case flipped for camel); snake
-/// lower-joins with <c>_</c>; upper/lower flatten with no separator at all.
+///     Projects a PascalCase CLR identifier through Futhark's five wire-name casing conventions.
+///     Splits on Pascal word boundaries (a run of uppercase letters followed by a lowercase letter
+///     starts a new word, and a lowercase-to-uppercase transition starts a new word), then rejoins per
+///     style: camel/Pascal join with no separator (first word's case flipped for camel); snake
+///     lower-joins with <c>_</c>; upper/lower flatten with no separator at all.
 /// </summary>
 static class NameCasing
 {
-	/// <summary>Projects <paramref name="name"/> through <paramref name="style"/>.</summary>
+	/// <summary>Projects <paramref name="name" /> through <paramref name="style" />.</summary>
 	public static string Apply(XmlCaseStyle style, string name)
 	{
 		var words = Split(name);
@@ -43,7 +43,7 @@ static class NameCasing
 		};
 	}
 
-	/// <summary>All five casings of <paramref name="name"/>, ordinal-indexed to match <see cref="XmlCaseStyle"/>.</summary>
+	/// <summary>All five casings of <paramref name="name" />, ordinal-indexed to match <see cref="XmlCaseStyle" />.</summary>
 	public static EquatableArray<string> ApplyAll(string name) =>
 		EquatableArray<string>.Create(
 		[
@@ -70,16 +70,20 @@ static class NameCasing
 		string.Concat(words.Select(UpperFirst));
 
 	static string UpperFirst(string word) =>
-		word.Length == 0 ? word : char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
+		word.Length == 0 ?
+			word :
+			char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
 
 	static string LowerFirst(string word) =>
-		word.Length == 0 ? word : char.ToLowerInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
+		word.Length == 0 ?
+			word :
+			char.ToLowerInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
 
 	/// <summary>
-	/// Splits a PascalCase identifier into words on Pascal word boundaries. A digit run attaches to
-	/// the preceding letter run (no boundary before a digit). An acronym run (<c>ABCFoo</c>) breaks
-	/// before the final uppercase letter of the run when followed by a lowercase letter, so
-	/// <c>ABCFoo</c> splits as <c>AB</c> / <c>CFoo</c> — the conventional acronym-boundary rule.
+	///     Splits a PascalCase identifier into words on Pascal word boundaries. A digit run attaches to
+	///     the preceding letter run (no boundary before a digit). An acronym run (<c>ABCFoo</c>) breaks
+	///     before the final uppercase letter of the run when followed by a lowercase letter, so
+	///     <c>ABCFoo</c> splits as <c>AB</c> / <c>CFoo</c> — the conventional acronym-boundary rule.
 	/// </summary>
 	static List<string> Split(string name)
 	{
@@ -93,7 +97,8 @@ static class NameCasing
 			var boundary = false;
 			if (char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]))
 				boundary = true; // lower/digit -> upper
-			else if (char.IsUpper(name[i]) && char.IsUpper(name[i - 1]) && i + 1 < name.Length && char.IsLower(name[i + 1]))
+			else if (char.IsUpper(name[i]) && char.IsUpper(name[i - 1]) && i + 1 < name.Length &&
+				char.IsLower(name[i + 1]))
 				boundary = true; // acronym run -> the last capital starts the next word
 
 			if (boundary)
@@ -102,6 +107,7 @@ static class NameCasing
 				start = i;
 			}
 		}
+
 		words.Add(name.Substring(start));
 		return words;
 	}

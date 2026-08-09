@@ -17,21 +17,24 @@ public sealed class RepositorySingleTests(PostgresContainerFixture fixture)
 	[Fact]
 	async Task Single_returns_the_view_over_exactly_one_match()
 	{
-		var outcome = await CreateRepository().SingleAsync(v => v.Name == "beta", TestContext.Current.CancellationToken);
+		var outcome =
+			await CreateRepository().SingleAsync(v => v.Name == "beta", TestContext.Current.CancellationToken);
 		outcome.Match(v => v.Name, _ => "<problem>").ShouldBe("beta");
 	}
 
 	[Fact]
 	async Task Single_returns_not_found_over_zero_matches()
 	{
-		var outcome = await CreateRepository().SingleAsync(v => v.Name == "no-such", TestContext.Current.CancellationToken);
+		var outcome = await CreateRepository()
+			.SingleAsync(v => v.Name == "no-such", TestContext.Current.CancellationToken);
 		outcome.Match(_ => ErrorCategory.Unspecified, p => p.Category).ShouldBe(ErrorCategory.NotFound);
 	}
 
 	[Fact]
 	async Task Single_returns_multiple_matches_over_two_matches()
 	{
-		var outcome = await CreateRepository().SingleAsync(v => v.CustomerId == "C1", TestContext.Current.CancellationToken);
+		var outcome = await CreateRepository()
+			.SingleAsync(v => v.CustomerId == "C1", TestContext.Current.CancellationToken);
 		outcome.Match(_ => ErrorCategory.Unspecified, p => p.Category).ShouldBe(ErrorCategory.MultipleMatches);
 	}
 

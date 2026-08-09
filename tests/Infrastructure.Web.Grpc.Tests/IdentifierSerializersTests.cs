@@ -5,8 +5,11 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 
 public sealed class IdentifierSerializersTests
 {
-	static readonly Guid _knownGuid = new("12345678-9abc-def0-1234-56789abcdef0");
 	const string KnownWireHex = "0A10123456789ABCDEF0123456789ABCDEF0";
+	const decimal KnownAmount = 1234.56m;
+	static readonly Guid _knownGuid = new("12345678-9abc-def0-1234-56789abcdef0");
+
+	static readonly DateTime _knownInstant = new(2026, 7, 27, 12, 0, 0, DateTimeKind.Utc);
 
 	[Fact]
 	void Serializes_a_Guid_member_as_sixteen_rfc_9562_bytes_on_an_auto_discovered_type()
@@ -59,9 +62,6 @@ public sealed class IdentifierSerializersTests
 		TestModel.Deserialize<GuidEnvelope>(model, payload).Id.ShouldBe(Guid.Empty);
 	}
 
-	static readonly DateTime _knownInstant = new(2026, 7, 27, 12, 0, 0, DateTimeKind.Utc);
-	const decimal KnownAmount = 1234.56m;
-
 	[Fact]
 	void Applies_level_300_semantics_per_member_without_touching_the_model_default()
 	{
@@ -105,15 +105,13 @@ public sealed class IdentifierSerializersTests
 [ProtoContract]
 public sealed class GuidEnvelope
 {
-	[ProtoMember(1)]
-	public Guid Id { get; set; }
+	[ProtoMember(1)] public Guid Id { get; set; }
 }
 
 [ProtoContract]
 public sealed class NullableGuidEnvelope
 {
-	[ProtoMember(1)]
-	public Guid? Id { get; set; }
+	[ProtoMember(1)] public Guid? Id { get; set; }
 }
 
 [ProtoContract]
@@ -126,8 +124,7 @@ public sealed class FixedSizeGuidEnvelope
 [ProtoContract]
 public sealed class Level300Envelope
 {
-	[ProtoMember(1)]
-	public DateTime When { get; set; }
-	[ProtoMember(2)]
-	public decimal Amount { get; set; }
+	[ProtoMember(1)] public DateTime When { get; set; }
+
+	[ProtoMember(2)] public decimal Amount { get; set; }
 }

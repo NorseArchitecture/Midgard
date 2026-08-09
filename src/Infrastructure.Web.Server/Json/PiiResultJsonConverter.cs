@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Norse.Primitives;
@@ -21,9 +22,11 @@ namespace Norse.Infrastructure.Web.Server.Json;
 /// <typeparam name="T">The PII scalar's type — one row of the forge's PII taxonomy.</typeparam>
 public sealed class PiiResultJsonConverter<T> : JsonConverter<Result<T>> where T : struct, IPiiScalar<T>
 {
-	/// <inheritdoc/>
+	/// <inheritdoc />
 	public override Result<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-		reader.TokenType == JsonTokenType.Null ? T.Parse([]) : ReadPresent(ref reader);
+		reader.TokenType == JsonTokenType.Null ?
+			T.Parse([]) :
+			ReadPresent(ref reader);
 
 	/// <summary>
 	///     Funnels a present (non-null) token through the scalar's parse door. Shared with
@@ -34,21 +37,25 @@ public sealed class PiiResultJsonConverter<T> : JsonConverter<Result<T>> where T
 		reader.TokenType switch
 		{
 			JsonTokenType.String => T.Parse(reader.GetString() ?? string.Empty),
-			JsonTokenType.Number => T.Parse(reader.GetDecimal().ToString(System.Globalization.CultureInfo.InvariantCulture)),
-			JsonTokenType.True or JsonTokenType.False => T.Parse(reader.GetBoolean() ? "true" : "false"),
+			JsonTokenType.Number => T.Parse(reader.GetDecimal().ToString(CultureInfo.InvariantCulture)),
+			JsonTokenType.True or JsonTokenType.False => T.Parse(reader.GetBoolean() ?
+				"true" :
+				"false"),
 			JsonTokenType.StartObject or JsonTokenType.StartArray => SkipAndFail(ref reader),
-			_ => throw new JsonException($"unexpected token {reader.TokenType} reading Result<{typeof(T).Name}>"),
+			_ => throw new JsonException($"unexpected token {reader.TokenType} reading Result<{typeof(T).Name}>")
 		};
 
 	static Result<T> SkipAndFail(ref Utf8JsonReader reader)
 	{
-		var kind = reader.TokenType == JsonTokenType.StartObject ? "{object}" : "[array]";
+		var kind = reader.TokenType == JsonTokenType.StartObject ?
+			"{object}" :
+			"[array]";
 		reader.Skip();
 		return new Failure(ParseFailure.Malformed, kind, typeof(T).Name);
 	}
 
-	/// <inheritdoc/>
-	/// <exception cref="InvalidOperationException"><paramref name="value"/> is a <see cref="Failure"/> or defaulted.</exception>
+	/// <inheritdoc />
+	/// <exception cref="InvalidOperationException"><paramref name="value" /> is a <see cref="Failure" /> or defaulted.</exception>
 	public override void Write(Utf8JsonWriter writer, Result<T> value, JsonSerializerOptions options) =>
 		WritePresent(writer, value);
 
@@ -75,12 +82,17 @@ public sealed class PiiResultJsonConverter<T> : JsonConverter<Result<T>> where T
 /// <typeparam name="T">The PII scalar's type — one row of the forge's PII taxonomy.</typeparam>
 public sealed class NullablePiiResultJsonConverter<T> : JsonConverter<Result<T>?> where T : struct, IPiiScalar<T>
 {
-	/// <inheritdoc/>
+	/// <inheritdoc />
 	public override Result<T>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-		reader.TokenType == JsonTokenType.Null ? null : PiiResultJsonConverter<T>.ReadPresent(ref reader);
+		reader.TokenType == JsonTokenType.Null ?
+			null :
+			PiiResultJsonConverter<T>.ReadPresent(ref reader);
 
-	/// <inheritdoc/>
-	/// <exception cref="InvalidOperationException"><paramref name="value"/> is present but a <see cref="Failure"/> or defaulted.</exception>
+	/// <inheritdoc />
+	/// <exception cref="InvalidOperationException">
+	///     <paramref name="value" /> is present but a <see cref="Failure" /> or
+	///     defaulted.
+	/// </exception>
 	public override void Write(Utf8JsonWriter writer, Result<T>? value, JsonSerializerOptions options)
 	{
 		if (value is null)

@@ -15,14 +15,16 @@ using Norse.Primitives;
 namespace Norse.Infrastructure.Web.Server.Tests.OpenApi;
 
 /// <summary>
-/// Tests <see cref="ResultSchemaTransformer"/>, <see cref="XmlMetadataTransformer"/>, and
-/// <see cref="UnionLeakGuardTransformer"/> against the real <c>Microsoft.AspNetCore.OpenApi</c> native
-/// pipeline (never Swashbuckle — confirmed by using its actual types throughout, not a stand-in). Every
-/// assertion reads the byte-real generated document, fetched from a live <see cref="TestServer"/> host
-/// exactly the way a partner's tooling would, not a hand-inspected in-memory model.
+///     Tests <see cref="ResultSchemaTransformer" />, <see cref="XmlMetadataTransformer" />, and
+///     <see cref="UnionLeakGuardTransformer" /> against the real <c>Microsoft.AspNetCore.OpenApi</c> native
+///     pipeline (never Swashbuckle — confirmed by using its actual types throughout, not a stand-in). Every
+///     assertion reads the byte-real generated document, fetched from a live <see cref="TestServer" /> host
+///     exactly the way a partner's tooling would, not a hand-inspected in-memory model.
 /// </summary>
 public sealed class TransformerTests
 {
+	static readonly IServiceProvider _emptyServiceProvider = new ServiceCollection().BuildServiceProvider();
+
 	[Fact]
 	async Task Result_wrapped_scalar_renders_as_the_unwrapped_type_and_format()
 	{
@@ -53,7 +55,8 @@ public sealed class TransformerTests
 	{
 		var document = await BuildDocumentAsync();
 
-		document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["effectiveDate"]!["writeOnly"]!.GetValue<bool>().ShouldBeTrue();
+		document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["effectiveDate"]!["writeOnly"]!
+			.GetValue<bool>().ShouldBeTrue();
 	}
 
 	[Fact]
@@ -76,7 +79,8 @@ public sealed class TransformerTests
 		// equivalent this package version actually renders (see XmlMetadataTransformer's remarks).
 		var effective = document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["effectiveDate"]!["xml"]!;
 		effective["nodeType"]!.GetValue<string>().ShouldBe("attribute");
-		effective["name"]!.GetValue<string>().ShouldBe("effective_date"); // SnakeCase, the host style this test wires below.
+		effective["name"]!.GetValue<string>()
+			.ShouldBe("effective_date"); // SnakeCase, the host style this test wires below.
 	}
 
 	[Fact]
@@ -84,7 +88,8 @@ public sealed class TransformerTests
 	{
 		var document = await BuildDocumentAsync();
 
-		document["components"]!["schemas"]!["QuoteRequest"]!["xml"]!["name"]!.GetValue<string>().ShouldBe("quote_request");
+		document["components"]!["schemas"]!["QuoteRequest"]!["xml"]!["name"]!.GetValue<string>()
+			.ShouldBe("quote_request");
 	}
 
 	[Fact]
@@ -94,12 +99,14 @@ public sealed class TransformerTests
 
 		// Item element names come from the item type's own [DataContract] schema (spec §6.3) — proven
 		// here against the real generated document, not merely eyeballed against a throwaway probe.
-		document["components"]!["schemas"]!["CoverageLine"]!["xml"]!["name"]!.GetValue<string>().ShouldBe("coverage_line");
+		document["components"]!["schemas"]!["CoverageLine"]!["xml"]!["name"]!.GetValue<string>()
+			.ShouldBe("coverage_line");
 
 		// No literal "wrapped" keyword exists in this OpenApi package version's xml vocabulary — see
 		// XmlMetadataTransformer's remarks. The array property itself carries no stray xml stamp; the
 		// vocabulary's own unwrapped-by-default behavior already matches Futhark's law.
-		document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["lines"]!.AsObject().ContainsKey("xml").ShouldBeFalse();
+		document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["lines"]!.AsObject().ContainsKey("xml")
+			.ShouldBeFalse();
 	}
 
 	[Fact]
@@ -118,7 +125,8 @@ public sealed class TransformerTests
 		members.ShouldBe(["general_liability", "property_damage"]);
 
 		kind["writeOnly"]!.GetValue<bool>().ShouldBeTrue();
-		kind["xml"]!["nodeType"]!.GetValue<string>().ShouldBe("attribute"); // the existing scalar-property stamping already covers enums once IsClosedScalar recognizes them — no separate branch needed.
+		kind["xml"]!["nodeType"]!.GetValue<string>()
+			.ShouldBe("attribute"); // the existing scalar-property stamping already covers enums once IsClosedScalar recognizes them — no separate branch needed.
 	}
 
 	[Fact]
@@ -127,7 +135,9 @@ public sealed class TransformerTests
 		var document = await BuildDocumentAsync();
 
 		var schemaNames = document["components"]!["schemas"]!.AsObject().Select(kv => kv.Key);
-		schemaNames.ShouldNotContain(name => name.StartsWith("Result", StringComparison.Ordinal) || name.StartsWith("Outcome", StringComparison.Ordinal));
+		schemaNames.ShouldNotContain(name =>
+			name.StartsWith("Result", StringComparison.Ordinal) ||
+			name.StartsWith("Outcome", StringComparison.Ordinal));
 	}
 
 	[Fact]
@@ -216,7 +226,8 @@ public sealed class TransformerTests
 
 		await app.StartAsync(TestContext.Current.CancellationToken);
 		using var client = app.GetTestClient();
-		var response = await client.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative), TestContext.Current.CancellationToken);
+		var response = await client.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative),
+			TestContext.Current.CancellationToken);
 		var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 		await app.StopAsync(TestContext.Current.CancellationToken);
 
@@ -230,7 +241,9 @@ public sealed class TransformerTests
 		// The "wired not just designed" proof (spec §10.4): the guard is not a fixture-only unit test —
 		// it genuinely trips on a real, live-generated document when the unwrap transformer that is
 		// supposed to run first is missing from registration.
-		var exception = await Should.ThrowAsync<InvalidOperationException>(() => BuildRawDocumentAsync(registerResultTransformer: false));
+		var exception =
+			await Should.ThrowAsync<InvalidOperationException>(() =>
+				BuildRawDocumentAsync(registerResultTransformer: false));
 
 		exception.Message.ShouldContain("Result<T>/Outcome<T>");
 	}
@@ -249,8 +262,14 @@ public sealed class TransformerTests
 			}
 		};
 
-		var exception = await Should.ThrowAsync<InvalidOperationException>(
-			() => new UnionLeakGuardTransformer().TransformAsync(document, new OpenApiDocumentTransformerContext { DocumentName = "v1", DescriptionGroups = [], ApplicationServices = _emptyServiceProvider }, TestContext.Current.CancellationToken));
+		var exception = await Should.ThrowAsync<InvalidOperationException>(() =>
+			new UnionLeakGuardTransformer().TransformAsync(document,
+				new OpenApiDocumentTransformerContext
+				{
+					DocumentName = "v1",
+					DescriptionGroups = [],
+					ApplicationServices = _emptyServiceProvider
+				}, TestContext.Current.CancellationToken));
 
 		exception.Message.ShouldContain("OutcomeOfQuoteReport");
 	}
@@ -269,11 +288,14 @@ public sealed class TransformerTests
 			}
 		};
 
-		await Should.NotThrowAsync(
-			() => new UnionLeakGuardTransformer().TransformAsync(document, new OpenApiDocumentTransformerContext { DocumentName = "v1", DescriptionGroups = [], ApplicationServices = _emptyServiceProvider }, TestContext.Current.CancellationToken));
+		await Should.NotThrowAsync(() => new UnionLeakGuardTransformer().TransformAsync(document,
+			new OpenApiDocumentTransformerContext
+			{
+				DocumentName = "v1",
+				DescriptionGroups = [],
+				ApplicationServices = _emptyServiceProvider
+			}, TestContext.Current.CancellationToken));
 	}
-
-	static readonly IServiceProvider _emptyServiceProvider = new ServiceCollection().BuildServiceProvider();
 
 	static async Task<JsonNode> BuildDocumentAsync(XmlCaseStyle caseStyle = XmlCaseStyle.SnakeCase)
 	{
@@ -282,11 +304,11 @@ public sealed class TransformerTests
 	}
 
 	/// <summary>
-	/// Columns follow <see cref="XmlCaseStyle"/>'s declared order (Camel/Pascal/Snake/Upper/Lower) — the
-	/// same hand-built idiom <c>EnumLexicalJsonConverterTests</c> uses. Both fixture enums this test
-	/// file's contracts reference (<see cref="CoverageKind"/>, <see cref="TableStatus"/>) get a table
-	/// here — <see cref="ResultSchemaTransformer"/> and <see cref="EnumSchemaTransformer"/> both throw on
-	/// an unregistered enum, so every enum the fixture types reference must carry one.
+	///     Columns follow <see cref="XmlCaseStyle" />'s declared order (Camel/Pascal/Snake/Upper/Lower) — the
+	///     same hand-built idiom <c>EnumLexicalJsonConverterTests</c> uses. Both fixture enums this test
+	///     file's contracts reference (<see cref="CoverageKind" />, <see cref="TableStatus" />) get a table
+	///     here — <see cref="ResultSchemaTransformer" /> and <see cref="EnumSchemaTransformer" /> both throw on
+	///     an unregistered enum, so every enum the fixture types reference must carry one.
 	/// </summary>
 	static EnumNameRegistry BuildEnumRegistry()
 	{
@@ -310,7 +332,8 @@ public sealed class TransformerTests
 		return registry;
 	}
 
-	static async Task<string> BuildRawDocumentAsync(bool registerResultTransformer, XmlCaseStyle caseStyle = XmlCaseStyle.SnakeCase)
+	static async Task<string> BuildRawDocumentAsync(bool registerResultTransformer,
+		XmlCaseStyle caseStyle = XmlCaseStyle.SnakeCase)
 	{
 		var builder = WebApplication.CreateBuilder();
 		builder.WebHost.UseTestServer();
@@ -345,18 +368,24 @@ public sealed class TransformerTests
 
 		await app.StartAsync(TestContext.Current.CancellationToken);
 		using var client = app.GetTestClient();
-		var response = await client.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative), TestContext.Current.CancellationToken);
+		var response = await client.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative),
+			TestContext.Current.CancellationToken);
 		var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 		await app.StopAsync(TestContext.Current.CancellationToken);
 
 		if (!response.IsSuccessStatusCode)
-			throw new InvalidOperationException(json); // the document generation itself threw (e.g. the leak guard) — MapOpenApi surfaces it as a 500 body, not a thrown exception at this call site, so re-throw for the "verify fail" tests below.
+			throw
+				new InvalidOperationException(
+					json); // the document generation itself threw (e.g. the leak guard) — MapOpenApi surfaces it as a 500 body, not a thrown exception at this call site, so re-throw for the "verify fail" tests below.
 
 		return json;
 	}
 }
 
-/// <summary>Restricts controller discovery to <see cref="QuotesController"/> alone — see the remark at its registration call site.</summary>
+/// <summary>
+///     Restricts controller discovery to <see cref="QuotesController" /> alone — see the remark at its registration
+///     call site.
+/// </summary>
 sealed class OnlyQuotesControllerFeatureProvider : ControllerFeatureProvider
 {
 	protected override bool IsController(TypeInfo typeInfo) =>
@@ -394,7 +423,10 @@ enum CoverageKind
 	PropertyDamage
 }
 
-/// <summary>The plain-member fixture enum for Task 9's governed <c>enum:</c> list coverage — mirrors the <c>EnumLexicalJsonConverterTests</c> fixture by name and shape.</summary>
+/// <summary>
+///     The plain-member fixture enum for Task 9's governed <c>enum:</c> list coverage — mirrors the
+///     <c>EnumLexicalJsonConverterTests</c> fixture by name and shape.
+/// </summary>
 enum TableStatus
 {
 	Active,
@@ -414,7 +446,10 @@ sealed class QuoteReport
 	public TableStatus Status { get; init; }
 }
 
-/// <summary>Restricts controller discovery to <see cref="UngovernedController"/> alone — the tripwire fixture for the registry-miss throw test.</summary>
+/// <summary>
+///     Restricts controller discovery to <see cref="UngovernedController" /> alone — the tripwire fixture for the
+///     registry-miss throw test.
+/// </summary>
 sealed class OnlyUngovernedControllerFeatureProvider : ControllerFeatureProvider
 {
 	protected override bool IsController(TypeInfo typeInfo) =>
@@ -431,7 +466,10 @@ sealed class UngovernedController : ControllerBase
 #pragma warning restore CA1822
 }
 
-/// <summary>Carries a raw enum with deliberately no table in the registry the host wires — the registry-miss tripwire fixture.</summary>
+/// <summary>
+///     Carries a raw enum with deliberately no table in the registry the host wires — the registry-miss tripwire
+///     fixture.
+/// </summary>
 enum UngovernedKind
 {
 	First,

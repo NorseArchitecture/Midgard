@@ -6,7 +6,8 @@ namespace Norse.Infrastructure.Web.Server.Generator;
 
 static class ServerRegistrationEmitter
 {
-	internal static string Emit(string rootNamespace, ImmutableArray<ServiceModel> services, ImmutableArray<string> payloads)
+	internal static string Emit(string rootNamespace, ImmutableArray<ServiceModel> services,
+		ImmutableArray<string> payloads)
 	{
 		StringBuilder builder = new();
 		builder.AppendCSharp(

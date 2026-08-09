@@ -19,7 +19,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	[Fact]
 	void Add_default_health_checks_registers_the_self_liveness_check()
 	{
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddDefaultHealthChecks();
 		using var host = builder.Build();
 		var registration = host.Services
@@ -32,10 +32,10 @@ public sealed class HostApplicationBuilderExtensionsTests
 	[Fact]
 	void Service_defaults_stamp_the_resource_with_service_identity()
 	{
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new()
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings
 		{
 			ApplicationName = "Norse.TestHost",
-			EnvironmentName = "Testing",
+			EnvironmentName = "Testing"
 		});
 		builder.AddServiceDefaults();
 		using var host = builder.Build();
@@ -51,7 +51,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	[Fact]
 	void Service_defaults_keep_the_console_provider_and_enrich_the_otel_logger()
 	{
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults();
 		using var host = builder.Build();
 		host.Services.GetServices<ILoggerProvider>().ShouldContain(p => p is ConsoleLoggerProvider);
@@ -65,7 +65,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	void Norse_activity_sources_are_captured_and_foreign_sources_are_not()
 	{
 		List<Activity> exported = [];
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults();
 		builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing.AddInMemoryExporter(exported));
 		using var host = builder.Build();
@@ -83,7 +83,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	void Norse_meters_are_captured_by_the_wildcard_subscription()
 	{
 		List<Metric> exported = [];
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults();
 		builder.Services.AddOpenTelemetry().WithMetrics(metrics => metrics.AddInMemoryExporter(exported));
 		using var host = builder.Build();
@@ -97,7 +97,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	[Fact]
 	void Service_defaults_register_no_health_checks()
 	{
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults();
 		using var host = builder.Build();
 		host.Services.GetService<IOptions<HealthCheckServiceOptions>>()
@@ -107,7 +107,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	[Fact]
 	async Task A_host_with_no_otlp_endpoint_builds_and_starts_cleanly()
 	{
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults();
 		using var host = builder.Build();
 		await host.StartAsync(TestContext.Current.CancellationToken);
@@ -117,9 +117,9 @@ public sealed class HostApplicationBuilderExtensionsTests
 	[Fact]
 	async Task A_host_with_an_otlp_endpoint_builds_and_starts_cleanly()
 	{
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.Configuration.AddInMemoryCollection(
-			[new("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")]);
+			[new KeyValuePair<string, string?>("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")]);
 		builder.AddServiceDefaults();
 		using var host = builder.Build();
 		await host.StartAsync(TestContext.Current.CancellationToken);
@@ -138,7 +138,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	void A_forwarded_tracing_delegate_is_invoked_alongside_the_norse_wildcard()
 	{
 		List<Activity> exported = [];
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults(configureTracing: static tracing => tracing.AddSource("Forwarded.Probe"));
 		builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing.AddInMemoryExporter(exported));
 		using var host = builder.Build();
@@ -156,7 +156,7 @@ public sealed class HostApplicationBuilderExtensionsTests
 	void A_forwarded_metrics_delegate_is_invoked_alongside_the_norse_wildcard()
 	{
 		List<Metric> exported = [];
-		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+		var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
 		builder.AddServiceDefaults(configureMetrics: static metrics => metrics.AddMeter("Forwarded.Probe"));
 		builder.Services.AddOpenTelemetry().WithMetrics(metrics => metrics.AddInMemoryExporter(exported));
 		using var host = builder.Build();

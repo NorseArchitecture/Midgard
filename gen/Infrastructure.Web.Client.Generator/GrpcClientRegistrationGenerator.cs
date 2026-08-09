@@ -9,11 +9,11 @@ namespace Norse.Infrastructure.Web.Client.Generator;
 #pragma warning disable RS2008 // No analyzer-release ledger, matching the platform's other generators.
 
 /// <summary>
-/// Discovers a compilation's Norse gRPC contracts at compile time and emits
-/// <c>AddNorseGrpcClients()</c> — a code-first client proxy per contract over an
-/// <c>OutcomeClientInterceptor</c>-decorated invoker, plus idempotent <c>Outcome&lt;T&gt;</c>
-/// surrogate wiring against <c>RuntimeTypeModel.Default</c>. Emits nothing when no contract is
-/// visible to the compilation.
+///     Discovers a compilation's Norse gRPC contracts at compile time and emits
+///     <c>AddNorseGrpcClients()</c> — a code-first client proxy per contract over an
+///     <c>OutcomeClientInterceptor</c>-decorated invoker, plus idempotent <c>Outcome&lt;T&gt;</c>
+///     surrogate wiring against <c>RuntimeTypeModel.Default</c>. Emits nothing when no contract is
+///     visible to the compilation.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class GrpcClientRegistrationGenerator : IIncrementalGenerator
@@ -31,9 +31,12 @@ public sealed class GrpcClientRegistrationGenerator : IIncrementalGenerator
 		{
 			foreach (var diagnostic in result.Diagnostics)
 				productionContext.ReportDiagnostic(diagnostic);
-			if (result.ContractTypeNames.Length > 0 && !result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+			if (result.ContractTypeNames.Length > 0 &&
+				!result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
 				productionContext.AddSource("NorseGrpcClientRegistration.g.cs",
-					SourceText.From(ClientRegistrationEmitter.Emit(result.RootNamespace, result.ContractTypeNames, result.Payloads), Utf8NoBom.Encoding));
+					SourceText.From(
+						ClientRegistrationEmitter.Emit(result.RootNamespace, result.ContractTypeNames, result.Payloads),
+						Utf8NoBom.Encoding));
 		});
 	}
 
@@ -49,7 +52,8 @@ public sealed class GrpcClientRegistrationGenerator : IIncrementalGenerator
 		var payloads = ContractDiscovery.DistinctPayloads(contracts);
 		var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 		foreach (var (shortName, fullNames) in ContractDiscovery.PayloadShortNameCollisions(payloads))
-			diagnostics.Add(Diagnostic.Create(_payloadShortNameCollision, Location.None, shortName, string.Join(", ", fullNames)));
+			diagnostics.Add(Diagnostic.Create(_payloadShortNameCollision, Location.None, shortName,
+				string.Join(", ", fullNames)));
 
 		var contractTypeNames = contracts
 			.Select(c => c.InterfaceName)
@@ -59,5 +63,9 @@ public sealed class GrpcClientRegistrationGenerator : IIncrementalGenerator
 		return new DiscoveryResult(rootNamespace, contractTypeNames, payloads, diagnostics.ToImmutable());
 	}
 
-	sealed record DiscoveryResult(string RootNamespace, ImmutableArray<string> ContractTypeNames, ImmutableArray<string> Payloads, ImmutableArray<Diagnostic> Diagnostics);
+	sealed record DiscoveryResult(
+		string RootNamespace,
+		ImmutableArray<string> ContractTypeNames,
+		ImmutableArray<string> Payloads,
+		ImmutableArray<Diagnostic> Diagnostics);
 }

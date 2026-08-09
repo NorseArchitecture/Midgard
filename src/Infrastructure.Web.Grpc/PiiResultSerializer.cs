@@ -23,24 +23,30 @@ sealed class PiiResultSerializer<T> : ISerializer<Result<T>>, ISerializer<Result
 		SerializerFeatures.CategoryScalar | SerializerFeatures.WireTypeString;
 
 	public Result<T> Read(ref ProtoReader.State state, Result<T> value) =>
-		T.Parse(state.ReadString(null) ?? string.Empty);
+		T.Parse(state.ReadString() ?? string.Empty);
 
 	/// <summary>
 	///     Unwraps a success to the scalar's canonical wire string — deliberate
 	///     <see cref="IPiiScalar{TSelf}.WireValue" /> egress, never the masked rendering.
 	/// </summary>
-	/// <exception cref="InvalidOperationException"><paramref name="value"/> is a failure or default; both are illegal to write.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     <paramref name="value" /> is a failure or default; both are illegal to
+	///     write.
+	/// </exception>
 	public void Write(ref ProtoWriter.State state, Result<T> value)
 	{
 		if (!value.TryGetValue(out Success<T> success))
 			throw new InvalidOperationException(ResultSerializers.IllegalWriteMessage);
-		state.WriteString(success.Value.WireValue, null);
+		state.WriteString(success.Value.WireValue);
 	}
 
 	Result<T>? ISerializer<Result<T>?>.Read(ref ProtoReader.State state, Result<T>? value) =>
 		Read(ref state, value.GetValueOrDefault());
 
-	/// <exception cref="InvalidOperationException"><paramref name="value"/> is present but a failure or default; both are illegal to write.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     <paramref name="value" /> is present but a failure or default; both are
+	///     illegal to write.
+	/// </exception>
 	void ISerializer<Result<T>?>.Write(ref ProtoWriter.State state, Result<T>? value) =>
 		Write(ref state, value.GetValueOrDefault());
 }

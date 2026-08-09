@@ -25,14 +25,22 @@ public sealed class MvcBuilderExtensionsTests
 		using var provider = services.BuildServiceProvider();
 		var jsonOptions = provider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is ResultJsonConverterFactory);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is MaskedValueJsonConverterFactory);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is DateTimeLexicalJsonConverter);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is DateTimeOffsetLexicalJsonConverter);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is TimeOnlyLexicalJsonConverter);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is TimeSpanLexicalJsonConverter);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is EnumLexicalJsonConverterFactory);
-		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter => converter is ResultEnumJsonConverterFactory);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is ResultJsonConverterFactory);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is MaskedValueJsonConverterFactory);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is DateTimeLexicalJsonConverter);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is DateTimeOffsetLexicalJsonConverter);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is TimeOnlyLexicalJsonConverter);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is TimeSpanLexicalJsonConverter);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is EnumLexicalJsonConverterFactory);
+		jsonOptions.JsonSerializerOptions.Converters.ShouldContain(converter =>
+			converter is ResultEnumJsonConverterFactory);
 		jsonOptions.JsonSerializerOptions.UnmappedMemberHandling.ShouldBe(JsonUnmappedMemberHandling.Disallow);
 		provider.GetRequiredService<EnumNameRegistry>().ShouldBeSameAs(registry);
 	}

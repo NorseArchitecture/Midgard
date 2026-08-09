@@ -50,8 +50,9 @@ sealed record ExemptView
 sealed record ExemptEntity : IViewBearer<ExemptView>
 {
 	public required Guid Id { get; init; }
-	[NotProjected]
-	public required byte[] RowStamp { get; init; }
+
+	[NotProjected] public required byte[] RowStamp { get; init; }
+
 	public required ExemptView View { get; init; }
 }
 
@@ -104,7 +105,8 @@ public sealed class AddWellTests
 	void AddWell_registers_a_read_repository_per_view_bearer()
 	{
 		using var provider = Build<WellContext>();
-		provider.GetRequiredService<IReadRepository<WidgetView>>().ShouldBeOfType<Repository<WellContext, WidgetEntity, WidgetView>>();
+		provider.GetRequiredService<IReadRepository<WidgetView>>()
+			.ShouldBeOfType<Repository<WellContext, WidgetEntity, WidgetView>>();
 	}
 
 	[Fact]

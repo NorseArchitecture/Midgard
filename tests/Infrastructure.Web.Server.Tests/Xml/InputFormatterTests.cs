@@ -5,12 +5,12 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Tests <see cref="XmlContractInputFormatter"/>'s plumbing — happy-path read, the
-/// <see cref="XmlReadContext.HasFailures"/> gate, accumulable failures surfacing into
-/// <c>ModelState</c>, and the unregistered-type refusal — against a hand-rolled
-/// <see cref="WidgetXmlShape"/>, never generated code (the brief's explicit instruction). The security
-/// corpus (session-fatal payloads, the spy-verified "shape never invoked" proof) lives in
-/// <c>SecurityCorpusTests.cs</c>, not here.
+///     Tests <see cref="XmlContractInputFormatter" />'s plumbing — happy-path read, the
+///     <see cref="XmlReadContext.HasFailures" /> gate, accumulable failures surfacing into
+///     <c>ModelState</c>, and the unregistered-type refusal — against a hand-rolled
+///     <see cref="WidgetXmlShape" />, never generated code (the brief's explicit instruction). The security
+///     corpus (session-fatal payloads, the spy-verified "shape never invoked" proof) lives in
+///     <c>SecurityCorpusTests.cs</c>, not here.
 /// </summary>
 public sealed class InputFormatterTests
 {
@@ -19,7 +19,8 @@ public sealed class InputFormatterTests
 	{
 		var registry = new XmlShapeRegistry();
 		registry.Add(new WidgetXmlShape());
-		var formatter = new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var context = FormatterTestSupport.BuildReadContext("""<widget name="lantern" />""", typeof(Widget));
 
 		var result = await formatter.ReadRequestBodyAsync(context, Encoding.UTF8);
@@ -35,7 +36,8 @@ public sealed class InputFormatterTests
 	{
 		var registry = new XmlShapeRegistry();
 		registry.Add(new WidgetXmlShape());
-		var formatter = new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var context = FormatterTestSupport.BuildReadContext("""<widget />""", typeof(Widget));
 
 		var result = await formatter.ReadRequestBodyAsync(context, Encoding.UTF8);
@@ -57,7 +59,8 @@ public sealed class InputFormatterTests
 		// passed.
 		var registry = new XmlShapeRegistry();
 		registry.Add(new AlwaysFailsButConstructsWidgetShape());
-		var formatter = new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var context = FormatterTestSupport.BuildReadContext("""<widget name="anything" />""", typeof(Widget));
 
 		var result = await formatter.ReadRequestBodyAsync(context, Encoding.UTF8);
@@ -71,10 +74,13 @@ public sealed class InputFormatterTests
 	async Task An_unregistered_type_is_refused_loudly()
 	{
 		var registry = new XmlShapeRegistry(); // Widget's shape deliberately never registered.
-		var formatter = new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var context = FormatterTestSupport.BuildReadContext("""<widget name="x" />""", typeof(Widget));
 
-		var exception = await Should.ThrowAsync<InvalidOperationException>(() => formatter.ReadRequestBodyAsync(context, Encoding.UTF8));
+		var exception =
+			await Should.ThrowAsync<InvalidOperationException>(() =>
+				formatter.ReadRequestBodyAsync(context, Encoding.UTF8));
 		exception.Message.ShouldContain("Widget");
 	}
 

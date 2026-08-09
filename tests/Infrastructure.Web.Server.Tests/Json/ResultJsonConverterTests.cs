@@ -5,6 +5,11 @@ namespace Norse.Infrastructure.Web.Server.Tests.Json;
 
 public sealed class ResultJsonConverterTests
 {
+	// A failed or default Result<T> is illegal to write; a success unwraps to the plain scalar value
+	// instead — the same one-law wording the gRPC serializers and generated XML writer throw, so the
+	// message never diverges by channel.
+	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
+
 	[Fact]
 	void Read_string_token_funnels_to_parser()
 	{
@@ -118,11 +123,6 @@ public sealed class ResultJsonConverterTests
 		presentEmpty.Value.Value.ShouldBeOfType<Success<string>>().Value.ShouldBe(string.Empty);
 		absent.ShouldBeNull();
 	}
-
-	// A failed or default Result<T> is illegal to write; a success unwraps to the plain scalar value
-	// instead — the same one-law wording the gRPC serializers and generated XML writer throw, so the
-	// message never diverges by channel.
-	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	[Fact]
 	void Write_success_emits_the_clean_unwrapped_value()

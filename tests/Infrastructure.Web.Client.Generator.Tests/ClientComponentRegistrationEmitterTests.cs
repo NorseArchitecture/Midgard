@@ -1,8 +1,11 @@
 using System.Collections.Immutable;
+using FluentValidation;
+using Microsoft.AspNetCore.Components;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Norse.Infrastructure.Web.Client.Generator.Tests;
 
@@ -37,15 +40,15 @@ public sealed class ClientComponentRegistrationEmitterTests
 	static readonly MetadataReference[] _sharedFramework =
 	[
 		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f)),
+			.Select(f => MetadataReference.CreateFromFile(f))
 	];
 
 	static readonly MetadataReference[] _extraReferences =
 	[
-		MetadataReference.CreateFromFile(typeof(FluentValidation.IValidator<>).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.AspNetCore.Components.RouteAttribute).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection).Assembly.Location),
-		.. _sharedFramework,
+		MetadataReference.CreateFromFile(typeof(IValidator<>).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(RouteAttribute).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(IServiceCollection).Assembly.Location),
+		.. _sharedFramework
 	];
 
 	// A genuinely separate referenced assembly, not a second source file in the same compilation --
@@ -85,9 +88,11 @@ public sealed class ClientComponentRegistrationEmitterTests
 		var generated = Generate(ValidatorSource, RoutesAdditionalAssembliesSource);
 
 		generated.ShouldContain("// validator (idempotent, pairs with the server-side generator's identical shape)");
-		generated.ShouldContain("global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(");
+		generated.ShouldContain(
+			"global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(");
 		generated.ShouldContain("services, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(");
-		generated.ShouldContain("typeof(global::FluentValidation.IValidator<global::Fake.LoginRequest>), typeof(global::Fake.LoginRequestValidator)));");
+		generated.ShouldContain(
+			"typeof(global::FluentValidation.IValidator<global::Fake.LoginRequest>), typeof(global::Fake.LoginRequestValidator)));");
 	}
 
 	[Fact]
@@ -96,7 +101,8 @@ public sealed class ClientComponentRegistrationEmitterTests
 		var generated = Generate(ValidatorSource, RoutesAdditionalAssembliesSource);
 
 		generated.ShouldContain("// router discovery");
-		generated.ShouldContain("global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(");
+		generated.ShouldContain(
+			"global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(");
 		generated.ShouldContain("services, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([");
 		generated.ShouldContain("typeof(global::Fake.RoutablePage).Assembly,");
 	}
@@ -199,17 +205,17 @@ public sealed class ClientComponentRegistrationEmitterTests
 
 	static MetadataReference BuildReferenceAssembly(string assemblyName, string source) =>
 		CSharpCompilation.Create(
-			assemblyName,
-			[CSharpSyntaxTree.ParseText(source)],
-			[.. ReferenceAssemblies.Net110, .. _extraReferences],
-			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+				assemblyName,
+				[CSharpSyntaxTree.ParseText(source)],
+				[.. ReferenceAssemblies.Net110, .. _extraReferences],
+				new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
 			.ToMetadataReference();
 
 	static (ImmutableArray<Diagnostic> Diagnostics, Compilation OutputCompilation) Run(params string[] sources)
 	{
-		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
-			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
-			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource) ?
+			[.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly] :
+			[.. ReferenceAssemblies.Net110, .. _extraReferences];
 
 		var compilation = CSharpCompilation.Create(
 			"Norse.Hosting.Web.Client",
@@ -217,7 +223,7 @@ public sealed class ClientComponentRegistrationEmitterTests
 			references,
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-		_ = CSharpGeneratorDriver.Create([new ClientComponentRegistrationGenerator().AsSourceGenerator()])
+		_ = CSharpGeneratorDriver.Create(new ClientComponentRegistrationGenerator().AsSourceGenerator())
 			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
 
 		return (diagnostics, outputCompilation);
@@ -234,9 +240,9 @@ public sealed class ClientComponentRegistrationEmitterTests
 	// can't see the pages they declare.
 	static string GenerateWithRazorPages(string[] razorPages, params string[] sources)
 	{
-		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
-			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
-			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource) ?
+			[.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly] :
+			[.. ReferenceAssemblies.Net110, .. _extraReferences];
 
 		var compilation = CSharpCompilation.Create(
 			"Norse.Hosting.Web.Client",
@@ -246,7 +252,8 @@ public sealed class ClientComponentRegistrationEmitterTests
 
 		_ = CSharpGeneratorDriver.Create(
 				generators: [new ClientComponentRegistrationGenerator().AsSourceGenerator()],
-				additionalTexts: razorPages.Select((page, i) => (AdditionalText)new RazorAdditionalText($"Pages/Page{i}.razor", page)),
+				additionalTexts: razorPages.Select((page, i) =>
+					(AdditionalText)new RazorAdditionalText($"Pages/Page{i}.razor", page)),
 				parseOptions: null,
 				optionsProvider: null)
 			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
@@ -259,9 +266,9 @@ public sealed class ClientComponentRegistrationEmitterTests
 	// two sanitization fixtures need to vary.
 	static string GenerateWithAssemblyName(string assemblyName, params string[] sources)
 	{
-		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
-			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
-			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource) ?
+			[.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly] :
+			[.. ReferenceAssemblies.Net110, .. _extraReferences];
 
 		var compilation = CSharpCompilation.Create(
 			assemblyName,
@@ -269,7 +276,7 @@ public sealed class ClientComponentRegistrationEmitterTests
 			references,
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-		_ = CSharpGeneratorDriver.Create([new ClientComponentRegistrationGenerator().AsSourceGenerator()])
+		_ = CSharpGeneratorDriver.Create(new ClientComponentRegistrationGenerator().AsSourceGenerator())
 			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
 
 		return outputCompilation.SyntaxTrees.Skip(sources.Length).Select(tree => tree.ToString()).Single();
@@ -277,9 +284,9 @@ public sealed class ClientComponentRegistrationEmitterTests
 
 	static string GenerateWithRootNamespaceProperty(string rootNamespace, string assemblyName, params string[] sources)
 	{
-		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource)
-			? [.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly]
-			: [.. ReferenceAssemblies.Net110, .. _extraReferences];
+		MetadataReference[] references = sources.Contains(RoutesAdditionalAssembliesSource) ?
+			[.. ReferenceAssemblies.Net110, .. _extraReferences, _routableAssembly] :
+			[.. ReferenceAssemblies.Net110, .. _extraReferences];
 
 		var compilation = CSharpCompilation.Create(
 			assemblyName,
@@ -296,7 +303,10 @@ public sealed class ClientComponentRegistrationEmitterTests
 	}
 }
 
-/// <summary>Minimal in-memory <see cref="AdditionalText"/> standing in for a .razor file the Razor SDK adds to <c>@(AdditionalFiles)</c>.</summary>
+/// <summary>
+///     Minimal in-memory <see cref="AdditionalText" /> standing in for a .razor file the Razor SDK adds to
+///     <c>@(AdditionalFiles)</c>.
+/// </summary>
 sealed class RazorAdditionalText(string path, string text) : AdditionalText
 {
 	public override string Path { get; } = path;
@@ -304,7 +314,10 @@ sealed class RazorAdditionalText(string path, string text) : AdditionalText
 	public override SourceText GetText(CancellationToken cancellationToken = default) => SourceText.From(text);
 }
 
-/// <summary>Minimal test double for MSBuild's build_property.* interop -- reports a single configured <c>build_property.RootNamespace</c> value from AnalyzerConfigOptionsProvider.GlobalOptions and nothing else.</summary>
+/// <summary>
+///     Minimal test double for MSBuild's build_property.* interop -- reports a single configured
+///     <c>build_property.RootNamespace</c> value from AnalyzerConfigOptionsProvider.GlobalOptions and nothing else.
+/// </summary>
 sealed class TestAnalyzerConfigOptionsProvider(string rootNamespace) : AnalyzerConfigOptionsProvider
 {
 	public override AnalyzerConfigOptions GlobalOptions { get; } = new TestAnalyzerConfigOptions(rootNamespace);

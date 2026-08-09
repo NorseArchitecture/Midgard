@@ -8,7 +8,11 @@ namespace Norse.Infrastructure.Web.Server.Tests.Validation;
 
 public sealed class ResultRulesTests
 {
-	public sealed record Sample(Result<int> Required, Result<string>? Optional);
+	public enum Status
+	{
+		Active = 1,
+		Inactive = 2
+	}
 
 	[Fact]
 	void Required_rule_passes_a_success_Result()
@@ -33,7 +37,8 @@ public sealed class ResultRulesTests
 		var result = validator.Validate(new Sample(default, null));
 
 		result.IsValid.ShouldBeFalse();
-		Parser.ParseRequired<int>(string.Empty, CultureInfo.InvariantCulture).TryGetValue(out Failure requiredMissing).ShouldBeTrue();
+		Parser.ParseRequired<int>(string.Empty, CultureInfo.InvariantCulture).TryGetValue(out Failure requiredMissing)
+			.ShouldBeTrue();
 		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(requiredMissing));
 	}
 
@@ -86,14 +91,6 @@ public sealed class ResultRulesTests
 		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(malformed));
 	}
 
-	public enum Status
-	{
-		Active = 1,
-		Inactive = 2
-	}
-
-	public sealed record EnumSample(Result<Status> Required, Result<Status>? Optional);
-
 	[Fact]
 	void ResultRequiredEnum_passes_a_success_Result()
 	{
@@ -119,7 +116,8 @@ public sealed class ResultRulesTests
 		var result = validator.Validate(new EnumSample(default, null));
 
 		result.IsValid.ShouldBeFalse();
-		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(new Failure(ParseFailure.Empty, "", nameof(Status))));
+		result.Errors.ShouldHaveSingleItem().ErrorMessage
+			.ShouldBe(FailureDetail.Render(new Failure(ParseFailure.Empty, "", nameof(Status))));
 	}
 
 	[Fact]
@@ -152,7 +150,9 @@ public sealed class ResultRulesTests
 		InlineValidator<EnumSample> validator = [];
 		validator.RuleFor(s => s.Optional).ResultOptionalEnum();
 
-		var result = validator.Validate(new EnumSample(new Success<Status>(Status.Active), new Success<Status>(Status.Inactive)));
+		var result =
+			validator.Validate(new EnumSample(new Success<Status>(Status.Active),
+				new Success<Status>(Status.Inactive)));
 
 		result.IsValid.ShouldBeTrue();
 	}
@@ -170,4 +170,8 @@ public sealed class ResultRulesTests
 		result.IsValid.ShouldBeFalse();
 		result.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(FailureDetail.Render(malformed));
 	}
+
+	public sealed record Sample(Result<int> Required, Result<string>? Optional);
+
+	public sealed record EnumSample(Result<Status> Required, Result<Status>? Optional);
 }

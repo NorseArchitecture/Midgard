@@ -1,3 +1,5 @@
+using FluentValidation;
+using Microsoft.AspNetCore.Components;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
@@ -6,16 +8,6 @@ namespace Norse.Infrastructure.Web.Grpc.Generator.Shared.Tests;
 
 public sealed class ComponentDiscoveryTests
 {
-	// Field declaration order matters here: static field initializers run top-to-bottom, and the
-	// fixture MetadataReference fields below call BuildReferenceAssembly, which reads _extraReferences
-	// -- so it must be declared first, not just textually convenient.
-	static readonly MetadataReference[] _extraReferences =
-	[
-		.. ReferenceAssemblies.Net110,
-		MetadataReference.CreateFromFile(typeof(FluentValidation.IValidator<>).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.AspNetCore.Components.RouteAttribute).Assembly.Location),
-	];
-
 	const string ValidatorSource = """
 		using FluentValidation;
 
@@ -25,6 +17,16 @@ public sealed class ComponentDiscoveryTests
 
 		public sealed class FakeValidator : AbstractValidator<FakeRequest>;
 		""";
+
+	// Field declaration order matters here: static field initializers run top-to-bottom, and the
+	// fixture MetadataReference fields below call BuildReferenceAssembly, which reads _extraReferences
+	// -- so it must be declared first, not just textually convenient.
+	static readonly MetadataReference[] _extraReferences =
+	[
+		.. ReferenceAssemblies.Net110,
+		MetadataReference.CreateFromFile(typeof(IValidator<>).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(RouteAttribute).Assembly.Location)
+	];
 
 	// A genuinely separate assembly (CompilationReference via ToMetadataReference -- no IL emission
 	// needed) so ComponentDiscovery.Discover sees it as a referenced IAssemblySymbol distinct from the
@@ -500,17 +502,19 @@ public sealed class ComponentDiscoveryTests
 
 		var result = ComponentDiscovery.Discover(compilation, ownAssemblyDeclaresRazorRoutes: false);
 
-		result.Validators.ShouldContain(v => v.ValidatorTypeName == "global::Own.MultiValidator" && v.RequestTypeName == "global::Own.RequestA");
-		result.Validators.ShouldContain(v => v.ValidatorTypeName == "global::Own.MultiValidator" && v.RequestTypeName == "global::Own.RequestB");
+		result.Validators.ShouldContain(v =>
+			v.ValidatorTypeName == "global::Own.MultiValidator" && v.RequestTypeName == "global::Own.RequestA");
+		result.Validators.ShouldContain(v =>
+			v.ValidatorTypeName == "global::Own.MultiValidator" && v.RequestTypeName == "global::Own.RequestB");
 		result.Validators.Count(v => v.ValidatorTypeName == "global::Own.MultiValidator").ShouldBe(2);
 	}
 
 	static MetadataReference BuildReferenceAssembly(string assemblyName, string source) =>
 		CSharpCompilation.Create(
-			assemblyName,
-			[CSharpSyntaxTree.ParseText(source)],
-			_extraReferences,
-			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+				assemblyName,
+				[CSharpSyntaxTree.ParseText(source)],
+				_extraReferences,
+				new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
 			.ToMetadataReference();
 
 	static Compilation HarnessCompilation(string[]? sources = null, MetadataReference[]? references = null) =>

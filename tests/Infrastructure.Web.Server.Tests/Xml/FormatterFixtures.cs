@@ -13,17 +13,21 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml.FormatterFixtures;
 
 /// <summary>
-/// A minimal contract used by the formatter-pair tests (<c>InputFormatterTests</c>,
-/// <c>OutputFormatterTests</c>, <c>SecurityCorpusTests</c>). Deliberately hand-rolled, never generated —
-/// the brief is explicit that the formatter's own tests must not depend on Task 5-8's generator, so this
-/// stands in for what <c>XmlShapeGenerator</c> would otherwise emit.
+///     A minimal contract used by the formatter-pair tests (<c>InputFormatterTests</c>,
+///     <c>OutputFormatterTests</c>, <c>SecurityCorpusTests</c>). Deliberately hand-rolled, never generated —
+///     the brief is explicit that the formatter's own tests must not depend on Task 5-8's generator, so this
+///     stands in for what <c>XmlShapeGenerator</c> would otherwise emit.
 /// </summary>
 public sealed record Widget
 {
 	public string Name { get; init; } = "";
 }
 
-/// <summary>A minimal, hand-rolled <see cref="IXmlShape{T}"/> for <see cref="Widget"/>: root element <c>widget</c>, one <c>name</c> attribute. <see cref="Read"/> never throws on a missing attribute — it accumulates a failure into <c>context</c>, exactly like generated code would.</summary>
+/// <summary>
+///     A minimal, hand-rolled <see cref="IXmlShape{T}" /> for <see cref="Widget" />: root element <c>widget</c>, one
+///     <c>name</c> attribute. <see cref="Read" /> never throws on a missing attribute — it accumulates a failure into
+///     <c>context</c>, exactly like generated code would.
+/// </summary>
 public sealed class WidgetXmlShape : IXmlShape<Widget>
 {
 	public Type ContractType =>
@@ -57,10 +61,10 @@ public sealed class WidgetXmlShape : IXmlShape<Widget>
 }
 
 /// <summary>
-/// A shape that mirrors Task 7's generator law on purpose: it always accumulates a failure AND always
-/// constructs and returns an object anyway — with an unmistakable sentinel value — so a test can prove
-/// the formatter discards that object rather than letting it leak through as a successful read. This is
-/// the exact contract Task 7's report flagged as a forward-looking concern for this task.
+///     A shape that mirrors Task 7's generator law on purpose: it always accumulates a failure AND always
+///     constructs and returns an object anyway — with an unmistakable sentinel value — so a test can prove
+///     the formatter discards that object rather than letting it leak through as a successful read. This is
+///     the exact contract Task 7's report flagged as a forward-looking concern for this task.
 /// </summary>
 public sealed class AlwaysFailsButConstructsWidgetShape : IXmlShape<Widget>
 {
@@ -87,7 +91,11 @@ public sealed class AlwaysFailsButConstructsWidgetShape : IXmlShape<Widget>
 	}
 }
 
-/// <summary>A shape that records how many times <see cref="Read"/> was actually invoked — the security corpus's proof that a session-fatal payload never reaches the shape at all, not merely that the formatter happened to return a failure.</summary>
+/// <summary>
+///     A shape that records how many times <see cref="Read" /> was actually invoked — the security corpus's proof
+///     that a session-fatal payload never reaches the shape at all, not merely that the formatter happened to return a
+///     failure.
+/// </summary>
 public sealed class SpyWidgetShape : IXmlShape<Widget>
 {
 	public int ReadInvocations { get; private set; }
@@ -116,7 +124,11 @@ public sealed class SpyWidgetShape : IXmlShape<Widget>
 	}
 }
 
-/// <summary>Shared plumbing for building the MVC formatter-context types the real ASP.NET Core pipeline would hand a formatter — kept in one place so <c>InputFormatterTests</c>, <c>OutputFormatterTests</c>, and <c>SecurityCorpusTests</c> can't drift from each other on setup mechanics.</summary>
+/// <summary>
+///     Shared plumbing for building the MVC formatter-context types the real ASP.NET Core pipeline would hand a
+///     formatter — kept in one place so <c>InputFormatterTests</c>, <c>OutputFormatterTests</c>, and
+///     <c>SecurityCorpusTests</c> can't drift from each other on setup mechanics.
+/// </summary>
 public static class FormatterTestSupport
 {
 	public static InputFormatterContext BuildReadContext(byte[] body, Type modelType)
@@ -138,13 +150,11 @@ public static class FormatterTestSupport
 	public static InputFormatterContext BuildReadContext(string xml, Type modelType) =>
 		BuildReadContext(Encoding.UTF8.GetBytes(xml), modelType);
 
-	public static (OutputFormatterWriteContext Context, MemoryStream ResponseBody) BuildWriteContext(object? value, Type objectType)
+	public static (OutputFormatterWriteContext Context, MemoryStream ResponseBody) BuildWriteContext(object? value,
+		Type objectType)
 	{
 		MemoryStream responseBody = new();
-		DefaultHttpContext httpContext = new()
-		{
-			Response = { Body = responseBody }
-		};
+		DefaultHttpContext httpContext = new() { Response = { Body = responseBody } };
 
 		var context = new OutputFormatterWriteContext(
 			httpContext,
@@ -155,7 +165,10 @@ public static class FormatterTestSupport
 		return (context, responseBody);
 	}
 
-	/// <summary>A UTF-16 (little-endian) BOM followed by UTF-16-encoded content — the corpus's "declared-or-BOM-signaled non-UTF-8 encoding" payload (spec §8.1).</summary>
+	/// <summary>
+	///     A UTF-16 (little-endian) BOM followed by UTF-16-encoded content — the corpus's "declared-or-BOM-signaled
+	///     non-UTF-8 encoding" payload (spec §8.1).
+	/// </summary>
 	public static byte[] Utf16WithBom(string xml) =>
 		[.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(xml)];
 }

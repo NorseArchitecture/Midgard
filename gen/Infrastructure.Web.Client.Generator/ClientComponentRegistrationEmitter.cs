@@ -37,9 +37,9 @@ static class ClientComponentRegistrationEmitter
 	// registration (Task 5), so both hosts converge on the same DI graph regardless of which one
 	// resolves a shared validator first.
 	static string ValidatorRegistrations(ComponentDiscoveryResult result) =>
-		result.Validators.IsEmpty
-			? string.Empty
-			: $"\t\t// validator (idempotent, pairs with the server-side generator's identical shape)\n{string.Join("\n", result.Validators.Select(ValidatorRegistration))}";
+		result.Validators.IsEmpty ?
+			string.Empty :
+			$"\t\t// validator (idempotent, pairs with the server-side generator's identical shape)\n{string.Join("\n", result.Validators.Select(ValidatorRegistration))}";
 
 	static string ValidatorRegistration(ValidatorModel validator) =>
 		$"\t\tglobal::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(\n\t\t\tservices, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(\n\t\t\t\ttypeof(global::FluentValidation.IValidator<{validator.RequestTypeName}>), typeof({validator.ValidatorTypeName})));";
@@ -61,6 +61,7 @@ static class ClientComponentRegistrationEmitter
 			markers.Add($"global::{rootNamespace}.NorseClientComponentRegistration");
 
 		var joined = string.Join("\n", markers.Select(m => $"\t\t\t\ttypeof({m}).Assembly,"));
-		return $"\t\t// router discovery\n\t\tglobal::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(\n\t\t\tservices, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([\n{joined}\n\t\t\t]));";
+		return
+			$"\t\t// router discovery\n\t\tglobal::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(\n\t\t\tservices, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([\n{joined}\n\t\t\t]));";
 	}
 }

@@ -38,9 +38,9 @@ static class ServerComponentRegistrationEmitter
 	// (Task 4), so both hosts converge on the same DI graph regardless of which one resolves a shared
 	// validator first.
 	static string ValidatorRegistrations(ComponentDiscoveryResult result) =>
-		result.Validators.IsEmpty
-			? string.Empty
-			: $"\t\t// validator (idempotent, pairs with the server-side generator's identical shape)\n{string.Join("\n", result.Validators.Select(ValidatorRegistration))}";
+		result.Validators.IsEmpty ?
+			string.Empty :
+			$"\t\t// validator (idempotent, pairs with the server-side generator's identical shape)\n{string.Join("\n", result.Validators.Select(ValidatorRegistration))}";
 
 	static string ValidatorRegistration(ValidatorModel validator) =>
 		$"\t\tglobal::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(\n\t\t\tservices, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(\n\t\t\t\ttypeof(global::FluentValidation.IValidator<{validator.RequestTypeName}>), typeof({validator.ValidatorTypeName})));";
@@ -65,7 +65,8 @@ static class ServerComponentRegistrationEmitter
 			markers.Add($"global::{rootNamespace}.NorseServerComponentRegistration");
 
 		var joined = string.Join("\n", markers.Select(m => $"\t\t\t\ttypeof({m}).Assembly,"));
-		return $"\t\t// router discovery\n\t\tglobal::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(\n\t\t\tservices, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([\n{joined}\n\t\t\t]));";
+		return
+			$"\t\t// router discovery\n\t\tglobal::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(\n\t\t\tservices, new global::Norse.Hosting.Web.Components.RoutesAdditionalAssemblies([\n{joined}\n\t\t\t]));";
 	}
 
 	// The endpoint half of composition -- distinct from RouteRegistration above in both mechanism
@@ -90,10 +91,11 @@ static class ServerComponentRegistrationEmitter
 			markers.Add(result.RoutesHolderMarker);
 		markers.AddRange(result.RoutableAssemblyMarkers.Where(m => m != result.OwnAssemblyRoutableMarker));
 
-		var call = markers.Count == 0
-			? "builder"
-			: $"builder,\n{string.Join(",\n", markers.Select(m => $"\t\t\ttypeof({m}).Assembly"))}";
+		var call = markers.Count == 0 ?
+			"builder" :
+			$"builder,\n{string.Join(",\n", markers.Select(m => $"\t\t\ttypeof({m}).Assembly"))}";
 
-		return $"\t/// <summary>Feeds every discovered routable component assembly to Razor endpoint discovery — the render-mode half of discovery, distinct from the Router's.</summary>\n\tpublic static global::Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder AddNorseComponentAssemblies(\n\t\tthis global::Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder builder) =>\n\t\tglobal::Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilderExtensions.AddAdditionalAssemblies({call});";
+		return
+			$"\t/// <summary>Feeds every discovered routable component assembly to Razor endpoint discovery — the render-mode half of discovery, distinct from the Router's.</summary>\n\tpublic static global::Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder AddNorseComponentAssemblies(\n\t\tthis global::Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder builder) =>\n\t\tglobal::Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilderExtensions.AddAdditionalAssemblies({call});";
 	}
 }

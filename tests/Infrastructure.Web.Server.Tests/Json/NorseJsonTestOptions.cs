@@ -7,18 +7,25 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Json;
 
 /// <summary>
-/// Builds a bare <see cref="JsonSerializerOptions"/> carrying Futhark's JSON converter family,
-/// <see cref="OptInContractModifier"/>, and strictness ratchet, mirroring what
-/// <c>AddNorseJson</c> wires onto MVC's <c>JsonOptions</c> — including the
-/// camelCase naming policy ASP.NET Core's own <c>JsonOptions</c> default carries into every host that
-/// calls <c>AddControllers().AddNorseJson()</c> — without spinning up an ASP.NET Core host, since
-/// these tests exercise the converters directly against <see cref="JsonSerializer"/>.
+///     Builds a bare <see cref="JsonSerializerOptions" /> carrying Futhark's JSON converter family,
+///     <see cref="OptInContractModifier" />, and strictness ratchet, mirroring what
+///     <c>AddNorseJson</c> wires onto MVC's <c>JsonOptions</c> — including the
+///     camelCase naming policy ASP.NET Core's own <c>JsonOptions</c> default carries into every host that
+///     calls <c>AddControllers().AddNorseJson()</c> — without spinning up an ASP.NET Core host, since
+///     these tests exercise the converters directly against <see cref="JsonSerializer" />.
 /// </summary>
 static class NorseJsonTestOptions
 {
-	/// <param name="registry">The enum name-table registry the two enum factories resolve against. Defaults to an empty registry — existing (non-enum) tests never need a table.</param>
-	/// <param name="caseStyle">The active <see cref="XmlCaseStyle"/> the enum factories style names through. Defaults to <see cref="XmlCaseStyle.CamelCase"/>.</param>
-	public static JsonSerializerOptions Create(EnumNameRegistry? registry = null, XmlCaseStyle caseStyle = XmlCaseStyle.CamelCase)
+	/// <param name="registry">
+	///     The enum name-table registry the two enum factories resolve against. Defaults to an empty
+	///     registry — existing (non-enum) tests never need a table.
+	/// </param>
+	/// <param name="caseStyle">
+	///     The active <see cref="XmlCaseStyle" /> the enum factories style names through. Defaults to
+	///     <see cref="XmlCaseStyle.CamelCase" />.
+	/// </param>
+	public static JsonSerializerOptions Create(EnumNameRegistry? registry = null,
+		XmlCaseStyle caseStyle = XmlCaseStyle.CamelCase)
 	{
 		registry ??= new EnumNameRegistry();
 		var xmlOptions = new NorseXmlOptions { CaseStyle = caseStyle };

@@ -6,7 +6,8 @@ namespace Norse.Infrastructure.Web.Client.Generator;
 
 static class ClientRegistrationEmitter
 {
-	internal static string Emit(string rootNamespace, ImmutableArray<string> contractTypeNames, ImmutableArray<string> payloads)
+	internal static string Emit(string rootNamespace, ImmutableArray<string> contractTypeNames,
+		ImmutableArray<string> payloads)
 	{
 		StringBuilder builder = new();
 		builder.AppendCSharp(

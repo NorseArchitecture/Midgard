@@ -6,15 +6,15 @@ using Testcontainers.PostgreSql;
 namespace Norse.Infrastructure.Persistence.EntityFramework.Tests;
 
 /// <summary>
-/// Stands up a real Postgres container and a synthetic three-widget well against
-/// <see cref="WellContext"/> — beyond the container-lifecycle shape shared with every other
-/// realm's Postgres fixture, this one also owns schema creation and seeding, since
-/// <see cref="RepositoryReadTests"/> exercises the repository against real data rather than an
-/// empty database. <see cref="KnownWidgetId"/> names the seeded "alpha" widget (CustomerId "C1",
-/// EffectiveDate 2026-01-01, Notes "hot", Labels ["featured","new"]); "gamma" deliberately shares
-/// alpha's CustomerId "C1" and EffectiveDate, held in reserve for Task 4's <c>SingleAsync</c>
-/// MultipleMatches case and Task 6's anchored-composite seek-verification case (differentiated
-/// from alpha only by the residual Notes leg); "beta" (CustomerId "C2") is the odd one out.
+///     Stands up a real Postgres container and a synthetic three-widget well against
+///     <see cref="WellContext" /> — beyond the container-lifecycle shape shared with every other
+///     realm's Postgres fixture, this one also owns schema creation and seeding, since
+///     <see cref="RepositoryReadTests" /> exercises the repository against real data rather than an
+///     empty database. <see cref="KnownWidgetId" /> names the seeded "alpha" widget (CustomerId "C1",
+///     EffectiveDate 2026-01-01, Notes "hot", Labels ["featured","new"]); "gamma" deliberately shares
+///     alpha's CustomerId "C1" and EffectiveDate, held in reserve for Task 4's <c>SingleAsync</c>
+///     MultipleMatches case and Task 6's anchored-composite seek-verification case (differentiated
+///     from alpha only by the residual Notes leg); "beta" (CustomerId "C2") is the odd one out.
 /// </summary>
 public sealed class PostgresContainerFixture : IAsyncLifetime
 {
@@ -31,9 +31,9 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 	public Guid KnownWidgetId { get; } = Guid.NewGuid();
 
 	/// <summary>
-	/// The live container's connection string — Task 6's canary/seek-verification tests need their
-	/// own <see cref="DbContextOptionsBuilder{TContext}"/> per test (wired with <c>LogTo</c> into a
-	/// test-owned log), so they cannot ride <see cref="ContextFactory"/>'s already-fixed options.
+	///     The live container's connection string — Task 6's canary/seek-verification tests need their
+	///     own <see cref="DbContextOptionsBuilder{TContext}" /> per test (wired with <c>LogTo</c> into a
+	///     test-owned log), so they cannot ride <see cref="ContextFactory" />'s already-fixed options.
 	/// </summary>
 	public string ConnectionString => _container.GetConnectionString();
 
@@ -42,7 +42,8 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 		await _container.StartAsync();
 
 		DbContextOptionsBuilder<WellContext> optionsBuilder = new();
-		optionsBuilder.ApplyNorseProviderOptions(NorsePostgresEfProvider.Instance, _container.GetConnectionString(), migrationsAssemblyName: null);
+		optionsBuilder.ApplyNorseProviderOptions(NorsePostgresEfProvider.Instance, _container.GetConnectionString(),
+			migrationsAssemblyName: null);
 		ContextFactory = new WellContextFactory(optionsBuilder.Options);
 
 		await using var context = await ContextFactory.CreateDbContextAsync();
@@ -73,8 +74,8 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 					Name = "alpha",
 					Notes = "hot",
 					Tags = [new() { Label = "featured" }],
-					Labels = ["featured", "new"],
-				},
+					Labels = ["featured", "new"]
+				}
 			},
 			new WidgetEntity
 			{
@@ -87,8 +88,8 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 					CustomerId = "C2",
 					EffectiveDate = new DateOnly(2026, 2, 1),
 					Name = "beta",
-					Notes = "cold",
-				},
+					Notes = "cold"
+				}
 			},
 			new WidgetEntity
 			{
@@ -102,8 +103,8 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 					EffectiveDate = alphaEffectiveDate,
 					Name = "gamma",
 					Notes = "cold",
-					Labels = ["legacy"],
-				},
+					Labels = ["legacy"]
+				}
 			});
 		await context.SaveChangesAsync();
 	}

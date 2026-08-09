@@ -1,6 +1,14 @@
 using System.Collections.Immutable;
+using System.ServiceModel;
+using Grpc.Core.Interceptors;
+using Grpc.Net.Client;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.Extensions.DependencyInjection;
+using Norse.Infrastructure.Web.Client.Grpc;
+using Norse.Infrastructure.Web.Grpc;
+using ProtoBuf.Grpc.Client;
+using ProtoBuf.Meta;
 
 namespace Norse.Infrastructure.Web.Client.Generator.Tests;
 
@@ -25,13 +33,36 @@ public sealed class GrpcClientRegistrationGeneratorTests
 		public sealed record LoginResult;
 		""";
 
+	static readonly MetadataReference[] _sharedFramework =
+	[
+		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
+			.Select(f => MetadataReference.CreateFromFile(f))
+	];
+
+	static readonly MetadataReference[] _extraReferences =
+	[
+		MetadataReference.CreateFromFile(typeof(ServiceContractAttribute).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(Abstractions.Contracts.Outcome<>).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(RuntimeTypeModel).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(TypeModel).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(GrpcClientFactory).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(ChannelExtensions).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(GrpcChannel).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(ServiceCollectionServiceExtensions).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(IServiceCollection).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(OutcomeClientInterceptor).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(IdentifierSerializers).Assembly.Location),
+		.. _sharedFramework
+	];
+
 	[Fact]
 	void Emits_CreateGrpcService_over_an_intercepted_invoker()
 	{
 		var generated = Generate(Contract);
 		generated.ShouldContain("global::Grpc.Core.Interceptors.CallInvokerExtensions.Intercept(");
 		generated.ShouldContain("new global::Norse.Infrastructure.Web.Client.Grpc.OutcomeClientInterceptor()");
-		generated.ShouldContain("global::ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService<global::Norse.AuthN.Services.IAuthenticationService>(invoker)");
+		generated.ShouldContain(
+			"global::ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService<global::Norse.AuthN.Services.IAuthenticationService>(invoker)");
 	}
 
 	[Fact]
@@ -186,30 +217,9 @@ public sealed class GrpcClientRegistrationGeneratorTests
 			count++;
 			index += needle.Length;
 		}
+
 		return count;
 	}
-
-	static readonly MetadataReference[] _sharedFramework =
-	[
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f)),
-	];
-
-	static readonly MetadataReference[] _extraReferences =
-	[
-		MetadataReference.CreateFromFile(typeof(System.ServiceModel.ServiceContractAttribute).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Norse.Abstractions.Contracts.Outcome<>).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(ProtoBuf.Meta.RuntimeTypeModel).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(ProtoBuf.Meta.TypeModel).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(ProtoBuf.Grpc.Client.GrpcClientFactory).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(global::Grpc.Core.Interceptors.ChannelExtensions).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(global::Grpc.Net.Client.GrpcChannel).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Client.Grpc.OutcomeClientInterceptor).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Grpc.IdentifierSerializers).Assembly.Location),
-		.. _sharedFramework,
-	];
 
 	static (ImmutableArray<Diagnostic> Diagnostics, Compilation OutputCompilation) Run(params string[] sources)
 	{
@@ -219,7 +229,7 @@ public sealed class GrpcClientRegistrationGeneratorTests
 			[.. ReferenceAssemblies.Net110, .. _extraReferences],
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-		_ = CSharpGeneratorDriver.Create([new GrpcClientRegistrationGenerator().AsSourceGenerator()])
+		_ = CSharpGeneratorDriver.Create(new GrpcClientRegistrationGenerator().AsSourceGenerator())
 			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
 
 		return (diagnostics, outputCompilation);

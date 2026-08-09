@@ -4,25 +4,30 @@ using Norse.Abstractions.Emit;
 namespace Norse.Infrastructure.Web.Server.Xml.Generator;
 
 /// <summary>
-/// Emits the one-per-host-compilation registration summary (Task 8): a static <c>Build()</c> that
-/// lists every distinct generated <c>{Contract}XmlShape</c> class — the exact same deduplicated set
-/// <see cref="XmlShapeGenerator"/> already computed for its own per-shape emission loop. This emitter
-/// carries no dedup logic of its own; the closure walk's dedup (Task 6, <c>GroupBy(TypeName).Last()</c>)
-/// is the single source of truth for "one shape class per distinct contract type," so duplicate
-/// registration is impossible by construction, not by a second check here.
+///     Emits the one-per-host-compilation registration summary (Task 8): a static <c>Build()</c> that
+///     lists every distinct generated <c>{Contract}XmlShape</c> class — the exact same deduplicated set
+///     <see cref="XmlShapeGenerator" /> already computed for its own per-shape emission loop. This emitter
+///     carries no dedup logic of its own; the closure walk's dedup (Task 6, <c>GroupBy(TypeName).Last()</c>)
+///     is the single source of truth for "one shape class per distinct contract type," so duplicate
+///     registration is impossible by construction, not by a second check here.
 /// </summary>
 static class RegistrationEmitter
 {
 	const string XmlNs = "global::Norse.Infrastructure.Web.Server.Xml";
 
-	/// <summary>Emits <c>NorseXmlShapeRegistration</c> for <paramref name="shapes"/> — called exactly once per host compilation, even when <paramref name="shapes"/> is empty (the host always calls <c>Build()</c> unconditionally).</summary>
+	/// <summary>
+	///     Emits <c>NorseXmlShapeRegistration</c> for <paramref name="shapes" /> — called exactly once per host
+	///     compilation, even when <paramref name="shapes" /> is empty (the host always calls <c>Build()</c> unconditionally).
+	/// </summary>
 	public static string Emit(string rootNamespace, IReadOnlyList<ShapeModel> shapes)
 	{
 		List<string> adds = [];
 		foreach (var shape in shapes)
 			adds.Add($"\t\tregistry.Add({WriterEmitter.ShortName(shape.TypeName)}XmlShape.Instance);");
 
-		var addLines = adds.Count == 0 ? string.Empty : string.Join("\n", adds);
+		var addLines = adds.Count == 0 ?
+			string.Empty :
+			string.Join("\n", adds);
 
 		StringBuilder sb = new();
 		sb.AppendCSharp(
@@ -48,13 +53,13 @@ static class RegistrationEmitter
 	}
 
 	/// <summary>
-	/// Emits <c>NorseEnumNameRegistration</c> (Task 8): one <c>EnumNameTable</c> field per distinct
-	/// enum type reachable from any shape's members, plus a <c>Build()</c> that lists them all — the
-	/// mirror image of <see cref="Emit"/> above, one namespace, same host-compilation cardinality (called
-	/// exactly once, even with zero enums). <see cref="WriterEmitter.EnumTableReference"/> is the one
-	/// other place that knows this class's field-naming scheme (<see cref="WriterEmitter.SafeIdentifier"/>
-	/// plus the <c>Table</c> suffix) — both sides agree on a field name without either coordinating with
-	/// the other beyond calling the same helper.
+	///     Emits <c>NorseEnumNameRegistration</c> (Task 8): one <c>EnumNameTable</c> field per distinct
+	///     enum type reachable from any shape's members, plus a <c>Build()</c> that lists them all — the
+	///     mirror image of <see cref="Emit" /> above, one namespace, same host-compilation cardinality (called
+	///     exactly once, even with zero enums). <see cref="WriterEmitter.EnumTableReference" /> is the one
+	///     other place that knows this class's field-naming scheme (<see cref="WriterEmitter.SafeIdentifier" />
+	///     plus the <c>Table</c> suffix) — both sides agree on a field name without either coordinating with
+	///     the other beyond calling the same helper.
 	/// </summary>
 	public static string EmitEnumRegistration(string rootNamespace, IReadOnlyList<ShapeModel> shapes)
 	{
@@ -86,12 +91,17 @@ static class RegistrationEmitter
 				values.Add($"{value.Value}L");
 			}
 
-			fields.Add($"\tpublic static readonly {XmlNs}.EnumNameTable {fieldName} = new(typeof({enumType}), {WriterEmitter.Quote(typeName)}, [{string.Join(", ", nameRows)}], [{string.Join(", ", values)}]);");
+			fields.Add(
+				$"\tpublic static readonly {XmlNs}.EnumNameTable {fieldName} = new(typeof({enumType}), {WriterEmitter.Quote(typeName)}, [{string.Join(", ", nameRows)}], [{string.Join(", ", values)}]);");
 			adds.Add($"\t\tregistry.Add({fieldName});");
 		}
 
-		var fieldLines = fields.Count == 0 ? string.Empty : string.Join("\n", fields);
-		var addLines = adds.Count == 0 ? string.Empty : string.Join("\n", adds);
+		var fieldLines = fields.Count == 0 ?
+			string.Empty :
+			string.Join("\n", fields);
+		var addLines = adds.Count == 0 ?
+			string.Empty :
+			string.Join("\n", adds);
 
 		StringBuilder sb = new();
 		sb.AppendCSharp(

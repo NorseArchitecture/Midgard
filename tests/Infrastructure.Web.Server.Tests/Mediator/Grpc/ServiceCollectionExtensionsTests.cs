@@ -21,7 +21,7 @@ public sealed class ServiceCollectionExtensionsTests
 		[
 			typeof(UnhandledExceptionInterceptor),
 			typeof(PrincipalSeedingInterceptor),
-			typeof(OutcomeServerInterceptor),
+			typeof(OutcomeServerInterceptor)
 		]);
 	}
 }

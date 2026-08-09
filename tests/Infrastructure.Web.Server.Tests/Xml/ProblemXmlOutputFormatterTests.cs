@@ -6,10 +6,10 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Tests <see cref="ProblemXmlOutputFormatter"/>'s plumbing — supports only
-/// <c>application/problem+xml</c>, delegates to <see cref="ProblemXmlWriter"/> with the same canonical
-/// <c>XmlWriterSettings</c> as <see cref="XmlContractOutputFormatter"/>, and refuses a non-
-/// <see cref="ProblemDetails"/> value loudly rather than silently mis-writing it.
+///     Tests <see cref="ProblemXmlOutputFormatter" />'s plumbing — supports only
+///     <c>application/problem+xml</c>, delegates to <see cref="ProblemXmlWriter" /> with the same canonical
+///     <c>XmlWriterSettings</c> as <see cref="XmlContractOutputFormatter" />, and refuses a non-
+///     <see cref="ProblemDetails" /> value loudly rather than silently mis-writing it.
 /// </summary>
 public sealed class ProblemXmlOutputFormatterTests
 {
@@ -23,7 +23,8 @@ public sealed class ProblemXmlOutputFormatterTests
 		await formatter.WriteResponseBodyAsync(context, Encoding.UTF8);
 
 		var xml = Encoding.UTF8.GetString(responseBody.ToArray());
-		xml.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><problem xmlns="urn:ietf:rfc:7807"><title>Conflict</title><status>409</status></problem>""");
+		xml.ShouldBe(
+			"""<?xml version="1.0" encoding="utf-8"?><problem xmlns="urn:ietf:rfc:7807"><title>Conflict</title><status>409</status></problem>""");
 	}
 
 	[Fact]
@@ -45,7 +46,8 @@ public sealed class ProblemXmlOutputFormatterTests
 		var formatter = new ProblemXmlOutputFormatter();
 		var (context, _) = FormatterTestSupport.BuildWriteContext(new Widget(), typeof(Widget));
 
-		await Should.ThrowAsync<InvalidOperationException>(() => formatter.WriteResponseBodyAsync(context, Encoding.UTF8));
+		await Should.ThrowAsync<InvalidOperationException>(() =>
+			formatter.WriteResponseBodyAsync(context, Encoding.UTF8));
 	}
 
 	[Fact]

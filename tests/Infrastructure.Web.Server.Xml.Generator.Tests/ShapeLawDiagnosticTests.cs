@@ -4,10 +4,10 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
 
 /// <summary>
-/// One test per Futhark shape-law diagnostic (NORSE022-028) — a controller exposing a contract that
-/// violates exactly one law, asserting the diagnostic ID and that the reported location's source
-/// substring is the offending symbol's own name (the "squiggle lands on the offending symbol" bar).
-/// Plus the exposure-scoping negative (spec §15): the same kind of violation, unexposed, compiles clean.
+///     One test per Futhark shape-law diagnostic (NORSE022-028) — a controller exposing a contract that
+///     violates exactly one law, asserting the diagnostic ID and that the reported location's source
+///     substring is the offending symbol's own name (the "squiggle lands on the offending symbol" bar).
+///     Plus the exposure-scoping negative (spec §15): the same kind of violation, unexposed, compiles clean.
 /// </summary>
 public sealed class ShapeLawDiagnosticTests
 {
@@ -233,8 +233,9 @@ public sealed class ShapeLawDiagnosticTests
 			""";
 
 		var compilation = GeneratorTestHarness.CreateCompilation(Fixture).AddReferences(externalReference);
-		_ = CSharpGeneratorDriver.Create([new XmlShapeGenerator().AsSourceGenerator()])
-			.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics, TestContext.Current.CancellationToken);
+		_ = CSharpGeneratorDriver.Create(new XmlShapeGenerator().AsSourceGenerator())
+			.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics,
+				TestContext.Current.CancellationToken);
 
 		var diagnostic = diagnostics.ShouldHaveSingleItem();
 		diagnostic.Id.ShouldBe("NORSE025");
@@ -243,7 +244,10 @@ public sealed class ShapeLawDiagnosticTests
 		diagnostic.Location.SourceSpan.ShouldBe(default);
 	}
 
-	/// <summary>Compiles <paramref name="source"/> into an in-memory assembly and returns it as a metadata-only reference — a type from it resolves with no <c>IsInSource</c> location, exactly like a real shared-library dependency.</summary>
+	/// <summary>
+	///     Compiles <paramref name="source" /> into an in-memory assembly and returns it as a metadata-only reference — a
+	///     type from it resolves with no <c>IsInSource</c> location, exactly like a real shared-library dependency.
+	/// </summary>
 	static MetadataReference CompileToMetadataReference(string source)
 	{
 		var compilation = CSharpCompilation.Create(
@@ -593,7 +597,11 @@ public sealed class ShapeLawDiagnosticTests
 		diagnostics.ShouldBeEmpty();
 	}
 
-	/// <summary>The exact source substring at <paramref name="diagnostic"/>'s reported span, within <paramref name="fixture"/> — proves the squiggle lands on the offending symbol, not merely that the right ID fired.</summary>
+	/// <summary>
+	///     The exact source substring at <paramref name="diagnostic" />'s reported span, within
+	///     <paramref name="fixture" /> — proves the squiggle lands on the offending symbol, not merely that the right ID
+	///     fired.
+	/// </summary>
 	static string SourceAt(string fixture, Diagnostic diagnostic)
 	{
 		var span = diagnostic.Location.SourceSpan;

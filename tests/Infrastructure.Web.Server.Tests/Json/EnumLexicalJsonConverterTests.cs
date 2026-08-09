@@ -6,11 +6,7 @@ namespace Norse.Infrastructure.Web.Server.Tests.Json;
 
 public sealed class EnumLexicalJsonConverterTests
 {
-	enum TableStatus
-	{
-		Active = 1,
-		Inactive = 2
-	}
+	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
 
 	// Columns follow XmlCaseStyle's declared order: Camel, Pascal, Snake, Upper, Lower — the same
 	// hand-built idiom EnumLexicalTests (Xml) uses.
@@ -41,9 +37,11 @@ public sealed class EnumLexicalJsonConverterTests
 	[Fact]
 	void Read_plain_enum_wrong_case_throws_json_exception_rendering_the_malformed_failure()
 	{
-		var exception = Should.Throw<JsonException>(() => JsonSerializer.Deserialize<TableStatus>("\"Active\"", CreateOptions()));
+		var exception =
+			Should.Throw<JsonException>(() => JsonSerializer.Deserialize<TableStatus>("\"Active\"", CreateOptions()));
 
-		exception.Message.ShouldBe(FailureDetail.Render(new Failure(ParseFailure.Malformed, "Active", nameof(TableStatus))));
+		exception.Message.ShouldBe(
+			FailureDetail.Render(new Failure(ParseFailure.Malformed, "Active", nameof(TableStatus))));
 	}
 
 	[Fact]
@@ -55,7 +53,8 @@ public sealed class EnumLexicalJsonConverterTests
 	{
 		var options = NorseJsonTestOptions.Create(); // empty registry — no table for TableStatus
 
-		var exception = Should.Throw<NotSupportedException>(() => JsonSerializer.Deserialize<TableStatus>("\"active\"", options));
+		var exception =
+			Should.Throw<NotSupportedException>(() => JsonSerializer.Deserialize<TableStatus>("\"active\"", options));
 
 		exception.Message.ShouldBe(
 			"no generated name table for enum 'TableStatus' — an enum outside every facade closure has no text wire law");
@@ -106,14 +105,13 @@ public sealed class EnumLexicalJsonConverterTests
 		JsonSerializer.Serialize(result, CreateOptions()).ShouldBe("\"active\"");
 	}
 
-	const string IllegalWriteMessage = "a failed or default Result<T> is illegal to write";
-
 	[Fact]
 	void Write_result_enum_failure_throws_the_illegal_write_message()
 	{
 		Result<TableStatus> result = new Failure(ParseFailure.Malformed, "nope", nameof(TableStatus));
 
-		var exception = Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, CreateOptions()));
+		var exception =
+			Should.Throw<InvalidOperationException>(() => JsonSerializer.Serialize(result, CreateOptions()));
 
 		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
@@ -125,5 +123,11 @@ public sealed class EnumLexicalJsonConverterTests
 			JsonSerializer.Serialize(default(Result<TableStatus>), CreateOptions()));
 
 		exception.Message.ShouldBe(IllegalWriteMessage);
+	}
+
+	enum TableStatus
+	{
+		Active = 1,
+		Inactive = 2
 	}
 }

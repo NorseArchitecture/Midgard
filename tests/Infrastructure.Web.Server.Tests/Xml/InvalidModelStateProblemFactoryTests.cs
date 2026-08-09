@@ -9,10 +9,10 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Tests <see cref="InvalidModelStateProblemFactory"/> — the <c>[ApiController]</c> automatic-400
-/// factory that must render the identical <c>[{path, detail}]</c> shape (<see cref="ProblemErrorEntry"/>)
-/// as <c>GrpcControllerBase.FoldAsync</c> (Asgard) and negotiate to the RFC 9457 problem media types, not
-/// the plain ones the class-level <c>[Produces]</c> would otherwise back-fill.
+///     Tests <see cref="InvalidModelStateProblemFactory" /> — the <c>[ApiController]</c> automatic-400
+///     factory that must render the identical <c>[{path, detail}]</c> shape (<see cref="ProblemErrorEntry" />)
+///     as <c>GrpcControllerBase.FoldAsync</c> (Asgard) and negotiate to the RFC 9457 problem media types, not
+///     the plain ones the class-level <c>[Produces]</c> would otherwise back-fill.
 /// </summary>
 public sealed class InvalidModelStateProblemFactoryTests
 {
@@ -31,7 +31,8 @@ public sealed class InvalidModelStateProblemFactoryTests
 		result.ContentTypes.ShouldBe(["application/problem+json", "application/problem+xml"]);
 		var problem = result.Value.ShouldBeOfType<ProblemDetails>();
 		problem.Status.ShouldBe(StatusCodes.Status400BadRequest);
-		var entries = problem.Extensions["errors"].ShouldBeAssignableTo<IEnumerable<ProblemErrorEntry>>().ShouldNotBeNull().ToArray();
+		var entries = problem.Extensions["errors"].ShouldBeAssignableTo<IEnumerable<ProblemErrorEntry>>()
+			.ShouldNotBeNull().ToArray();
 		entries.Length.ShouldBe(3);
 		entries.ShouldContain(new ProblemErrorEntry("Policy/@birthDate", "cannot parse 'x' as DateOnly"));
 		entries.ShouldContain(new ProblemErrorEntry("Policy/Coverage[2]/@limit", "cannot parse 'y' as decimal"));

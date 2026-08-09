@@ -9,10 +9,10 @@ namespace Norse.Infrastructure.Web.Server.Generator;
 #pragma warning disable RS2008 // No analyzer-release ledger, matching the platform's other generators.
 
 /// <summary>
-/// Discovers a compilation's Norse gRPC contracts and their implementations at compile time and
-/// emits <c>MapNorseGrpcServices()</c> — code-first <c>MapGrpcService</c>/<c>EnableGrpcWeb</c>
-/// registration for every discovered service, plus idempotent <c>Outcome&lt;T&gt;</c> surrogate
-/// wiring against <c>RuntimeTypeModel.Default</c>.
+///     Discovers a compilation's Norse gRPC contracts and their implementations at compile time and
+///     emits <c>MapNorseGrpcServices()</c> — code-first <c>MapGrpcService</c>/<c>EnableGrpcWeb</c>
+///     registration for every discovered service, plus idempotent <c>Outcome&lt;T&gt;</c> surrogate
+///     wiring against <c>RuntimeTypeModel.Default</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class GrpcServerRegistrationGenerator : IIncrementalGenerator
@@ -37,7 +37,9 @@ public sealed class GrpcServerRegistrationGenerator : IIncrementalGenerator
 				productionContext.ReportDiagnostic(diagnostic);
 			if (result.Services.Length > 0 && !result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
 				productionContext.AddSource("NorseGrpcServerRegistration.g.cs",
-					SourceText.From(ServerRegistrationEmitter.Emit(result.RootNamespace, result.Services, result.Payloads), Utf8NoBom.Encoding));
+					SourceText.From(
+						ServerRegistrationEmitter.Emit(result.RootNamespace, result.Services, result.Payloads),
+						Utf8NoBom.Encoding));
 		});
 	}
 
@@ -75,7 +77,8 @@ public sealed class GrpcServerRegistrationGenerator : IIncrementalGenerator
 
 		var payloads = ContractDiscovery.DistinctPayloads(contracts);
 		foreach (var (shortName, fullNames) in ContractDiscovery.PayloadShortNameCollisions(payloads))
-			diagnostics.Add(Diagnostic.Create(_payloadShortNameCollision, Location.None, shortName, string.Join(", ", fullNames)));
+			diagnostics.Add(Diagnostic.Create(_payloadShortNameCollision, Location.None, shortName,
+				string.Join(", ", fullNames)));
 
 		var sortedServices = services
 			.OrderBy(s => s.InterfaceName, StringComparer.Ordinal)
@@ -84,5 +87,9 @@ public sealed class GrpcServerRegistrationGenerator : IIncrementalGenerator
 		return new DiscoveryResult(rootNamespace, sortedServices, payloads, diagnostics.ToImmutable());
 	}
 
-	sealed record DiscoveryResult(string RootNamespace, ImmutableArray<ServiceModel> Services, ImmutableArray<string> Payloads, ImmutableArray<Diagnostic> Diagnostics);
+	sealed record DiscoveryResult(
+		string RootNamespace,
+		ImmutableArray<ServiceModel> Services,
+		ImmutableArray<string> Payloads,
+		ImmutableArray<Diagnostic> Diagnostics);
 }

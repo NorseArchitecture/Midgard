@@ -1,10 +1,10 @@
 namespace Norse.Infrastructure.Web.Server.Xml;
 
 /// <summary>
-/// The wire-name casing conventions Futhark's XML serialization can project element and attribute
-/// names through. Deliberately <see langword="public"/>, not <see langword="internal sealed"/>:
-/// generated code in a host compilation (a different repo, later task) selects a member of this
-/// enum, so it must be visible outside this assembly.
+///     The wire-name casing conventions Futhark's XML serialization can project element and attribute
+///     names through. Deliberately <see langword="public" />, not <see langword="internal sealed" />:
+///     generated code in a host compilation (a different repo, later task) selects a member of this
+///     enum, so it must be visible outside this assembly.
 /// </summary>
 public enum XmlCaseStyle
 {

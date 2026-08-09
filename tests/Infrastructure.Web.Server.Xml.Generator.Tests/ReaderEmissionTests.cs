@@ -10,11 +10,11 @@ using WireCaseStyle = Norse.Infrastructure.Web.Server.Xml.XmlCaseStyle;
 namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
 
 /// <summary>
-/// Compiles a fixture contract set through the real generator, loads the emitted assembly, writes a
-/// value with the (already-shipped, Task 6) generated writer, and reads it back with the (this task's)
-/// generated reader — the presence-aware, accumulating <c>Read</c> design spec §8 describes. Every
-/// failure-path test hand-writes the XML fragment directly rather than round-tripping through the
-/// writer, since the writer by construction only ever emits input the reader accepts cleanly.
+///     Compiles a fixture contract set through the real generator, loads the emitted assembly, writes a
+///     value with the (already-shipped, Task 6) generated writer, and reads it back with the (this task's)
+///     generated reader — the presence-aware, accumulating <c>Read</c> design spec §8 describes. Every
+///     failure-path test hand-writes the XML fragment directly rather than round-tripping through the
+///     writer, since the writer by construction only ever emits input the reader accepts cleanly.
 /// </summary>
 public sealed class ReaderEmissionTests
 {
@@ -74,6 +74,50 @@ public sealed class ReaderEmissionTests
 		}
 		""";
 
+	const string RequiredNestedFixture = """
+		using System;
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.ReaderRequiredNested;
+
+		public enum Status
+		{
+			Draft = 1,
+			Active = 2
+		}
+
+		[DataContract]
+		public sealed record OrderRequest
+		{
+			[DataMember]
+			public Result<Status> State { get; init; }
+			[DataMember]
+			public Payment Payment { get; init; } = null!;
+		}
+
+		public sealed record Payment
+		{
+			[DataMember]
+			public Result<decimal> Amount { get; init; }
+		}
+
+		public sealed record OrderResponse
+		{
+			[DataMember]
+			public string Ok { get; init; } = "";
+		}
+
+		public sealed class OrderController : GrpcControllerBase
+		{
+			public Task<ActionResult<OrderResponse>> Do([FromBody] OrderRequest request) =>
+				Task.FromResult(new ActionResult<OrderResponse>(new OrderResponse()));
+		}
+		""";
+
 	[Fact]
 	void Happy_path_round_trip_preserves_a_required_empty_string()
 	{
@@ -120,8 +164,10 @@ public sealed class ReaderEmissionTests
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
 
 		context.Failures.Count.ShouldBe(2);
-		context.Failures.ShouldContain(f => f.Path == "personRequest/@birthday" && f.Detail == "unknown attribute — did you mean 'birthDate'?");
-		context.Failures.ShouldContain(f => f.Path == "personRequest/@birthDate" && f.Detail == "required value missing");
+		context.Failures.ShouldContain(f =>
+			f.Path == "personRequest/@birthday" && f.Detail == "unknown attribute — did you mean 'birthDate'?");
+		context.Failures.ShouldContain(f =>
+			f.Path == "personRequest/@birthDate" && f.Detail == "required value missing");
 	}
 
 	[Fact]
@@ -135,9 +181,12 @@ public sealed class ReaderEmissionTests
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
 
 		context.Failures.Count.ShouldBe(3);
-		context.Failures.ShouldContain(f => f.Path == "personRequest/@limit" && f.Detail == "cannot parse 'not-a-decimal' as Decimal");
-		context.Failures.ShouldContain(f => f.Path == "personRequest/@birthDate" && f.Detail == "cannot parse 'not-a-date' as DateOnly");
-		context.Failures.ShouldContain(f => f.Path == "personRequest/@age" && f.Detail == "cannot parse 'not-a-number' as Int32");
+		context.Failures.ShouldContain(f =>
+			f.Path == "personRequest/@limit" && f.Detail == "cannot parse 'not-a-decimal' as Decimal");
+		context.Failures.ShouldContain(f =>
+			f.Path == "personRequest/@birthDate" && f.Detail == "cannot parse 'not-a-date' as DateOnly");
+		context.Failures.ShouldContain(f =>
+			f.Path == "personRequest/@age" && f.Detail == "cannot parse 'not-a-number' as Int32");
 	}
 
 	[Fact]
@@ -146,7 +195,8 @@ public sealed class ReaderEmissionTests
 		var compiled = CompiledFixture.Build(PersonFixture);
 		var shape = compiled.Shape("PersonRequest");
 
-		var xml = """<personRequest name="ok" limit="1.00" birthDate="2020-01-15" age="1"><extra note="a" /><extra note="b" />stray text</personRequest>""";
+		var xml =
+			"""<personRequest name="ok" limit="1.00" birthDate="2020-01-15" age="1"><extra note="a" /><extra note="b" />stray text</personRequest>""";
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
 
@@ -193,11 +243,13 @@ public sealed class ReaderEmissionTests
 		var shape = compiled.Shape("PersonRequest");
 
 		// "extar" (transposed) is a distance-2 typo of "extra" — the complex member Detail's element name.
-		var xml = """<personRequest name="ok" limit="1.00" birthDate="2020-01-15" age="1"><extar note="a" /></personRequest>""";
+		var xml =
+			"""<personRequest name="ok" limit="1.00" birthDate="2020-01-15" age="1"><extar note="a" /></personRequest>""";
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
 
-		context.Failures.ShouldContain(f => f.Path == "personRequest/extar" && f.Detail == "unknown element — did you mean 'extra'?");
+		context.Failures.ShouldContain(f =>
+			f.Path == "personRequest/extar" && f.Detail == "unknown element — did you mean 'extra'?");
 	}
 
 	[Fact]
@@ -244,55 +296,12 @@ public sealed class ReaderEmissionTests
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
 
-		context.Failures.ShouldContain(f => f.Path == "wrongRoot" && f.Detail == "unexpected root element — expected 'personRequest'");
+		context.Failures.ShouldContain(f =>
+			f.Path == "wrongRoot" && f.Detail == "unexpected root element — expected 'personRequest'");
 		// The walk continued past the mismatch — no unknown-attribute or required-missing noise for the
 		// four attributes that were all actually present and valid.
 		context.Failures.Count.ShouldBe(1);
 	}
-
-	const string RequiredNestedFixture = """
-		using System;
-		using System.Runtime.Serialization;
-		using System.Threading.Tasks;
-		using Microsoft.AspNetCore.Mvc;
-		using Norse.Primitives;
-		using Norse.Abstractions.Web.Server.Facade;
-
-		namespace Norse.Fixtures.ReaderRequiredNested;
-
-		public enum Status
-		{
-			Draft = 1,
-			Active = 2
-		}
-
-		[DataContract]
-		public sealed record OrderRequest
-		{
-			[DataMember]
-			public Result<Status> State { get; init; }
-			[DataMember]
-			public Payment Payment { get; init; } = null!;
-		}
-
-		public sealed record Payment
-		{
-			[DataMember]
-			public Result<decimal> Amount { get; init; }
-		}
-
-		public sealed record OrderResponse
-		{
-			[DataMember]
-			public string Ok { get; init; } = "";
-		}
-
-		public sealed class OrderController : GrpcControllerBase
-		{
-			public Task<ActionResult<OrderResponse>> Do([FromBody] OrderRequest request) =>
-				Task.FromResult(new ActionResult<OrderResponse>(new OrderResponse()));
-		}
-		""";
 
 	[Fact]
 	void A_missing_required_singleton_element_is_accumulated_as_required_value_missing()
@@ -305,7 +314,8 @@ public sealed class ReaderEmissionTests
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
 
-		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/Payment", "required value missing"));
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("OrderRequest/Payment", "required value missing"));
 	}
 
 	[Fact]
@@ -318,7 +328,8 @@ public sealed class ReaderEmissionTests
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
 
-		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse 'Cancelled' as Status"));
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse 'Cancelled' as Status"));
 	}
 
 	[Fact]
@@ -334,7 +345,8 @@ public sealed class ReaderEmissionTests
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
 
-		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "required value missing"));
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("OrderRequest/@State", "required value missing"));
 	}
 
 	[Fact]
@@ -349,20 +361,22 @@ public sealed class ReaderEmissionTests
 
 		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.PascalCase);
 
-		context.Failures.ShouldHaveSingleItem().ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse '' as Status"));
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse '' as Status"));
 	}
 
 	static object GetProperty(object instance, string name)
 	{
-		var property = instance.GetType().GetProperty(name) ?? throw new InvalidOperationException($"Property '{name}' was not found on '{instance.GetType()}'.");
+		var property = instance.GetType().GetProperty(name) ??
+			throw new InvalidOperationException($"Property '{name}' was not found on '{instance.GetType()}'.");
 		return property.GetValue(instance)!;
 	}
 
 	/// <summary>
-	/// Simulates the not-yet-built Task 8 formatter's contract with a generated shape: position an
-	/// <see cref="XmlReader"/> on the document's content, push the root element's own observed name
-	/// (the caller's responsibility per <see cref="ReaderEmitter"/>'s remarks — <c>Read</c> itself never
-	/// pushes its own path segment), call <c>ReadObject</c>, then pop.
+	///     Simulates the not-yet-built Task 8 formatter's contract with a generated shape: position an
+	///     <see cref="XmlReader" /> on the document's content, push the root element's own observed name
+	///     (the caller's responsibility per <see cref="ReaderEmitter" />'s remarks — <c>Read</c> itself never
+	///     pushes its own path segment), call <c>ReadObject</c>, then pop.
 	/// </summary>
 	static (object? Value, XmlReadContext Context) ReadRoot(IXmlShape shape, string xml, WireCaseStyle style)
 	{
@@ -376,8 +390,12 @@ public sealed class ReaderEmissionTests
 		return (value, context);
 	}
 
-	/// <summary>Same protocol as <see cref="ReadRoot"/>, but for a standalone fragment (no XML declaration) — the shape of a nested member read in isolation, exactly like <c>WriterEmissionTests</c>' <c>WriteFragment</c> counterpart.</summary>
-	static (object? Value, XmlReadContext Context) ReadFragment(IXmlShape shape, string xml, string expectedRootName, WireCaseStyle style)
+	/// <summary>
+	///     Same protocol as <see cref="ReadRoot" />, but for a standalone fragment (no XML declaration) — the shape of a
+	///     nested member read in isolation, exactly like <c>WriterEmissionTests</c>' <c>WriteFragment</c> counterpart.
+	/// </summary>
+	static (object? Value, XmlReadContext Context) ReadFragment(IXmlShape shape, string xml, string expectedRootName,
+		WireCaseStyle style)
 	{
 		using var stringReader = new StringReader(xml);
 		var settings = new XmlReaderSettings { ConformanceLevel = ConformanceLevel.Fragment };
@@ -416,7 +434,9 @@ public sealed class ReaderEmissionTests
 		}
 
 		public Type ResolveType(string fullyQualifiedName) =>
-			_assembly.GetType(fullyQualifiedName) ?? throw new InvalidOperationException($"Type '{fullyQualifiedName}' was not found in the compiled fixture assembly.");
+			_assembly.GetType(fullyQualifiedName) ??
+			throw new InvalidOperationException(
+				$"Type '{fullyQualifiedName}' was not found in the compiled fixture assembly.");
 
 		public IXmlShape Shape(string contractShortName)
 		{

@@ -3,13 +3,15 @@
 @inject IThemeService ThemeService
 
 @code {
-	// IThemeService is JS-interop-backed; it isn't callable until the circuit has rendered once.
+
+    // IThemeService is JS-interop-backed; it isn't callable until the circuit has rendered once.
     /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
-	{
-		if (firstRender)
-		{
-			await ThemeService.SetThemeAsync(new ThemeSettings(FluentTokenSeed.AccentBaseColor, Mode: ThemeMode.System));
-		}
-	}
+    {
+        if (firstRender)
+        {
+            await ThemeService.SetThemeAsync(new ThemeSettings(FluentTokenSeed.AccentBaseColor, Mode: ThemeMode.System));
+        }
+    }
+
 }

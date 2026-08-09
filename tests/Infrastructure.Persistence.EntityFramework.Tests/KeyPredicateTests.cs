@@ -113,7 +113,8 @@ public sealed class KeyPredicateTests
 	void A_key_type_that_is_neither_Guid_nor_Guid_constructible_throws_naming_the_key_type()
 	{
 		using var context = CreateContext();
-		var exception = Should.Throw<InvalidOperationException>(() => KeyPredicate.For<IntKeyedEntity>(context, Guid.NewGuid()));
+		var exception =
+			Should.Throw<InvalidOperationException>(() => KeyPredicate.For<IntKeyedEntity>(context, Guid.NewGuid()));
 		exception.Message.ShouldContain(typeof(int).ToString());
 	}
 
@@ -121,7 +122,8 @@ public sealed class KeyPredicateTests
 	void An_entity_with_no_primary_key_throws_naming_the_entity_type()
 	{
 		using var context = CreateContext();
-		var exception = Should.Throw<InvalidOperationException>(() => KeyPredicate.For<KeylessEntity>(context, Guid.NewGuid()));
+		var exception =
+			Should.Throw<InvalidOperationException>(() => KeyPredicate.For<KeylessEntity>(context, Guid.NewGuid()));
 		exception.Message.ShouldContain(typeof(KeylessEntity).ToString());
 		exception.Message.ShouldContain("no primary key");
 	}
@@ -130,7 +132,9 @@ public sealed class KeyPredicateTests
 	void An_entity_with_a_composite_primary_key_throws_naming_the_entity_type()
 	{
 		using var context = CreateContext();
-		var exception = Should.Throw<InvalidOperationException>(() => KeyPredicate.For<CompositeKeyedEntity>(context, Guid.NewGuid()));
+		var exception =
+			Should.Throw<InvalidOperationException>(() =>
+				KeyPredicate.For<CompositeKeyedEntity>(context, Guid.NewGuid()));
 		exception.Message.ShouldContain(typeof(CompositeKeyedEntity).ToString());
 		exception.Message.ShouldContain("composite primary key");
 	}
@@ -139,7 +143,8 @@ public sealed class KeyPredicateTests
 	void An_entity_with_a_shadow_property_primary_key_throws_naming_the_entity_type()
 	{
 		using var context = CreateContext();
-		var exception = Should.Throw<InvalidOperationException>(() => KeyPredicate.For<ShadowKeyedEntity>(context, Guid.NewGuid()));
+		var exception =
+			Should.Throw<InvalidOperationException>(() => KeyPredicate.For<ShadowKeyedEntity>(context, Guid.NewGuid()));
 		exception.Message.ShouldContain(typeof(ShadowKeyedEntity).ToString());
 		exception.Message.ShouldContain("shadow property");
 	}

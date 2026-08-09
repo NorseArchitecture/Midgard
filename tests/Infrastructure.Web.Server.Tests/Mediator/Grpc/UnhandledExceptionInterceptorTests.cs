@@ -12,7 +12,8 @@ sealed class TestLogger : ILogger<UnhandledExceptionInterceptor>
 	IDisposable? ILogger.BeginScope<TState>(TState state) => null;
 	bool ILogger.IsEnabled(LogLevel logLevel) => true;
 
-	void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+	void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+		Func<TState, Exception?, string> formatter)
 	{
 		if (logLevel == LogLevel.Error)
 			ErrorLogCount++;
@@ -56,7 +57,7 @@ public sealed class UnhandledExceptionInterceptorTests
 	{
 		TestLogger logger = new();
 		UnhandledExceptionInterceptor interceptor = new(logger);
-		RpcException original = new(new(StatusCode.NotFound, "not found"));
+		RpcException original = new(new Status(StatusCode.NotFound, "not found"));
 
 		var exception = await Should.ThrowAsync<RpcException>(async () =>
 			await interceptor.UnaryServerHandler<string, object>(

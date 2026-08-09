@@ -85,7 +85,8 @@ public sealed class PiiResultSerializerTests
 	void Round_trips_the_remaining_taxonomy_rows_PersonalName_PhoneNumber_BirthDate()
 	{
 		var model = TestModel.Create();
-		var payload = TestModel.Serialize(model, new PlainPiiTrioEnvelope { Name = "Brian", Phone = "+15125550143", Born = "1980-01-02" });
+		var payload = TestModel.Serialize(model,
+			new PlainPiiTrioEnvelope { Name = "Brian", Phone = "+15125550143", Born = "1980-01-02" });
 
 		var back = TestModel.Deserialize<PiiTrioEnvelope>(model, payload);
 
@@ -101,15 +102,13 @@ public sealed class PiiResultSerializerTests
 [ProtoContract]
 public sealed class PiiEnvelope
 {
-	[ProtoMember(1)]
-	public Result<EmailAddress> Email { get; set; }
+	[ProtoMember(1)] public Result<EmailAddress> Email { get; set; }
 }
 
 [ProtoContract]
 public sealed class PlainPiiEnvelope
 {
-	[ProtoMember(1)]
-	public string? Email { get; set; }
+	[ProtoMember(1)] public string? Email { get; set; }
 }
 
 [ProtoContract]
@@ -118,25 +117,19 @@ public sealed class EmptyEnvelope;
 [ProtoContract]
 public sealed class PiiTrioEnvelope
 {
-	[ProtoMember(1)]
-	public Result<PersonalName> Name { get; set; }
+	[ProtoMember(1)] public Result<PersonalName> Name { get; set; }
 
-	[ProtoMember(2)]
-	public Result<PhoneNumber> Phone { get; set; }
+	[ProtoMember(2)] public Result<PhoneNumber> Phone { get; set; }
 
-	[ProtoMember(3)]
-	public Result<BirthDate> Born { get; set; }
+	[ProtoMember(3)] public Result<BirthDate> Born { get; set; }
 }
 
 [ProtoContract]
 public sealed class PlainPiiTrioEnvelope
 {
-	[ProtoMember(1)]
-	public string? Name { get; set; }
+	[ProtoMember(1)] public string? Name { get; set; }
 
-	[ProtoMember(2)]
-	public string? Phone { get; set; }
+	[ProtoMember(2)] public string? Phone { get; set; }
 
-	[ProtoMember(3)]
-	public string? Born { get; set; }
+	[ProtoMember(3)] public string? Born { get; set; }
 }

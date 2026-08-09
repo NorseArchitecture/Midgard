@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -8,8 +10,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Trace;
-using System.Diagnostics;
-using System.Net;
 
 namespace Norse.Infrastructure.ServiceDefaults.AspNet.Tests;
 
@@ -32,9 +32,11 @@ public sealed class WebApplicationExtensionsTests
 		await using var app = BuildProbeHost();
 		await app.StartAsync(TestContext.Current.CancellationToken);
 		using var client = app.GetTestClient();
-		(await client.GetAsync(new Uri(HealthEndpoints.Liveness, UriKind.Relative), TestContext.Current.CancellationToken))
+		(await client.GetAsync(new Uri(HealthEndpoints.Liveness, UriKind.Relative),
+				TestContext.Current.CancellationToken))
 			.StatusCode.ShouldBe(HttpStatusCode.OK);
-		(await client.GetAsync(new Uri(HealthEndpoints.Readiness, UriKind.Relative), TestContext.Current.CancellationToken))
+		(await client.GetAsync(new Uri(HealthEndpoints.Readiness, UriKind.Relative),
+				TestContext.Current.CancellationToken))
 			.StatusCode.ShouldBe(HttpStatusCode.OK);
 	}
 
@@ -46,9 +48,11 @@ public sealed class WebApplicationExtensionsTests
 			.AddCheck("database", static () => HealthCheckResult.Unhealthy()));
 		await app.StartAsync(TestContext.Current.CancellationToken);
 		using var client = app.GetTestClient();
-		(await client.GetAsync(new Uri(HealthEndpoints.Liveness, UriKind.Relative), TestContext.Current.CancellationToken))
+		(await client.GetAsync(new Uri(HealthEndpoints.Liveness, UriKind.Relative),
+				TestContext.Current.CancellationToken))
 			.StatusCode.ShouldBe(HttpStatusCode.OK);
-		(await client.GetAsync(new Uri(HealthEndpoints.Readiness, UriKind.Relative), TestContext.Current.CancellationToken))
+		(await client.GetAsync(new Uri(HealthEndpoints.Readiness, UriKind.Relative),
+				TestContext.Current.CancellationToken))
 			.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
 	}
 
@@ -60,7 +64,8 @@ public sealed class WebApplicationExtensionsTests
 			.AddCheck("database", static () => HealthCheckResult.Healthy()));
 		await app.StartAsync(TestContext.Current.CancellationToken);
 		using var client = app.GetTestClient();
-		var body = await (await client.GetAsync(new Uri(HealthEndpoints.Readiness, UriKind.Relative), TestContext.Current.CancellationToken))
+		var body = await (await client.GetAsync(new Uri(HealthEndpoints.Readiness, UriKind.Relative),
+				TestContext.Current.CancellationToken))
 			.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 		body.ShouldBe("Healthy");
 		body.ShouldNotContain("database");
@@ -101,6 +106,7 @@ public sealed class WebApplicationExtensionsTests
 			if (exported.Count == 0)
 				await Task.Delay(10, TestContext.Current.CancellationToken);
 		}
+
 		exported.ShouldHaveSingleItem().DisplayName.ShouldContain(Sentinel);
 	}
 }

