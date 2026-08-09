@@ -20,9 +20,12 @@ namespace Norse.Infrastructure.Web.Grpc;
 ///     <c>default(Result{T})</c> — protobuf-net's native behavior for any field whose tag never appears on
 ///     the wire, since deserialize only ever invokes a field's serializer for tags it actually finds —
 ///     which <c>Infrastructure.Web.Server</c>'s <c>ResultRules</c> validation catches downstream (spec
-///     §9.3). <see cref="ResultEnumSerializer{TEnum}" /> is the one row still fully deserialization-only:
-///     its <c>Write</c> throws unconditionally for every state, success included, until it gains its own
-///     success branch. <c>Result{T}?</c> (<see cref="Nullable{T}" /> of <see cref="Result{T}" />) needs no
+///     §9.3). <see cref="ResultEnumSerializer{TEnum}" /> follows the same law as every other row: its
+///     <c>Write</c> unwraps a success to the enum's own native varint, mirroring
+///     <see cref="ResultSerializer{T}" />'s <c>Write</c>, and throws only for the same two illegal states —
+///     failure and default — plus a third, enum-specific one: a success carrying an undefined value, which
+///     for a <see cref="FlagsAttribute" /> enum means leftover bits outside the defined set. <c>Result{T}?</c>
+///     (<see cref="Nullable{T}" /> of <see cref="Result{T}" />) needs no
 ///     separate registration: protobuf-net's built-in <see cref="Nullable{T}" /> handling already skips the
 ///     write when null and leaves null on an absent read; a present <see cref="Result{T}" /> wrapped in the
 ///     nullable still reaches the same serializer's <c>Write</c>, unwrap-or-throw law and all.

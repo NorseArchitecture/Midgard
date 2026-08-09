@@ -8,7 +8,9 @@ namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 ///     attributes then declaration-order child elements, null scalars omitted, <c>Result&lt;T&gt;</c>
 ///     unwrap-on-success (a failed or default <c>Result&lt;T&gt;</c> throws — the same platform-wide
 ///     wording the JSON and gRPC legs use), enum values rendered through the shared runtime
-///     <c>EnumLexical.Format</c>/<c>EnumNameTable</c> mechanism (Task 8) — never a per-shape switch — and
+///     <c>EnumLexical.Format</c>/<c>EnumNameTable</c> mechanism (Task 8) — never a per-shape switch — a
+///     <c>[Flags]</c> member rendered as repeated governed-name child elements against that same table
+///     (amendment 2026-08-09, <see cref="WriteFlags" />) rather than an attribute, and
 ///     recursion into nested/collection complex members via their own generated shape classes — never a
 ///     second writer, one recursive projection reused as both "the root" and "a fragment," which is
 ///     exactly why this method never calls <c>WriteStartDocument</c>: the XML declaration is a
@@ -140,7 +142,9 @@ static class WriterEmitter
 	{
 		List<string> lines = [];
 		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
-			lines.Add($"\tstatic readonly string[] _{member.ClrName}AttrNames = {NamesLiteral(member.WireNames)};");
+			lines.Add(member.IsFlagsEnum ?
+				$"\tstatic readonly string[] _{member.ClrName}ElementNames = {NamesLiteral(member.WireNames)};" :
+				$"\tstatic readonly string[] _{member.ClrName}AttrNames = {NamesLiteral(member.WireNames)};");
 
 		return lines.Count == 0 ?
 			string.Empty :
@@ -150,7 +154,7 @@ static class WriterEmitter
 	static string WriteAttributes(ShapeModel shape, string rootNamespace)
 	{
 		List<string> lines = [];
-		foreach (var member in shape.Members.Where(m => m.Kind == MemberKind.Scalar))
+		foreach (var member in shape.Members.Where(m => m is { Kind: MemberKind.Scalar, IsFlagsEnum: false }))
 			lines.Add(WriteAttribute(member, rootNamespace));
 
 		return lines.Count == 0 ?
@@ -217,14 +221,137 @@ static class WriterEmitter
 	static string WriteChildren(string rootNamespace, ShapeModel shape)
 	{
 		List<string> lines = [];
-		foreach (var member in shape.Members.Where(m => m.Kind != MemberKind.Scalar))
-			lines.Add(member.Kind == MemberKind.Collection ?
-				WriteCollection(rootNamespace, member) :
-				WriteComplex(rootNamespace, member));
+		foreach (var member in shape.Members.Where(m => m.Kind != MemberKind.Scalar || m.IsFlagsEnum))
+			lines.Add(member.IsFlagsEnum ?
+				WriteFlags(rootNamespace, member) :
+				member.Kind == MemberKind.Collection ?
+					WriteCollection(rootNamespace, member) :
+					WriteComplex(rootNamespace, member));
 
 		return lines.Count == 0 ?
 			string.Empty :
 			string.Join("\n", lines);
+	}
+
+	/// <summary>
+	///     Renders a flags member's write as repeated governed-name child elements (amendment 2026-08-09) —
+	///     never attributes: the set bits decompose in the enum table's member-declaration order, each
+	///     single-bit member present emitting one member-named element with the bit's governed name as text
+	///     content, via <see cref="FlagsDecomposition" />. The <c>Result&lt;T&gt;</c>/nullable prologue combos
+	///     mirror <see cref="WriteAttribute" />'s exactly, pinned message included.
+	/// </summary>
+	static string WriteFlags(string rootNamespace, MemberModel member)
+	{
+		if (member is { IsResultWrapped: true, IsNullable: true })
+		{
+			var wrapperVar = $"{member.ClrName}Wrapper";
+			var unwrapVar = UnwrapVar(member);
+			return
+				$$"""
+						if (value.{{member.ClrName}}.HasValue)
+						{
+							var {{wrapperVar}} = value.{{member.ClrName}}.Value;
+							if (!{{wrapperVar}}.TryGetValue(out global::Norse.Primitives.Success<{{member.ScalarTypeName}}> {{unwrapVar}}))
+								throw new global::System.InvalidOperationException("a failed or default Result<T> is illegal to write");
+				{{FlagsDecomposition(rootNamespace, member, $"{unwrapVar}.Value", indent: "\t\t\t")}}
+						}
+				""";
+		}
+
+		if (member is { IsResultWrapped: true, IsNullable: false })
+		{
+			var unwrapVar = UnwrapVar(member);
+			return
+				$$"""
+						if (!value.{{member.ClrName}}.TryGetValue(out global::Norse.Primitives.Success<{{member.ScalarTypeName}}> {{unwrapVar}}))
+							throw new global::System.InvalidOperationException("a failed or default Result<T> is illegal to write");
+				{{FlagsDecomposition(rootNamespace, member, $"{unwrapVar}.Value", indent: "\t\t")}}
+				""";
+		}
+
+		if (member is { IsResultWrapped: false, IsNullable: true })
+		{
+			var rawVar = $"{member.ClrName}Raw";
+			return
+				$$"""
+						if (value.{{member.ClrName}} is { } {{rawVar}})
+						{
+				{{FlagsDecomposition(rootNamespace, member, rawVar, indent: "\t\t\t")}}
+						}
+				""";
+		}
+
+		return FlagsDecomposition(rootNamespace, member, $"value.{member.ClrName}", indent: "\t\t");
+	}
+
+	/// <summary>
+	///     The decomposition core <see cref="WriteFlags" /> splices behind its prologue combos: the legality
+	///     gate first — any set bit outside the build-time mask of the table's nonzero single-bit member
+	///     values (composite/aggregate members contribute nothing to it) is illegal to write and throws
+	///     before a single element is written — then one table pass in member-declaration order, emitting
+	///     each single-bit member still present in the remaining bits and clearing as it goes, so an alias
+	///     member (two names, one value) emits its first-declared name only. The zero value walks the loop
+	///     without emitting: no elements is the wire's natural zero.
+	/// </summary>
+	static string FlagsDecomposition(string rootNamespace, MemberModel member, string valueExpression, string indent)
+	{
+		var table = EnumTableReference(rootNamespace, member.ScalarTypeName!);
+		var camel = $"{char.ToLowerInvariant(member.ClrName[0])}{member.ClrName.Substring(1)}";
+		var bitsVar = $"__{camel}Bits";
+		var indexVar = $"__{camel}Index";
+		var flagVar = $"__{camel}Flag";
+		var mask = $"unchecked((long)0x{SingleBitMask(member.EnumValues):X}UL)";
+		var bitsExpression = BitsExpression(member, valueExpression);
+		// The emitted throw's table hole rides parenthesized — an interpolation hole in the EMITTED
+		// interpolated string ends its expression at the first top-level ':', so a bare global::-qualified
+		// reference would parse as a format clause there.
+		return
+			$$"""
+			{{indent}}if (({{bitsExpression}} & ~{{mask}}) != 0L)
+			{{indent}}	throw new global::System.InvalidOperationException($"'{{{valueExpression}}}' carries bits with no single-bit member of '{({{table}}.EnumType)}' and is illegal to write.");
+			{{indent}}var {{bitsVar}} = {{bitsExpression}};
+			{{indent}}for (var {{indexVar}} = 0; {{indexVar}} < {{table}}.Count; {{indexVar}}++)
+			{{indent}}{
+			{{indent}}	var {{flagVar}} = {{table}}.Value({{indexVar}});
+			{{indent}}	if ({{flagVar}} == 0L || ({{flagVar}} & ({{flagVar}} - 1L)) != 0L || ({{bitsVar}} & {{flagVar}}) != {{flagVar}})
+			{{indent}}		continue;
+			{{indent}}	writer.WriteElementString(_{{member.ClrName}}ElementNames[(int)style], {{table}}.Name({{indexVar}}, (int)style));
+			{{indent}}	{{bitsVar}} &= ~{{flagVar}};
+			{{indent}}}
+			""";
+	}
+
+	/// <summary>
+	///     The emitted expression projecting a flags value into the shared 64-bit table representation —
+	///     zero-extending signed 1/2/4-byte underlying types through the unsigned same-width cast so the
+	///     result matches the zero-extended table values (<c>ClosureWalker.ToBits</c>, the build-time twin
+	///     of the runtime <c>EnumLexical.ToBits</c> law). A bare <c>(long)</c> cast sign-extends: an
+	///     int-backed <c>1 &lt;&lt; 31</c> member would land at 0xFFFFFFFF80000000, trip the legality mask,
+	///     and throw for a perfectly writable value. The unsigned/8-byte underlying types need no
+	///     intermediate cast — their <c>(long)</c> conversion already carries the bits identically.
+	/// </summary>
+	static string BitsExpression(MemberModel member, string valueExpression) =>
+		member.EnumUnderlyingTypeName switch
+		{
+			"sbyte" => $"unchecked((long)(byte){valueExpression})",
+			"short" => $"unchecked((long)(ushort){valueExpression})",
+			"int" => $"unchecked((long)(uint){valueExpression})",
+			_ => $"unchecked((long){valueExpression})"
+		};
+
+	/// <summary>
+	///     The union of the table's nonzero single-bit member values — the exact set of bits a flags value
+	///     may legally carry onto the wire, computed at generation time from the same
+	///     <see cref="EnumValueModel" /> table the registration emits.
+	/// </summary>
+	static long SingleBitMask(EquatableArray<EnumValueModel> values)
+	{
+		var mask = 0L;
+		foreach (var value in values)
+			if (value.Value != 0 && (value.Value & (value.Value - 1)) == 0)
+				mask |= value.Value;
+
+		return mask;
 	}
 
 	static string WriteCollection(string rootNamespace, MemberModel member)

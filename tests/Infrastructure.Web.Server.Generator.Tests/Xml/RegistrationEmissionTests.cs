@@ -207,6 +207,76 @@ public sealed class RegistrationEmissionTests
 		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.RequestB"), out _).ShouldBeTrue();
 	}
 
+	const string FlagsEnumFixture = """
+		using System;
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.RegistrationFlags;
+
+		[Flags]
+		public enum AccessRights
+		{
+			None = 0,
+			Read = 1,
+			Write = 2,
+			Execute = 4,
+			All = Read | Write | Execute
+		}
+
+		[DataContract]
+		public sealed record GrantRequest
+		{
+			[DataMember]
+			public Result<AccessRights> Rights { get; init; }
+		}
+
+		public sealed record GrantResponse
+		{
+			[DataMember]
+			public string Status { get; init; } = "";
+		}
+
+		public sealed class GrantController : GrpcControllerBase
+		{
+			public Task<ActionResult<GrantResponse>> Do([FromBody] GrantRequest request) =>
+				Task.FromResult(new ActionResult<GrantResponse>(new GrantResponse()));
+		}
+		""";
+
+	[Fact]
+	void EnumRegistration_Build_registers_a_flags_enum_table_exactly_as_for_a_plain_one()
+	{
+		// One table, one algorithm (§2.3): a [Flags] enum's table carries every defined member —
+		// the named zero and the composite aggregate included — in declaration order, exactly as a
+		// plain enum's table would; being flags changes how the emitted shape consumes the table,
+		// never how the table is built.
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(FlagsEnumFixture);
+		diagnostics.ShouldBeEmpty();
+
+		var assembly = Emit(outputCompilation);
+		var rootNamespace = outputCompilation.AssemblyName!;
+		var registrationType = assembly.GetType($"{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration")
+			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated.");
+		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
+
+		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
+
+		var accessRightsType = assembly.GetType("Norse.Fixtures.RegistrationFlags.AccessRights")
+			?? throw new InvalidOperationException("AccessRights was not found in the compiled fixture assembly.");
+
+		registry.TryGet(accessRightsType, out var table).ShouldBeTrue();
+		table!.TypeName.ShouldBe("AccessRights");
+		table.Count.ShouldBe(5);
+		table.Value(0).ShouldBe(0L);
+		table.Value(4).ShouldBe(7L);
+		table.Name(1, (int)XmlCaseStyle.SnakeCase).ShouldBe("read");
+		table.Name(4, (int)XmlCaseStyle.SnakeCase).ShouldBe("all");
+	}
+
 	[Fact]
 	void EnumRegistration_Build_registers_a_table_for_every_reachable_enum_and_none_for_an_unexposed_one()
 	{

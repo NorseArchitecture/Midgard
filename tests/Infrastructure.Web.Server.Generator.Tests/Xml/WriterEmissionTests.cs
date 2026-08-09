@@ -168,6 +168,107 @@ public sealed class WriterEmissionTests
 		}
 		""";
 
+	const string FlagsFixture = """
+		#nullable enable
+		using System;
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.WriterFlags;
+
+		[Flags]
+		public enum AccessRights
+		{
+			None = 0,
+			Read = 1,
+			Write = 2,
+			Execute = 4,
+			All = Read | Write | Execute
+		}
+
+		[Flags]
+		public enum ArchiveMode
+		{
+			ReadWrite = 3,
+			Append = 4
+		}
+
+		[DataContract]
+		public sealed record GrantRequest
+		{
+			[DataMember]
+			public Result<AccessRights> Rights { get; init; }
+			[DataMember]
+			public Result<AccessRights>? OptionalRights { get; init; }
+		}
+
+		public sealed record GrantResponse
+		{
+			[DataMember]
+			public int Code { get; init; }
+			[DataMember]
+			public AccessRights Rights { get; init; }
+			[DataMember]
+			public ArchiveMode Mode { get; init; }
+			[DataMember]
+			public AccessRights? MaybeRights { get; init; }
+		}
+
+		public sealed class GrantController : GrpcControllerBase
+		{
+			public Task<ActionResult<GrantResponse>> Do([FromBody] GrantRequest request) =>
+				Task.FromResult(new ActionResult<GrantResponse>(new GrantResponse()));
+		}
+		""";
+
+	const string AccessRightsFullName = "Norse.Fixtures.WriterFlags.AccessRights";
+	const string ArchiveModeFullName = "Norse.Fixtures.WriterFlags.ArchiveMode";
+
+	const string SignBitFixture = """
+		#nullable enable
+		using System;
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.WriterSignBit;
+
+		[Flags]
+		public enum AuditBits
+		{
+			Low = 1,
+			Vault = unchecked(1 << 31)
+		}
+
+		[DataContract]
+		public sealed record AuditRequest
+		{
+			[DataMember]
+			public Result<string> Name { get; init; }
+		}
+
+		public sealed record AuditResponse
+		{
+			[DataMember]
+			public int Code { get; init; }
+			[DataMember]
+			public AuditBits Bits { get; init; }
+		}
+
+		public sealed class AuditController : GrpcControllerBase
+		{
+			public Task<ActionResult<AuditResponse>> Do([FromBody] AuditRequest request) =>
+				Task.FromResult(new ActionResult<AuditResponse>(new AuditResponse()));
+		}
+		""";
+
+	const string AuditBitsFullName = "Norse.Fixtures.WriterSignBit.AuditBits";
+
 	const string SharedTypeFixture = """
 		using System.Runtime.Serialization;
 		using System.Threading.Tasks;
@@ -487,6 +588,229 @@ public sealed class WriterEmissionTests
 		// write, and this member (Tag.Name) is raw, so it can actually reach WriteFragment successfully.
 		WriteFragment(shape, withTags, WireCaseStyle.SnakeCase)
 			.ShouldBe("""<ping_response code="200"><tag name="a" /><tag name="b" /></ping_response>""");
+	}
+
+	[Fact]
+	void A_flags_member_decomposes_set_bits_in_declaration_order_as_repeated_governed_name_elements()
+	{
+		// Read | Execute (5) — the two set bits emit one member-named element each, governed-name text
+		// content, in the enum table's member-declaration order (read before execute), never attributes.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse",
+			("Code", 200),
+			("Rights", Enum.ToObject(compiled.ResolveType(AccessRightsFullName), 5)));
+
+		WriteFragment(shape, response, WireCaseStyle.SnakeCase)
+			.ShouldBe(
+				"""<grant_response code="200"><rights>read</rights><rights>execute</rights></grant_response>""");
+	}
+
+	[Fact]
+	void A_zero_valued_flags_member_emits_no_elements()
+	{
+		// The zero value renders as no elements at all — for AccessRights (a named zero member, None)
+		// and ArchiveMode (no zero member) alike: the empty array is the natural zero either way.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse", ("Code", 200));
+
+		WriteFragment(shape, response, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<grant_response code="200" />""");
+	}
+
+	[Fact]
+	void A_composite_member_never_emits_its_own_name_and_its_bits_decompose_into_single_bit_members()
+	{
+		// All = Read | Write | Execute (7) — the composite/aggregate member is never emitted; its fully
+		// covered bits decompose into the three single-bit members instead.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse",
+			("Code", 200),
+			("Rights", Enum.ToObject(compiled.ResolveType(AccessRightsFullName), 7)));
+
+		var fragment = WriteFragment(shape, response, WireCaseStyle.SnakeCase);
+
+		fragment.ShouldBe(
+			"""<grant_response code="200"><rights>read</rights><rights>write</rights><rights>execute</rights></grant_response>""");
+		fragment.ShouldNotContain("all");
+	}
+
+	[Fact]
+	void A_flags_value_carrying_an_undefined_bit_throws_on_write()
+	{
+		// Read | 8 (9) — bit 8 has no table member at all: leftover/undefined bits are illegal to
+		// write, and the throw fires before a single element of the member is written.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+		var accessRightsType = compiled.ResolveType(AccessRightsFullName);
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse",
+			("Code", 200),
+			("Rights", Enum.ToObject(accessRightsType, 9)));
+
+		var exception =
+			Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.SnakeCase));
+
+		exception.Message.ShouldBe(
+			$"'9' carries bits with no single-bit member of '{accessRightsType}' and is illegal to write.");
+	}
+
+	[Fact]
+	void A_flags_value_covered_only_by_a_composite_member_throws_on_write()
+	{
+		// ArchiveMode.ReadWrite (3) is a defined member, but a composite one — composites are never
+		// emitted, and bits 1 and 2 have no single-bit member to decompose into, so the value is
+		// illegal to write even though it is a defined member of the enum.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+		var archiveModeType = compiled.ResolveType(ArchiveModeFullName);
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse",
+			("Code", 200),
+			("Mode", Enum.ToObject(archiveModeType, 3)));
+
+		var exception =
+			Should.Throw<InvalidOperationException>(() => WriteFragment(shape, response, WireCaseStyle.SnakeCase));
+
+		exception.Message.ShouldBe(
+			$"'ReadWrite' carries bits with no single-bit member of '{archiveModeType}' and is illegal to write.");
+	}
+
+	[Fact]
+	void A_Result_wrapped_flags_member_unwraps_on_success_and_decomposes()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantRequest",
+			("Rights", compiled.CreateEnumSuccess(AccessRightsFullName, 3)));
+
+		WriteFragment(shape, request, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<grant_request><rights>read</rights><rights>write</rights></grant_request>""");
+	}
+
+	[Fact]
+	void A_null_optional_Result_wrapped_flags_member_writes_nothing_and_a_present_one_decomposes()
+	{
+		// The Result<T>?-wrapped flags shape (request side): CLR null omits the member entirely — no
+		// elements, exactly like a null optional attribute-shaped scalar — and a present success
+		// decomposes through the same governed-name element form as its required sibling.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var withoutOptional = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantRequest",
+			("Rights", compiled.CreateEnumSuccess(AccessRightsFullName, 1)));
+		WriteFragment(shape, withoutOptional, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<grant_request><rights>read</rights></grant_request>""");
+
+		var withOptional = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantRequest",
+			("Rights", compiled.CreateEnumSuccess(AccessRightsFullName, 1)),
+			("OptionalRights", compiled.CreateEnumSuccess(AccessRightsFullName, 6)));
+		WriteFragment(shape, withOptional, WireCaseStyle.SnakeCase)
+			.ShouldBe(
+				"""<grant_request><rights>read</rights><optional_rights>write</optional_rights><optional_rights>execute</optional_rights></grant_request>""");
+	}
+
+	[Fact]
+	void A_null_bare_nullable_flags_member_writes_nothing_and_a_present_one_decomposes()
+	{
+		// The bare nullable flags shape (response side): CLR null omits the member entirely, and a
+		// present value decomposes exactly like the non-nullable sibling.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+
+		var withoutMaybe = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse", ("Code", 200));
+		WriteFragment(shape, withoutMaybe, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<grant_response code="200" />""");
+
+		var withMaybe = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantResponse",
+			("Code", 200),
+			("MaybeRights", Enum.ToObject(compiled.ResolveType(AccessRightsFullName), 5)));
+		WriteFragment(shape, withMaybe, WireCaseStyle.SnakeCase)
+			.ShouldBe(
+				"""<grant_response code="200"><maybe_rights>read</maybe_rights><maybe_rights>execute</maybe_rights></grant_response>""");
+	}
+
+	[Fact]
+	void A_failed_or_default_Result_wrapped_flags_member_throws_the_pinned_message()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var request = compiled.CreateInstance("Norse.Fixtures.WriterFlags.GrantRequest",
+			("Rights", compiled.CreateEnumDefault(AccessRightsFullName)));
+
+		var exception =
+			Should.Throw<InvalidOperationException>(() => WriteFragment(shape, request, WireCaseStyle.SnakeCase));
+
+		exception.Message.ShouldBe(IllegalWriteMessage);
+	}
+
+	[Fact]
+	void A_sign_bit_flags_member_emits_the_zero_extended_positive_table_value()
+	{
+		// An int-backed [Flags] member at 1 << 31 zero-extends into the emitted table (the platform's
+		// runtime law, EnumLexical.ToBits) — 2147483648L, never the sign-extended -2147483648 a bare
+		// Convert.ToInt64 over the boxed int constant would produce.
+		GeneratorDriver driver = CSharpGeneratorDriver.Create([new XmlShapeGenerator().AsSourceGenerator()],
+			parseOptions: GeneratorTestHarness.ParseOptions);
+		driver = driver.RunGeneratorsAndUpdateCompilation(GeneratorTestHarness.CreateCompilation(SignBitFixture),
+			out _, out var diagnostics, TestContext.Current.CancellationToken);
+
+		diagnostics.ShouldBeEmpty();
+
+		var registrationSource = driver.GetRunResult().Results.Single().GeneratedSources
+			.Single(s => s.HintName == "NorseEnumNameRegistration.g.cs").SourceText.ToString();
+		registrationSource.ShouldContain("2147483648L");
+		registrationSource.ShouldNotContain("-2147483648");
+	}
+
+	[Fact]
+	void A_sign_bit_flags_member_classifies_single_bit_and_write_decomposes_it()
+	{
+		// Zero-extended, 1 << 31 is a genuine single bit (0x80000000): it joins the legality mask, the
+		// composite/single-bit test passes, and the write decomposes it as an ordinary governed-name
+		// element — never the misleading "carries bits with no single-bit member" throw sign-extension
+		// used to produce.
+		var compiled = CompiledFixture.Build(SignBitFixture);
+		var shape = compiled.Shape("AuditResponse");
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterSignBit.AuditResponse",
+			("Code", 200),
+			("Bits", Enum.ToObject(compiled.ResolveType(AuditBitsFullName), (1 << 31) | 1)));
+
+		WriteFragment(shape, response, WireCaseStyle.SnakeCase)
+			.ShouldBe("""<audit_response code="200"><bits>low</bits><bits>vault</bits></audit_response>""");
+	}
+
+	[Fact]
+	void A_sign_bit_flags_value_round_trips_through_write_and_read()
+	{
+		var compiled = CompiledFixture.Build(SignBitFixture);
+		var shape = compiled.Shape("AuditResponse");
+		var original = Enum.ToObject(compiled.ResolveType(AuditBitsFullName), (1 << 31) | 1);
+
+		var response = compiled.CreateInstance("Norse.Fixtures.WriterSignBit.AuditResponse",
+			("Code", 200), ("Bits", original));
+		var fragment = WriteFragment(shape, response, WireCaseStyle.SnakeCase);
+
+		using var stringReader = new StringReader(fragment);
+		var settings = new XmlReaderSettings { ConformanceLevel = ConformanceLevel.Fragment };
+		using var reader = XmlReader.Create(stringReader, settings);
+		reader.MoveToContent();
+		XmlReadContext context = new();
+		context.PushElement(reader.LocalName);
+		var roundTripped = shape.ReadObject(reader, WireCaseStyle.SnakeCase, context);
+		context.Pop();
+
+		context.HasFailures.ShouldBeFalse();
+		var bits = roundTripped!.GetType().GetProperty("Bits")!.GetValue(roundTripped);
+		bits.ShouldBe(original);
 	}
 
 	[Fact]

@@ -441,8 +441,12 @@ public sealed class ShapeLawDiagnosticTests
 	}
 
 	[Fact]
-	void NORSE029_fires_on_a_Result_wrapped_flags_enum_in_the_request_closure()
+	void A_flags_member_in_either_closure_no_longer_strikes()
 	{
+		// The 2026-08-09 amendment overturns the flags ban outright — NORSE029 is deleted, not narrowed.
+		// A [Flags] enum rides the closure like any other scalar (Result-wrapped on the request side,
+		// bare on the response side); the channels own the translation into repeated governed-name
+		// elements, so there is nothing left for the shape law to strike.
 		const string Fixture = """
 			using System;
 			using System.Runtime.Serialization;
@@ -451,118 +455,33 @@ public sealed class ShapeLawDiagnosticTests
 			using Norse.Primitives;
 			using Norse.Abstractions.Web.Server.Facade;
 
-			namespace Norse.Fixtures.N029Request;
+			namespace Norse.Fixtures.FlagsLegal;
 
 			[Flags]
 			public enum AccessRights
 			{
 				None = 0,
-				Read = 1
+				Read = 1,
+				Write = 2
 			}
 
 			[DataContract]
-			public sealed record BadRequest
+			public sealed record GrantRequest
 			{
 				[DataMember]
-				public Result<AccessRights> Perm { get; init; }
+				public Result<AccessRights> Requested { get; init; }
 			}
 
-			public sealed record GoodResponse
+			public sealed record GrantResponse
 			{
 				[DataMember]
-				public string Status { get; init; } = "";
+				public AccessRights Granted { get; init; }
 			}
 
-			public sealed class BadController : GrpcControllerBase
+			public sealed class GrantController : GrpcControllerBase
 			{
-				public Task<ActionResult<GoodResponse>> Do([FromBody] BadRequest request) =>
-					Task.FromResult(new ActionResult<GoodResponse>(new GoodResponse()));
-			}
-			""";
-
-		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
-
-		var diagnostic = diagnostics.ShouldHaveSingleItem();
-		diagnostic.Id.ShouldBe("NORSE029");
-		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
-		SourceAt(Fixture, diagnostic).ShouldBe("Perm");
-	}
-
-	[Fact]
-	void NORSE029_fires_on_a_plain_flags_enum_in_the_response_closure()
-	{
-		const string Fixture = """
-			using System;
-			using System.Runtime.Serialization;
-			using System.Threading.Tasks;
-			using Microsoft.AspNetCore.Mvc;
-			using Norse.Primitives;
-			using Norse.Abstractions.Web.Server.Facade;
-
-			namespace Norse.Fixtures.N029Response;
-
-			[Flags]
-			public enum AccessRights
-			{
-				None = 0,
-				Read = 1
-			}
-
-			[DataContract]
-			public sealed record GoodRequest
-			{
-				[DataMember]
-				public Result<string> Value { get; init; }
-			}
-
-			public sealed record BadResponse
-			{
-				[DataMember]
-				public AccessRights Perm { get; init; }
-			}
-
-			public sealed class BadController : GrpcControllerBase
-			{
-				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
-					Task.FromResult(new ActionResult<BadResponse>(new BadResponse()));
-			}
-			""";
-
-		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
-
-		var diagnostic = diagnostics.ShouldHaveSingleItem();
-		diagnostic.Id.ShouldBe("NORSE029");
-		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
-		SourceAt(Fixture, diagnostic).ShouldBe("Perm");
-	}
-
-	[Fact]
-	void NORSE029_does_not_fire_when_the_flags_contract_is_unexposed()
-	{
-		const string Fixture = """
-			using System;
-			using System.Runtime.Serialization;
-			using Microsoft.AspNetCore.Mvc;
-			using Norse.Abstractions.Web.Server.Facade;
-
-			namespace Norse.Fixtures.N029ExposureScoping;
-
-			[Flags]
-			public enum AccessRights
-			{
-				None = 0,
-				Read = 1
-			}
-
-			[DataContract]
-			public sealed record UnexposedFlagsRequest
-			{
-				[DataMember]
-				public AccessRights Perm { get; init; }
-			}
-
-			public sealed class HarmlessController : GrpcControllerBase
-			{
+				public Task<ActionResult<GrantResponse>> Do([FromBody] GrantRequest request) =>
+					Task.FromResult(new ActionResult<GrantResponse>(new GrantResponse()));
 			}
 			""";
 

@@ -121,6 +121,65 @@ public sealed class ReaderEmissionTests
 		}
 		""";
 
+	const string FlagsFixture = """
+		#nullable enable
+		using System;
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.ReaderFlags;
+
+		[Flags]
+		public enum AccessRights
+		{
+			None = 0,
+			Read = 1,
+			Write = 2,
+			Execute = 4
+		}
+
+		[Flags]
+		public enum ArchiveMode
+		{
+			ReadWrite = 3,
+			Append = 4
+		}
+
+		[DataContract]
+		public sealed record GrantRequest
+		{
+			[DataMember]
+			public Result<string> Name { get; init; }
+			[DataMember]
+			public Result<AccessRights> Rights { get; init; }
+			[DataMember]
+			public Result<AccessRights>? OptionalRights { get; init; }
+		}
+
+		public sealed record GrantResponse
+		{
+			[DataMember]
+			public int Code { get; init; }
+			[DataMember]
+			public AccessRights Rights { get; init; }
+			[DataMember]
+			public ArchiveMode Mode { get; init; }
+			[DataMember]
+			public AccessRights? MaybeRights { get; init; }
+		}
+
+		public sealed class GrantController : GrpcControllerBase
+		{
+			public Task<ActionResult<GrantResponse>> Do([FromBody] GrantRequest request) =>
+				Task.FromResult(new ActionResult<GrantResponse>(new GrantResponse()));
+		}
+		""";
+
+	const string AccessRightsFullName = "Norse.Fixtures.ReaderFlags.AccessRights";
+
 	[Fact]
 	void Happy_path_round_trip_preserves_a_required_empty_string()
 	{
@@ -368,6 +427,165 @@ public sealed class ReaderEmissionTests
 			.ShouldBe(new XmlReadFailure("OrderRequest/@State", "cannot parse '' as Status"));
 	}
 
+	[Fact]
+	void Flags_tokens_OR_accumulate_into_the_bare_member_regardless_of_document_order()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantResponse");
+
+		// Execute before read in the document — the parsed set is the OR of its tokens, so document
+		// order never matters to the value.
+		var xml = """<grantResponse code="7"><rights>execute</rights><rights>read</rights></grantResponse>""";
+
+		var (value, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
+
+		context.HasFailures.ShouldBeFalse();
+		GetProperty(value!, "Code").ShouldBe(7);
+		GetProperty(value!, "Rights").ShouldBe(Enum.ToObject(compiled.ResolveType(AccessRightsFullName), 5));
+	}
+
+	[Fact]
+	void Flags_tokens_OR_accumulate_into_a_success_for_a_Result_wrapped_member()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var xml = """<grantRequest name="ok"><rights>read</rights><rights>write</rights></grantRequest>""";
+
+		var (value, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
+
+		context.HasFailures.ShouldBeFalse();
+		GetProperty(value!, "Rights").ShouldBe(compiled.CreateEnumSuccess(AccessRightsFullName, 3));
+	}
+
+	[Fact]
+	void An_entirely_absent_flags_member_reads_as_the_zero_value_with_no_failure()
+	{
+		// The empty array is the zero value, legal with or without a named zero member — never the
+		// required-value-missing failure a required plain scalar's absence yields: AccessRights carries
+		// a named zero (None), ArchiveMode carries none, and both read as their zero value.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+
+		var (request, requestContext) =
+			ReadRoot(compiled.Shape("GrantRequest"), """<grantRequest name="ok" />""", WireCaseStyle.CamelCase);
+		requestContext.HasFailures.ShouldBeFalse();
+		GetProperty(request!, "Rights").ShouldBe(compiled.CreateEnumSuccess(AccessRightsFullName, 0));
+
+		var (response, responseContext) =
+			ReadRoot(compiled.Shape("GrantResponse"), """<grantResponse code="1" />""", WireCaseStyle.CamelCase);
+		responseContext.HasFailures.ShouldBeFalse();
+		GetProperty(response!, "Rights")
+			.ShouldBe(Enum.ToObject(compiled.ResolveType(AccessRightsFullName), 0));
+		GetProperty(response!, "Mode")
+			.ShouldBe(Enum.ToObject(compiled.ResolveType("Norse.Fixtures.ReaderFlags.ArchiveMode"), 0));
+	}
+
+	[Fact]
+	void An_absent_nullable_flags_member_reads_as_the_zero_value_never_CLR_null()
+	{
+		// Deliberate law: the repeated-element (array) form has no absence marker — zero elements IS the
+		// zero value, so a nullable flags member can never read back as CLR null the way a nullable
+		// attribute-shaped scalar does. Both nullable shapes (Result<T>? and bare T?) land on the
+		// non-null zero.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+
+		var (request, requestContext) =
+			ReadRoot(compiled.Shape("GrantRequest"), """<grantRequest name="ok" />""", WireCaseStyle.CamelCase);
+		requestContext.HasFailures.ShouldBeFalse();
+		var optionalRights = GetProperty(request!, "OptionalRights");
+		optionalRights.ShouldNotBeNull();
+		optionalRights.ShouldBe(compiled.CreateEnumSuccess(AccessRightsFullName, 0));
+
+		var (response, responseContext) =
+			ReadRoot(compiled.Shape("GrantResponse"), """<grantResponse code="1" />""", WireCaseStyle.CamelCase);
+		responseContext.HasFailures.ShouldBeFalse();
+		var maybeRights = GetProperty(response!, "MaybeRights");
+		maybeRights.ShouldNotBeNull();
+		maybeRights.ShouldBe(Enum.ToObject(compiled.ResolveType(AccessRightsFullName), 0));
+	}
+
+	[Fact]
+	void A_present_nullable_flags_member_OR_accumulates_its_tokens()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+
+		var xml =
+			"""<grantRequest name="ok"><optionalRights>read</optionalRights><optionalRights>write</optionalRights></grantRequest>""";
+		var (request, context) = ReadRoot(compiled.Shape("GrantRequest"), xml, WireCaseStyle.CamelCase);
+
+		context.HasFailures.ShouldBeFalse();
+		GetProperty(request!, "OptionalRights").ShouldBe(compiled.CreateEnumSuccess(AccessRightsFullName, 3));
+	}
+
+	[Theory]
+	[InlineData("rread", "unknown value — did you mean 'read'?")]
+	[InlineData("Read", "unknown value — did you mean 'read'?")]
+	[InlineData("banana", "unknown value")]
+	void An_unknown_flags_token_accumulates_with_the_did_you_mean_suggestion(string token, string expectedDetail)
+	{
+		// Tokens resolve by exact governed-name match only — a typo ("rread") and a wrong-case spelling
+		// ("Read") both miss, and both get the case-insensitive nearest-name suggestion; an unrelated
+		// token gets none.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var xml = $"""<grantRequest name="ok"><rights>{token}</rights></grantRequest>""";
+
+		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
+
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("grantRequest/rights[1]", expectedDetail));
+	}
+
+	[Fact]
+	void A_duplicate_flags_token_accumulates_a_failure_and_the_set_carries_the_token_once()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var xml = """<grantRequest name="ok"><rights>read</rights><rights>read</rights></grantRequest>""";
+
+		var (value, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
+
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("grantRequest/rights[2]", "duplicate value"));
+		GetProperty(value!, "Rights").ShouldBe(compiled.CreateEnumSuccess(AccessRightsFullName, 1));
+	}
+
+	[Fact]
+	void Nested_markup_inside_a_flags_element_accumulates_a_failure_and_the_walk_continues()
+	{
+		// A flags element carries a governed-name token as text content, never markup — but nested markup
+		// is an accumulable failure like every sibling failure path (unknown token, duplicate, text
+		// content), never an exception escaping the reader: the offending element is consumed whole and
+		// the walk continues to the valid sibling.
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		var xml = """<grantRequest name="ok"><rights><x /></rights><rights>read</rights></grantRequest>""";
+
+		var (value, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
+
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("grantRequest/rights[1]", "nested markup is not permitted"));
+		GetProperty(value!, "Rights").ShouldBe(compiled.CreateEnumSuccess(AccessRightsFullName, 1));
+	}
+
+	[Fact]
+	void An_unknown_element_near_a_flags_member_name_suggests_it()
+	{
+		var compiled = CompiledFixture.Build(FlagsFixture);
+		var shape = compiled.Shape("GrantRequest");
+
+		// "rigths" (transposed) is a distance-2 typo of the flags member's element name "rights".
+		var xml = """<grantRequest name="ok"><rigths>read</rigths></grantRequest>""";
+
+		var (_, context) = ReadRoot(shape, xml, WireCaseStyle.CamelCase);
+
+		context.Failures.ShouldHaveSingleItem()
+			.ShouldBe(new XmlReadFailure("grantRequest/rigths", "unknown element — did you mean 'rights'?"));
+	}
+
 	static object GetProperty(object instance, string name)
 	{
 		var property = instance.GetType().GetProperty(name) ??
@@ -445,6 +663,25 @@ public sealed class ReaderEmissionTests
 		{
 			var shapeType = ResolveType($"{_rootNamespace}.NorseXmlShapes.{contractShortName}XmlShape");
 			return (IXmlShape)Activator.CreateInstance(shapeType)!;
+		}
+
+		/// <summary>
+		///     Builds a <c>Result&lt;TEnum&gt;</c> success case for a fixture-local enum only known by name at
+		///     this test project's own compile time — <c>WriterEmissionTests</c>' helper of the same name,
+		///     reflected the same way: <c>Result&lt;T&gt;.op_Implicit</c> is the only public surface that
+		///     constructs a success case without a compile-time <c>T</c>. <c>Result&lt;T&gt;</c> is a record
+		///     struct, so the boxed instance compares by value against a generated reader's own — the flags
+		///     facts' Shouldly assertions ride exactly that.
+		/// </summary>
+		public object CreateEnumSuccess(string enumFullyQualifiedName, int underlyingValue)
+		{
+			var enumType = ResolveType(enumFullyQualifiedName);
+			var resultType = typeof(Result<>).MakeGenericType(enumType);
+			var implicitOperator = resultType.GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, null,
+					[enumType], null)
+				?? throw new InvalidOperationException(
+					$"'{resultType}' has no implicit conversion operator from '{enumType}'.");
+			return implicitOperator.Invoke(null, [Enum.ToObject(enumType, underlyingValue)])!;
 		}
 	}
 }

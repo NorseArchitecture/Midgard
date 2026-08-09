@@ -141,7 +141,7 @@ static class ClosureWalker
 			diagnostics.Add(DiagnosticInfo.Create(Diagnostics.TaxonomyViolation, property,
 				TaxonomyMessage(classification.Problem, property, owner)));
 			return new MemberModel(property.Name, classification.Kind, NameCasing.ApplyAll(property.Name),
-				classification.IsResultWrapped, classification.IsNullable, null, null, false,
+				classification.IsResultWrapped, classification.IsNullable, null, null, false, null,
 				EquatableArray<EnumValueModel>.Empty);
 		}
 
@@ -155,6 +155,10 @@ static class ClosureWalker
 					owner.ToDisplayString(_displayFormat)));
 		}
 
+		// Flags are legal in either closure, carried bare on the contract (design spec
+		// 2026-08-02-futhark-enum-wire-law-design.md, Amendment 2026-08-09) — recorded as a member
+		// trait the emitters translate into the repeated governed-name element shape, never a strike.
+		// The enum table builds identically for flags and plain enums: one table, one algorithm (§2.3).
 		var isEnum = classification.ScalarType is { TypeKind: TypeKind.Enum };
 		var isFlags = isEnum && ctx.FlagsAttribute is not null &&
 			((INamedTypeSymbol)classification.ScalarType!).GetAttributes().Any(a =>
@@ -162,12 +166,11 @@ static class ClosureWalker
 		var enumValues = isEnum ?
 			BuildEnumTable((INamedTypeSymbol)classification.ScalarType!) :
 			EquatableArray<EnumValueModel>.Empty;
-
-		// Flags are interior compression — banned from the facade closure outright (design spec
-		// 2026-08-02-futhark-enum-wire-law-design.md §2.2): plain or Result-wrapped, either closure.
-		if (isFlags)
-			diagnostics.Add(DiagnosticInfo.Create(Diagnostics.FlagsEnumInClosure, property, property.Name,
-				owner.ToDisplayString(_displayFormat)));
+		// FullyQualifiedFormat renders special types as their bare keywords ("int", "uint", ...) — the
+		// exact strings WriterEmitter's zero-extension dispatch matches on.
+		var enumUnderlyingTypeName = isEnum ?
+			((INamedTypeSymbol)classification.ScalarType!).EnumUnderlyingType!.ToDisplayString(_displayFormat) :
+			null;
 
 		return new MemberModel(
 			property.Name,
@@ -178,6 +181,7 @@ static class ClosureWalker
 			classification.ScalarType?.ToDisplayString(_displayFormat),
 			classification.ComplexType?.ToDisplayString(_displayFormat),
 			isFlags,
+			enumUnderlyingTypeName,
 			enumValues);
 	}
 
@@ -402,8 +406,29 @@ static class ClosureWalker
 		EquatableArray<EnumValueModel>.Create(
 			enumType.GetMembers().OfType<IFieldSymbol>()
 				.Where(f => f is { IsConst: true, HasConstantValue: true })
-				.Select(f => new EnumValueModel(f.Name, NameCasing.ApplyAll(f.Name),
-					Convert.ToInt64(f.ConstantValue, CultureInfo.InvariantCulture))));
+				.Select(f => new EnumValueModel(f.Name, NameCasing.ApplyAll(f.Name), ToBits(f.ConstantValue!))));
+
+	/// <summary>
+	///     Zero-extends a boxed enum-member constant into the shared 64-bit table representation — the
+	///     build-time twin of the runtime law (<c>EnumLexical.ToBits</c>): 1/2/4-byte underlying types
+	///     zero-extend through the unsigned same-width type, 8-byte types carry their bits identically
+	///     (bit 63 genuinely is the sign bit there). A bare <c>Convert.ToInt64</c> would sign-extend
+	///     instead, landing an int-backed <c>1 &lt;&lt; 31</c> member at -2147483648L — which fails every
+	///     downstream single-bit test (generation-time mask and emitted table alike) and misclassifies
+	///     the member composite.
+	/// </summary>
+	static long ToBits(object constantValue) => constantValue switch
+	{
+		sbyte value => unchecked((byte)value),
+		byte value => value,
+		short value => unchecked((ushort)value),
+		ushort value => value,
+		int value => unchecked((uint)value),
+		uint value => value,
+		long value => value,
+		ulong value => unchecked((long)value),
+		_ => Convert.ToInt64(constantValue, CultureInfo.InvariantCulture)
+	};
 
 	static string TaxonomyMessage(TaxonomyProblem problem, IPropertySymbol property, INamedTypeSymbol owner) =>
 		problem switch

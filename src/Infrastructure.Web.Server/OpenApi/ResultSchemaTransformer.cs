@@ -24,9 +24,11 @@ namespace Norse.Infrastructure.Web.Server.OpenApi;
 ///     component schema survives, and <see cref="EnumSchemaTransformer" /> governs that referenced component
 ///     directly, so it is never inlined twice. Only the <c>Result&lt;TEnum&gt;</c> branch resolves an enum's
 ///     governed name list here, from the generated <see cref="EnumNameRegistry" /> via
-///     <see cref="EnumSchemaTransformer.ApplyGovernedList" /> — the same shared helper
-///     <see cref="EnumSchemaTransformer" /> uses for a plain enum schema node, so the two transformers never
-///     independently drift on how a table's names render.
+///     <see cref="EnumSchemaTransformer.ApplyGovernedList" /> — or, for a <c>[Flags]</c> element type,
+///     <see cref="EnumSchemaTransformer.ApplyGovernedFlagsList" />, the identical <c>type: array</c> fork the
+///     raw-member path takes — the same shared helpers <see cref="EnumSchemaTransformer" /> uses for a plain
+///     or flags enum schema node, so the two transformers never independently drift on how a table's names,
+///     or the flags shape fork, render.
 /// </summary>
 public sealed class ResultSchemaTransformer(EnumNameRegistry registry, NorseXmlOptions options)
 	: IOpenApiSchemaTransformer
@@ -102,7 +104,10 @@ public sealed class ResultSchemaTransformer(EnumNameRegistry registry, NorseXmlO
 				$"no generated name table for enum '{clrType.Name}' — an enum outside every facade closure has no text wire law");
 
 		schema = new OpenApiSchema();
-		EnumSchemaTransformer.ApplyGovernedList(schema, table, (int)_options.CaseStyle);
+		if (clrType.IsDefined(typeof(FlagsAttribute), inherit: false))
+			EnumSchemaTransformer.ApplyGovernedFlagsList(schema, table, (int)_options.CaseStyle);
+		else
+			EnumSchemaTransformer.ApplyGovernedList(schema, table, (int)_options.CaseStyle);
 		return true;
 	}
 }

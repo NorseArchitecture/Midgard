@@ -165,6 +165,54 @@ public sealed class TransformerTests
 	}
 
 	[Fact]
+	async Task Flags_enum_member_renders_as_type_array_with_governed_string_items_from_the_same_table()
+	{
+		var document = await BuildDocumentAsync();
+
+		// Flags enums still route through the framework's own per-CLR-type component dedup, exactly like
+		// TableStatus above — the property itself carries only the $ref.
+		document["components"]!["schemas"]!["QuoteReport"]!["properties"]!["coverageOptions"]!["$ref"]!
+			.GetValue<string>().ShouldBe("#/components/schemas/CoverageOptions");
+
+		var options = document["components"]!["schemas"]!["CoverageOptions"]!;
+		options["type"]!.GetValue<string>().ShouldBe("array");
+		options.AsObject().ContainsKey("enum").ShouldBeFalse(); // the picklist moves down to items — the outer array schema carries none of its own.
+		options.AsObject().ContainsKey("format").ShouldBeFalse();
+
+		var items = options["items"]!;
+		items["type"]!.GetValue<string>().ShouldBe("string");
+		var members = items["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+		members.ShouldBe(["fire", "flood"]); // the same governed table a plain enum would project, unfiltered.
+
+		// Same response-only readOnly policy as the plain-enum component path (NORSE022/23) — a flags
+		// member is never request-side either.
+		options["readOnly"]!.GetValue<bool>().ShouldBeTrue();
+	}
+
+	[Fact]
+	async Task Result_wrapped_flags_enum_member_renders_as_type_array_with_governed_string_items()
+	{
+		var document = await BuildDocumentAsync();
+
+		// The Result<TEnum> branch builds its schema inline (never a $ref — see the class doc's remark on
+		// why the union leak forces a full replacement there), so the array/items shape is asserted
+		// directly on the property, mirroring how Result_wrapped_TableStatus_member_... reads statusResult.
+		var options = document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["options"]!;
+		options["type"]!.GetValue<string>().ShouldBe("array");
+		options.AsObject().ContainsKey("enum").ShouldBeFalse();
+
+		var items = options["items"]!;
+		items["type"]!.GetValue<string>().ShouldBe("string");
+		var members = items["enum"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+		members.ShouldBe(["fire", "flood"]);
+
+		// Request-side Result<TEnum> members carry writeOnly, never readOnly — the same distinction the
+		// plain Result<TableStatus> fact above already covers for the non-flags row.
+		options["writeOnly"]!.GetValue<bool>().ShouldBeTrue();
+		options.AsObject().ContainsKey("readOnly").ShouldBeFalse();
+	}
+
+	[Fact]
 	async Task Result_wrapped_TableStatus_member_renders_the_identical_governed_string_list_under_a_camel_case_host()
 	{
 		var document = await BuildDocumentAsync(caseStyle: XmlCaseStyle.CamelCase);
@@ -305,10 +353,11 @@ public sealed class TransformerTests
 
 	/// <summary>
 	///     Columns follow <see cref="XmlCaseStyle" />'s declared order (Camel/Pascal/Snake/Upper/Lower) — the
-	///     same hand-built idiom <c>EnumLexicalJsonConverterTests</c> uses. Both fixture enums this test
-	///     file's contracts reference (<see cref="CoverageKind" />, <see cref="TableStatus" />) get a table
-	///     here — <see cref="ResultSchemaTransformer" /> and <see cref="EnumSchemaTransformer" /> both throw on
-	///     an unregistered enum, so every enum the fixture types reference must carry one.
+	///     same hand-built idiom <c>EnumLexicalJsonConverterTests</c> uses. Every fixture enum this test
+	///     file's contracts reference (<see cref="CoverageKind" />, <see cref="TableStatus" />,
+	///     <see cref="CoverageOptions" />) gets a table here — <see cref="ResultSchemaTransformer" /> and
+	///     <see cref="EnumSchemaTransformer" /> both throw on an unregistered enum, so every enum the fixture
+	///     types reference must carry one.
 	/// </summary>
 	static EnumNameRegistry BuildEnumRegistry()
 	{
@@ -329,6 +378,14 @@ public sealed class TransformerTests
 				["inactive", "Inactive", "inactive", "INACTIVE", "inactive"]
 			],
 			[0, 1]));
+		registry.Add(new EnumNameTable(
+			typeof(CoverageOptions),
+			nameof(CoverageOptions),
+			[
+				["fire", "Fire", "fire", "FIRE", "fire"],
+				["flood", "Flood", "flood", "FLOOD", "flood"]
+			],
+			[1, 2]));
 		return registry;
 	}
 
@@ -414,6 +471,7 @@ sealed class QuoteRequest
 	public Result<int> LineCount { get; init; }
 	public Result<CoverageKind> Kind { get; init; }
 	public Result<TableStatus> StatusResult { get; init; }
+	public Result<CoverageOptions> Options { get; init; }
 	public List<CoverageLine> Lines { get; init; } = [];
 }
 
@@ -444,6 +502,18 @@ sealed class QuoteReport
 {
 	public string PolicyStatus { get; init; } = "";
 	public TableStatus Status { get; init; }
+	public CoverageOptions CoverageOptions { get; init; }
+}
+
+/// <summary>
+///     The <c>[Flags]</c> fixture enum for Task 4's array-schema coverage — two single-bit members are
+///     enough to prove the shape change without needing a composite (multi-bit) member.
+/// </summary>
+[Flags]
+enum CoverageOptions
+{
+	Fire = 1,
+	Flood = 2
 }
 
 /// <summary>

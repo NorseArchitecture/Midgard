@@ -10,7 +10,10 @@ namespace Norse.Infrastructure.Web.Server.OpenApi;
 ///     twentieth taxonomy row): every schema node the native AspNetCore.OpenApi pipeline generates for an
 ///     enum CLR type — never gated to <c>[DataContract]</c> types, since an enum is an enum regardless of
 ///     what encloses it — becomes a case-styled <c>string</c>/<c>enum:</c> list sourced from the generated
-///     <see cref="EnumNameRegistry" />, never the framework's own numeric default. Twinned with
+///     <see cref="EnumNameRegistry" />, never the framework's own numeric default; a <c>[Flags]</c> CLR type
+///     forks onto <c>type: array</c> with that same list moved down to <c>items</c> instead (see
+///     <see cref="ApplyGovernedFlagsList" />) — the picklist survives the shape change, never a second table.
+///     Twinned with
 ///     <see cref="ResultSchemaTransformer" />, which routes the <c>Result&lt;TEnum&gt;</c>-wrapped half of
 ///     the same law through <see cref="ApplyGovernedList" /> below — the one shared mechanism both
 ///     transformers project a table's names through, so the two can never independently drift on how a
@@ -50,7 +53,10 @@ public sealed class EnumSchemaTransformer(EnumNameRegistry registry, NorseXmlOpt
 			throw new NotSupportedException(
 				$"no generated name table for enum '{type.Name}' — an enum outside every facade closure has no text wire law");
 
-		ApplyGovernedList(schema, table, (int)_options.CaseStyle);
+		if (type.IsDefined(typeof(FlagsAttribute), inherit: false))
+			ApplyGovernedFlagsList(schema, table, (int)_options.CaseStyle);
+		else
+			ApplyGovernedList(schema, table, (int)_options.CaseStyle);
 
 		// A raw (non-Result) enum member is always response-side by the shape law (NORSE022/23 ban
 		// raw scalars from request closures), and this governed component is never referenced from a
@@ -75,5 +81,24 @@ public sealed class EnumSchemaTransformer(EnumNameRegistry registry, NorseXmlOpt
 		schema.Format = null;
 		schema.Enum =
 			[.. Enumerable.Range(0, table.Count).Select(memberIndex => (JsonNode)table.Name(memberIndex, styleIndex))];
+	}
+
+	/// <summary>
+	///     Stamps <paramref name="schema" /> as <c>type: array</c> whose <c>items</c> is the identical
+	///     governed <c>string</c>/<c>enum:</c> projection <see cref="ApplyGovernedList" /> would have built
+	///     for a plain member of the same <paramref name="table" /> — a <c>[Flags]</c> member's picklist
+	///     survives the shape change instead of forking onto a separate table. Detected via the CLR type's
+	///     own <see cref="FlagsAttribute" />, mirroring the binary channel's identical
+	///     <c>typeof(TEnum).IsDefined(typeof(FlagsAttribute), inherit: false)</c> check
+	///     (<c>Norse.Infrastructure.Web.Grpc.ResultEnumSerializer&lt;TEnum&gt;</c>).
+	/// </summary>
+	internal static void ApplyGovernedFlagsList(OpenApiSchema schema, EnumNameTable table, int styleIndex)
+	{
+		schema.Type = JsonSchemaType.Array;
+		schema.Format = null;
+		schema.Enum = null;
+		OpenApiSchema items = new();
+		ApplyGovernedList(items, table, styleIndex);
+		schema.Items = items;
 	}
 }

@@ -57,8 +57,6 @@ static class Diagnostics
 		"Action parameter '{0}' of type '{1}' is body-bound but '{1}' carries no [DataContract]", "Norse.Xml",
 		DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-	public static readonly DiagnosticDescriptor FlagsEnumInClosure = new(
-		"NORSE029", "Flags enum in a facade closure",
-		"flags don't translate to strangers — model the option set explicitly ('{0}' on '{1}')",
-		"Norse.Xml", DiagnosticSeverity.Error, isEnabledByDefault: true);
+	// NORSE029 (FlagsEnumInClosure) lived here until the 2026-08-09 amendment deleted it outright —
+	// flags ride the closure bare and the channels translate. The ID is retired, never reused.
 }

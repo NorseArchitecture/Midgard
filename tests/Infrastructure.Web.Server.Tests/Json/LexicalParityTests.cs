@@ -101,4 +101,43 @@ public sealed class LexicalParityTests
 			Should.Throw<JsonException>(() => JsonSerializer.Deserialize<TimeSpan>("\"not a duration\"", options));
 		exception.Message.ShouldContain("not a duration");
 	}
+
+	// Full byte-for-byte JSON/XML parity for [Flags] enums lives one level up, in the XML shape
+	// generator's own harness (Infrastructure.Web.Server.Generator.Tests/Xml/WriterEmissionTests —
+	// CompiledFixture over the identical AccessRights { None=0, Read=1, Write=2, Execute=4,
+	// All=Read|Write|Execute } shape) — a different project this test class cannot reach. This fact
+	// pins the JSON-side half of the same law (governed names, member-declaration order, composite
+	// members never decomposed) so both channels are provably testing the same table/order/decompose
+	// rule, even though they can't be asserted against each other directly from here.
+	[Fact]
+	void Write_flags_array_renders_governed_names_in_declaration_order_matching_the_XML_channels_law()
+	{
+		var table = new EnumNameTable(
+			typeof(AccessRights),
+			nameof(AccessRights),
+			[
+				["none", "None", "none", "NONE", "none"],
+				["read", "Read", "read", "READ", "read"],
+				["write", "Write", "write", "WRITE", "write"],
+				["execute", "Execute", "execute", "EXECUTE", "execute"],
+				["all", "All", "all", "ALL", "all"]
+			],
+			[0, 1, 2, 4, 7]);
+		var registry = new EnumNameRegistry();
+		registry.Add(table);
+		var options = NorseJsonTestOptions.Create(registry);
+
+		JsonSerializer.Serialize(AccessRights.Execute | AccessRights.Read | AccessRights.Write, options)
+			.ShouldBe("[\"read\",\"write\",\"execute\"]");
+	}
+
+	[Flags]
+	enum AccessRights
+	{
+		None = 0,
+		Read = 1,
+		Write = 2,
+		Execute = 4,
+		All = Read | Write | Execute
+	}
 }

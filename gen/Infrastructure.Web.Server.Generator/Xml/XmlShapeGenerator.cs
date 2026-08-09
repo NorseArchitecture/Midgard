@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using Norse.Abstractions.Emit;
+using Norse.Infrastructure.Web.Grpc.Generator.Shared;
 
 namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
@@ -9,10 +10,11 @@ namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
 /// <summary>
 ///     Discovers facade controllers (<c>GrpcControllerBase</c> descendants, spec §4) in the host
-///     compilation, enforces Futhark's XML shape law (NORSE022-028) over their request/response closures
-///     at build time, and — new as of Task 6 — emits the canonical writer (<see cref="WriterEmitter" />)
-///     for every distinct reachable contract shape. Reader emission (a later task) will extend the same
-///     emitted classes; this generator does not yet make them fully functional, only fully compiling.
+///     compilation and — per the spec's 2026-08-09 amendment — in the host's reference closure, enforces
+///     Futhark's XML shape law (NORSE022-028) over their request/response closures at build time, and —
+///     new as of Task 6 — emits the canonical writer (<see cref="WriterEmitter" />) for every distinct
+///     reachable contract shape. Reader emission (a later task) will extend the same emitted classes;
+///     this generator does not yet make them fully functional, only fully compiling.
 /// </summary>
 /// <remarks>
 ///     <b>Incremental pipeline shape is load-bearing (spec §2, plan Task 5):</b> there is no attribute to
@@ -48,19 +50,35 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 			.Select(static (result, _) => result!.Value)
 			.WithTrackingName(ControllerShapesTrackingName);
 
+		// The reference-closure branch (spec amendment 2026-08-09): facade controllers compiled into a
+		// referenced realm assembly are discovered by metadata symbol walk, mirroring the sibling
+		// GrpcServerRegistrationGenerator's CompilationProvider.Select(Discover) shape. This node
+		// re-runs on every compilation change — the accepted cost of the precedent — but its output is
+		// fully equatable and symbol-free (the same ControllerShapeResult the syntax branch produces),
+		// so an unchanged reference closure leaves the merge node below cached. The syntax branch above
+		// keeps sole ownership of the host's own source; this walk excludes the compilation's own
+		// assembly by construction (ReferencedAssemblySymbols never contains it).
+		var referencedControllerShapes = context.CompilationProvider
+			.Select(static (compilation, cancellationToken) => DiscoverReferenced(compilation, cancellationToken));
+
 		// The host's root namespace, projected down to a single equatable string — a lighter touch
 		// than the sibling generator's full CompilationProvider.Select(Discover), and deliberately so:
 		// the incrementality guarantee this generator exists to prove (see the class remarks and
-		// IncrementalCachingTests) belongs to the ControllerShapes step above; this second, independent
+		// IncrementalCachingTests) belongs to the ControllerShapes step above; this independent
 		// pipeline node only ever recomputes a cheap string, never re-runs the closure walk.
 		var rootNamespace =
 			context.CompilationProvider.Select(static (compilation, _) =>
 				compilation.AssemblyName ?? "Norse.Generated");
 
-		context.RegisterSourceOutput(controllerShapes.Collect().Combine(rootNamespace),
+		context.RegisterSourceOutput(controllerShapes.Collect().Combine(referencedControllerShapes).Combine(rootNamespace),
 			static (productionContext, pair) =>
 			{
-				var (results, hostRootNamespace) = pair;
+				var ((sourceResults, referencedResults), hostRootNamespace) = pair;
+
+				// Both discovery branches merge here, before the distinct-by-TypeName grouping below —
+				// a contract type reachable from a source controller AND a referenced-assembly
+				// controller is still one shape, one emitted class.
+				ControllerShapeResult[] results = [.. sourceResults, .. referencedResults];
 
 				var hasErrors = false;
 				foreach (var result in results)
@@ -128,6 +146,47 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 
 		return ClosureWalker.Analyze(classSymbol, compilation);
 	}
+
+	/// <summary>
+	///     Walks every referenced assembly's global namespace (<c>ContractDiscovery.AllTypes</c>'s
+	///     recursive shape) for <c>GrpcControllerBase</c> descendants and runs each through the same
+	///     <see cref="ClosureWalker" /> the syntax branch uses — metadata-sourced symbols walk through it
+	///     identically, and any diagnostic they trip reports at <see cref="Location.None" /> (via
+	///     <see cref="LocationInfo.None" />, the symbol having no source location). Cheap bail-outs: no
+	///     <c>GrpcControllerBase</c> resolvable means no facade controller can exist anywhere in the
+	///     closure, and BCL/framework assemblies are skipped by name prefix before their namespaces are
+	///     ever walked.
+	/// </summary>
+	static EquatableArray<ControllerShapeResult> DiscoverReferenced(
+		Compilation compilation, CancellationToken cancellationToken)
+	{
+		var controllerBase = compilation.GetTypeByMetadataName(GrpcControllerBaseMetadataName);
+		if (controllerBase is null)
+			return EquatableArray<ControllerShapeResult>.Empty;
+
+		List<ControllerShapeResult> results = [];
+		foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+		{
+			if (IsNeverAFacadeAssembly(assembly.Name))
+				continue;
+
+			foreach (var type in ContractDiscovery.AllTypes(assembly.GlobalNamespace))
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+
+				if (type.TypeKind == TypeKind.Class && DerivesFrom(type, controllerBase))
+					results.Add(ClosureWalker.Analyze(type, compilation));
+			}
+		}
+
+		return EquatableArray<ControllerShapeResult>.Create(results);
+	}
+
+	static bool IsNeverAFacadeAssembly(string assemblyName) =>
+		assemblyName.StartsWith("System.", StringComparison.Ordinal) ||
+		assemblyName.StartsWith("Microsoft.", StringComparison.Ordinal) ||
+		assemblyName.StartsWith("netstandard", StringComparison.Ordinal) ||
+		assemblyName.StartsWith("mscorlib", StringComparison.Ordinal);
 
 	static bool DerivesFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
 	{

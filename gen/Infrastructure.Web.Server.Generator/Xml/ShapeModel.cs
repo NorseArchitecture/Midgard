@@ -142,6 +142,10 @@ sealed record EnumValueModel(string ClrName, EquatableArray<string> WireNames, l
 ///     set when <see cref="Kind" /> is <see cref="MemberKind.Complex" /> (the member's own type) or
 ///     <see cref="MemberKind.Collection" /> (the collection's item type) — the key a later task resolves
 ///     against the sibling <see cref="ShapeModel" /> emitted for that type.
+///     <see cref="EnumUnderlyingTypeName" /> is the C# keyword of an enum-typed member's underlying
+///     integral type (<c>"int"</c> unless declared otherwise), <see langword="null" /> for every other
+///     member — the emitters need it to zero-extend a flags value into the shared 64-bit table
+///     representation exactly as the runtime law (<c>EnumLexical.ToBits</c>) does.
 /// </summary>
 sealed record MemberModel(
 	string ClrName,
@@ -152,6 +156,7 @@ sealed record MemberModel(
 	string? ScalarTypeName,
 	string? ComplexTypeName,
 	bool IsFlagsEnum,
+	string? EnumUnderlyingTypeName,
 	EquatableArray<EnumValueModel> EnumValues);
 
 /// <summary>

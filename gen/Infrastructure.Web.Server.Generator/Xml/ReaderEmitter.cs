@@ -38,9 +38,16 @@ static class ReaderEmitter
 			lines.Add(
 				$"\tstatic readonly string[] _{member.ClrName}ElementNames = {WriterEmitter.NamesLiteral(NameCasing.ApplyAll(WriterEmitter.ShortName(member.ComplexTypeName!)))};");
 
-		var attributeNameSets = shape.Members.Where(m => m.Kind == MemberKind.Scalar).Select(m => m.WireNames);
-		var elementNameSets = shape.Members.Where(m => m.Kind != MemberKind.Scalar)
-			.Select(m => NameCasing.ApplyAll(WriterEmitter.ShortName(m.ComplexTypeName!)));
+		// A flags member is element-shaped (amendment 2026-08-09): its member wire names ride the known-
+		// element table for unknown-element suggestions, never the known-attribute one, and its
+		// _{ClrName}ElementNames static is declared by WriterEmitter.FieldDeclarations alongside the
+		// attribute-name statics — one declaration, both directions.
+		var attributeNameSets = shape.Members.Where(m => m is { Kind: MemberKind.Scalar, IsFlagsEnum: false })
+			.Select(m => m.WireNames);
+		var elementNameSets = shape.Members.Where(m => m.Kind != MemberKind.Scalar || m.IsFlagsEnum)
+			.Select(m => m.IsFlagsEnum ?
+				m.WireNames :
+				NameCasing.ApplyAll(WriterEmitter.ShortName(m.ComplexTypeName!)));
 		lines.Add($"\tstatic readonly string[][] _knownAttributeNames = {KnownNamesLiteral(attributeNameSets)};");
 		lines.Add($"\tstatic readonly string[][] _knownElementNames = {KnownNamesLiteral(elementNameSets)};");
 
@@ -69,7 +76,8 @@ static class ReaderEmitter
 	/// <summary>The full <c>Read</c> method — signature, braces, and body — spliced verbatim into the enclosing shape class.</summary>
 	public static string ReadMethod(string rootNamespace, ShapeModel shape)
 	{
-		var scalarMembers = shape.Members.Where(m => m.Kind == MemberKind.Scalar).ToList();
+		var scalarMembers = shape.Members.Where(m => m is { Kind: MemberKind.Scalar, IsFlagsEnum: false }).ToList();
+		var flagsMembers = shape.Members.Where(m => m.IsFlagsEnum).ToList();
 		var complexMembers = shape.Members.Where(m => m.Kind == MemberKind.Complex).ToList();
 		var collectionMembers = shape.Members.Where(m => m.Kind == MemberKind.Collection).ToList();
 
@@ -78,6 +86,16 @@ static class ReaderEmitter
 			"\t\t// Locals — one content/value slot per member, resolved after the attribute and child walks below.");
 		foreach (var member in scalarMembers)
 			body.Add($"\t\tstring? {ContentVar(member)} = null;");
+		foreach (var member in flagsMembers)
+		{
+			// OR-accumulation in the enum's own type — zero tokens leaves the zero value, which IS the
+			// member's read result: the empty array is the zero value (amendment 2026-08-09), so a flags
+			// member has no required-missing or presence funnel at all.
+			body.Add($"\t\t{member.ScalarTypeName} {ValueVar(member)} = default;");
+			body.Add($"\t\tvar {CountVar(member)} = 0;");
+			body.Add($"\t\tglobal::System.Collections.Generic.HashSet<string> {TokensVar(member)} = [];");
+		}
+
 		foreach (var member in complexMembers)
 		{
 			body.Add($"\t\t{member.ComplexTypeName}? {ValueVar(member)} = null;");
@@ -103,7 +121,7 @@ static class ReaderEmitter
 		body.Add("\t\treader.ReadStartElement();");
 		body.Add("\t\tif (!__isEmptyElement)");
 		body.Add("\t\t{");
-		body.AddRange(ChildLoop(rootNamespace, complexMembers, collectionMembers));
+		body.AddRange(ChildLoop(rootNamespace, complexMembers, collectionMembers, flagsMembers));
 		body.Add("\t\t\tif (!reader.EOF)");
 		body.Add("\t\t\t\treader.ReadEndElement();");
 		body.Add("\t\t}");
@@ -124,6 +142,10 @@ static class ReaderEmitter
 		List<string> initializers = [];
 		foreach (var member in scalarMembers)
 			initializers.Add($"\t\t\t{member.ClrName} = {ScalarFinalExpression(member)},");
+		foreach (var member in flagsMembers)
+			initializers.Add(member.IsResultWrapped ?
+				$"\t\t\t{member.ClrName} = new {PrimitivesNs}.Result<{member.ScalarTypeName}>(new {PrimitivesNs}.Success<{member.ScalarTypeName}>({ValueVar(member)}))," :
+				$"\t\t\t{member.ClrName} = {ValueVar(member)},");
 		foreach (var member in complexMembers)
 			initializers.Add(
 				$"\t\t\t{member.ClrName} = {(member.IsNullable ? ValueVar(member) : $"{ValueVar(member)}!")},");
@@ -171,7 +193,7 @@ static class ReaderEmitter
 	}
 
 	static List<string> ChildLoop(string rootNamespace, List<MemberModel> complexMembers,
-		List<MemberModel> collectionMembers)
+		List<MemberModel> collectionMembers, List<MemberModel> flagsMembers)
 	{
 		List<string> lines = [];
 		lines.Add("\t\t\twhile (!reader.EOF && reader.NodeType != global::System.Xml.XmlNodeType.EndElement)");
@@ -228,6 +250,22 @@ static class ReaderEmitter
 			lines.Add("\t\t\t\t\t}");
 		}
 
+		// Flags members dispatch like collections — repeated, order-insensitive, indexed item paths —
+		// but each occurrence is a governed-name token, not a nested shape: resolved by exact match
+		// through the shared EnumLexical.Parse against the one registered table, OR-accumulated into the
+		// member's own enum type. An unknown token gets the same case-insensitive did-you-mean treatment
+		// unknown attributes/elements already get, sourced from the same table's names in the request's
+		// own style; a literal duplicate token and nested markup inside the element are both accumulable
+		// failures, never a crash and never a silent re-OR.
+		foreach (var member in flagsMembers)
+		{
+			var keyword = first ?
+				"if" :
+				"else if";
+			first = false;
+			lines.Add(FlagsChildBlock(rootNamespace, member, keyword));
+		}
+
 		lines.Add(first ?
 			"\t\t\t\t{" :
 			"\t\t\t\telse\n\t\t\t\t{");
@@ -253,6 +291,80 @@ static class ReaderEmitter
 		lines.Add("\t\t\t\t}");
 		lines.Add("\t\t\t}");
 		return lines;
+	}
+
+	/// <summary>
+	///     One flags member's complete child-loop dispatch arm. The token is accumulated by hand rather
+	///     than via <c>ReadElementContentAsString</c> — that method throws (<c>XmlException</c>) the moment
+	///     the element carries a child element, which would let nested markup escape the reader as an
+	///     exception instead of accumulating like every sibling failure path: nested markup consumes the
+	///     offending element whole, records "nested markup is not permitted" at the item path, and the
+	///     walk continues. An empty element (or an empty text run) is the empty token — content, never
+	///     absence — which misses the table exactly as it always has.
+	/// </summary>
+	static string FlagsChildBlock(string rootNamespace, MemberModel member, string keyword)
+	{
+		var tableRef = WriterEmitter.EnumTableReference(rootNamespace, member.ScalarTypeName!);
+		return
+			$$"""
+								{{keyword}} (string.Equals(__childName, _{{member.ClrName}}ElementNames[(int)style], {{Ordinal}}))
+								{
+									{{CountVar(member)}}++;
+									context.PushItem(__childName, {{CountVar(member)}});
+									string? __token = null;
+									if (reader.IsEmptyElement)
+									{
+										__token = string.Empty;
+										reader.Read();
+									}
+									else
+									{
+										global::System.Text.StringBuilder __text = new();
+										var __nested = false;
+										reader.Read();
+										while (!reader.EOF && reader.NodeType != global::System.Xml.XmlNodeType.EndElement)
+										{
+											if (reader.NodeType == global::System.Xml.XmlNodeType.Element)
+											{
+												__nested = true;
+												reader.Skip();
+											}
+											else
+											{
+												if (reader.NodeType is global::System.Xml.XmlNodeType.Text or global::System.Xml.XmlNodeType.CDATA or global::System.Xml.XmlNodeType.Whitespace or global::System.Xml.XmlNodeType.SignificantWhitespace)
+													__text.Append(reader.Value);
+												reader.Read();
+											}
+										}
+										if (!reader.EOF)
+											reader.ReadEndElement();
+										if (__nested)
+											context.AddFailure(context.CurrentPath, "nested markup is not permitted");
+										else
+											__token = __text.ToString();
+									}
+									if (__token is not null)
+									{
+										var __parsed = {{XmlNs}}.EnumLexical.Parse<{{member.ScalarTypeName}}>({{tableRef}}, __token, (int)style);
+										if (__parsed.TryGetValue(out {{PrimitivesNs}}.Success<{{member.ScalarTypeName}}> __flag))
+										{
+											if ({{TokensVar(member)}}.Add(__token))
+												{{ValueVar(member)}} |= __flag.Value;
+											else
+												context.AddFailure(context.CurrentPath, "duplicate value");
+										}
+										else
+										{
+											var __known = new string[{{tableRef}}.Count];
+											for (var __i = 0; __i < __known.Length; __i++)
+												__known[__i] = {{tableRef}}.Name(__i, (int)style);
+											var __suggestion = {{XmlNs}}.NameSuggestion.Nearest(__token, __known);
+											context.AddFailure(context.CurrentPath, __suggestion is null ? "unknown value" : $"unknown value — did you mean '{__suggestion}'?");
+										}
+									}
+									context.Pop();
+								}
+			""";
 	}
 
 	static List<string> RequiredElementMissingCheck(MemberModel member)
@@ -456,4 +568,5 @@ static class ReaderEmitter
 	static string SeenVar(MemberModel member) => $"{member.ClrName}Seen";
 	static string ItemsVar(MemberModel member) => $"{member.ClrName}Items";
 	static string CountVar(MemberModel member) => $"{member.ClrName}Count";
+	static string TokensVar(MemberModel member) => $"{member.ClrName}Tokens";
 }
