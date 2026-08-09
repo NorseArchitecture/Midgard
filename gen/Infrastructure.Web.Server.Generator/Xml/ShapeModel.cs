@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator;
+namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
 /// <summary>
 ///     A structurally value-equatable, immutable array — <see cref="ImmutableArray{T}" /> compares by

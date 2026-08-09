@@ -1,13 +1,16 @@
 using System.Collections;
 using System.Reflection;
 using System.Xml;
+using Norse.Infrastructure.Web.Server.Generator.Xml;
+using Norse.Infrastructure.Web.Server.Xml;
 using Norse.Primitives;
-// See GeneratorTestHarness.cs's own remarks on this same alias — Xml.Generator (the nearer ancestor)
-// declares its own compiler-process-local XmlCaseStyle mirror that would otherwise shadow the real
-// runtime enum via plain enclosing-namespace walk.
+// The generator (Generator.Xml, imported by the emission fixtures here) declares its own
+// compiler-process-local XmlCaseStyle mirror of the runtime enum this using block also imports —
+// an unqualified XmlCaseStyle would be ambiguous, so runtime-enum references ride a
+// differently-named alias.
 using WireCaseStyle = Norse.Infrastructure.Web.Server.Xml.XmlCaseStyle;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
 ///     Compiles a fixture contract set through the real generator, loads the emitted assembly, writes a

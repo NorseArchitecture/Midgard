@@ -4,18 +4,16 @@ using System.Text;
 using System.Xml;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Norse.Infrastructure.Web.Server.Generator.Xml;
+using Norse.Infrastructure.Web.Server.Xml;
 using Norse.Primitives;
-// No `using Norse.Infrastructure.Web.Server.Xml;` needed for IXmlShape — this test file's own
-// namespace nests under Norse.Infrastructure.Web.Server.Xml.Generator, which nests under
-// Norse.Infrastructure.Web.Server.Xml itself, so IXmlShape resolves via plain enclosing-namespace
-// walk. XmlCaseStyle needs the rename below: Xml.Generator (the *nearer* ancestor, via NameCasing.cs)
-// declares its own compiler-process-local XmlCaseStyle mirror, so the walk finds that one first,
-// before ever reaching Xml's real runtime enum — a same-named alias wouldn't out-rank it either
-// (usings before a file-scoped namespace bind at the outermost compilation-unit level, the very last
-// thing checked). A differently-named alias sidesteps the shadow entirely.
+// The generator namespace above (NameCasing.cs) declares its own compiler-process-local
+// XmlCaseStyle mirror of the runtime enum the Web.Server.Xml using also imports — an unqualified
+// XmlCaseStyle would be ambiguous between the two, so runtime-enum references ride a
+// differently-named alias.
 using WireCaseStyle = Norse.Infrastructure.Web.Server.Xml.XmlCaseStyle;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
 ///     Compiles a fixture contract set through the real generator, loads the emitted assembly, and

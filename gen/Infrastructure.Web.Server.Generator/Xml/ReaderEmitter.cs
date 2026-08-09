@@ -1,4 +1,4 @@
-namespace Norse.Infrastructure.Web.Server.Xml.Generator;
+namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
 /// <summary>
 ///     Emits the presence-aware, accumulating XML reader (design spec §8) for one contract shape — the

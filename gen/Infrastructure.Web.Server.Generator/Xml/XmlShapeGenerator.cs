@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using Norse.Abstractions.Emit;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator;
+namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
 #pragma warning disable RS2008 // No analyzer-release ledger, matching the platform's other generators.
 

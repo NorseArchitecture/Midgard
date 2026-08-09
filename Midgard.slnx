@@ -30,7 +30,6 @@
 		<File Path="gen/Infrastructure.Web.Grpc.Generator.Shared/ComponentDiscovery.cs" />
 		<Project Path="gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
 		<Project Path="gen/Infrastructure.Web.Client.Generator/Infrastructure.Web.Client.Generator.csproj" />
-		<Project Path="gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj" />
 		<Project Path="gen/Infrastructure.Web.Grpc.Analyzers/Infrastructure.Web.Grpc.Analyzers.csproj" />
 	</Folder>
 	<Folder Name="/tests/">
@@ -48,7 +47,6 @@
 		<Project Path="tests/Infrastructure.Web.Grpc.Generator.Shared.Tests/Infrastructure.Web.Grpc.Generator.Shared.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Grpc.Tests/Infrastructure.Web.Grpc.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Persistence.EntityFramework.Tests/Infrastructure.Persistence.EntityFramework.Tests.csproj" />
-		<Project Path="tests/Infrastructure.Web.Server.Xml.Generator.Tests/Infrastructure.Web.Server.Xml.Generator.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Backend.Tests/Infrastructure.Backend.Tests.csproj" />
 		<Project Path="tests/Infrastructure.Web.Grpc.Analyzers.Tests/Infrastructure.Web.Grpc.Analyzers.Tests.csproj" />
 	</Folder>

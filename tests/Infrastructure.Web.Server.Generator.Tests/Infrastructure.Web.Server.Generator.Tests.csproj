@@ -6,6 +6,9 @@
 		<NorseRef Include="Abstractions.Contracts">
 			<Repo>Asgard</Repo>
 		</NorseRef>
+		<NorseRef Include="Primitives">
+			<Repo>Svartalfheim</Repo>
+		</NorseRef>
 		<PackageReference Include="FluentValidation" Version="12.*" />
 		<PackageReference Include="Grpc.AspNetCore.Web" Version="2.*" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
@@ -14,5 +17,6 @@
 		<PackageReference Include="System.ServiceModel.Primitives" Version="10.*" />
 		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" />
+		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>

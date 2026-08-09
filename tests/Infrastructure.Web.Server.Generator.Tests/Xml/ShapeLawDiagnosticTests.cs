@@ -1,7 +1,8 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Norse.Infrastructure.Web.Server.Generator.Xml;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
 ///     One test per Futhark shape-law diagnostic (NORSE022-028) — a controller exposing a contract that

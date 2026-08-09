@@ -3,7 +3,7 @@ using System.Runtime.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.CodeAnalysis;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 static class ReferenceAssemblies
 {
@@ -28,8 +28,8 @@ static class ReferenceAssemblies
 
 	// Every assembly under the .NET / ASP.NET Core shared framework directories the FrameworkReference
 	// resolves against — enumerated from already-loaded types' own assembly directories rather than
-	// hardcoding an SDK path, so this survives an SDK bump untouched (mirrors the sibling
-	// Infrastructure.Web.Server.Generator.Tests harness).
+	// hardcoding an SDK path, so this survives an SDK bump untouched (mirrors the parent project's
+	// root-level ReferenceAssemblies harness).
 	public static readonly MetadataReference[] AspNetCore =
 	[
 		.. Directory.GetFiles(Path.GetDirectoryName(typeof(ControllerBase).Assembly.Location)!, "*.dll")

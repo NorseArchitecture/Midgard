@@ -1,7 +1,8 @@
 using System.Reflection;
 using Microsoft.CodeAnalysis;
+using Norse.Infrastructure.Web.Server.Xml;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
 ///     Compiles a fixture contract set through the real generator, loads the emitted assembly, and calls

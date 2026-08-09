@@ -1,4 +1,6 @@
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+using Norse.Infrastructure.Web.Server.Generator.Xml;
+
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 public sealed class NameCasingTests
 {

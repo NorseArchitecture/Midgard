@@ -1,9 +1,11 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Norse.Infrastructure.Web.Server.Generator.Xml;
+using Norse.Infrastructure.Web.Server.Xml;
 using Norse.Primitives;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
 ///     Shared compilation-harness helpers for <see cref="XmlShapeGenerator" /> tests — mirrors the sibling

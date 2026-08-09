@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator;
+namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
 /// <summary>
 ///     The five wire-name casing conventions Futhark projects element/attribute/enum-member names

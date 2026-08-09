@@ -1,7 +1,7 @@
 using System.Globalization;
 using Microsoft.CodeAnalysis;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator;
+namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 
 /// <summary>
 ///     Walks one confirmed <c>GrpcControllerBase</c> descendant's action methods (spec §4.1): body-bound
