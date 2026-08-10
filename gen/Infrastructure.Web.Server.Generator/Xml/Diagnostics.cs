@@ -80,7 +80,7 @@ static class Diagnostics
 
 	public static readonly DiagnosticDescriptor DuplicateShapeShortName = new(
 		"NORSE035", "Duplicate shape short name across the closure",
-		"Short name '{0}' collides across distinct contract types reachable from this closure: {1}",
+		"Short name '{0}' collides across distinct contract types reachable from this closure: {1} — XML shape class and hint names derive from the short name, so distinct contract types crossing the same host must not share one",
 		"Norse.Xml",
 		DiagnosticSeverity.Error, isEnabledByDefault: true);
 
