@@ -33,9 +33,15 @@ public static class MvcBuilderExtensions
 			builder.Services.AddSingleton<IStartupFilter, XmlShapeTripwireStartupFilter>();
 			builder.Services.Configure<MvcOptions>(options =>
 			{
-				options.InputFormatters.Insert(0, new XmlContractInputFormatter(registry, xmlOptions));
-				options.OutputFormatters.Insert(0, new XmlContractOutputFormatter(registry, xmlOptions));
-				options.OutputFormatters.Insert(0, new ProblemXmlOutputFormatter());
+				// Appended, never inserted at the front: with the Swashbuckle-era [Produces] pair gone
+				// from GrpcControllerBase, formatter registration order IS the negotiation default --
+				// System.Text.Json stays first so a request expressing no Accept preference gets JSON,
+				// and the XML leg stays opt-in by Accept header (the default-channel law; Yggdrasil's
+				// WiringTests pins it live). Selection correctness is unaffected by position: media
+				// types are disjoint, so an explicit Accept always reaches the right formatter.
+				options.InputFormatters.Add(new XmlContractInputFormatter(registry, xmlOptions));
+				options.OutputFormatters.Add(new XmlContractOutputFormatter(registry, xmlOptions));
+				options.OutputFormatters.Add(new ProblemXmlOutputFormatter());
 				// Required-ness on Futhark contracts is carried by Result<T> presence semantics (spec
 				// §8.2) plus the pipeline's ResultRules validation — never by MVC's DataAnnotations
 				// layer. Without this switch, [ApiController]'s implicit [Required] on the non-nullable
