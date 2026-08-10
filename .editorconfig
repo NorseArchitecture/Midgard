@@ -237,6 +237,25 @@ resharper_csharp_wrap_before_arrow_with_expressions = false
 resharper_csharp_place_expr_method_on_single_line = never
 resharper_csharp_place_expr_property_on_single_line = never
 resharper_csharp_place_expr_accessor_on_single_line = never
+# Bare literals in multi-argument calls carry their parameter name — a naked
+# `true` or `null` riding an argument list (`DiagnosticSeverity.Error, true`)
+# is exactly the ambiguity named arguments exist to kill. Cleanup's
+# ArrangeArgumentsStyle reads these; left unset it runs at R#'s positional
+# default and STRIPS hand-authored names (the 2026-08-09 sweep took ~80).
+# Single-argument calls are exempt so assertions stay `ShouldBe(3)`, not
+# `ShouldBe(expected: 3)`; strings, lambdas, and ordinary expressions already
+# name themselves, so those categories pin positional against default drift.
+resharper_csharp_arguments_literal = named
+# `partial` is never redundant here — the second part is source-generated
+# (KeysJsonContext's STJ context, WellContext's EF configuration part), and
+# when R# can't see generated output its redundancy sweep strips the keyword
+# and severs the generator. The 2026-08-09 re-run did exactly that, twice.
+resharper_partial_type_with_single_part_highlighting = none
+resharper_csharp_arguments_skip_single = true
+resharper_csharp_arguments_string_literal = positional
+resharper_csharp_arguments_anonymous_function = positional
+resharper_csharp_arguments_named = positional
+resharper_csharp_arguments_other = positional
 
 ## ── Declared at default, to pin them against SDK drift ────────────────────
 dotnet_style_object_initializer = true

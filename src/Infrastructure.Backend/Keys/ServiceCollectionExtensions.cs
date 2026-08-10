@@ -7,9 +7,9 @@ namespace Norse.Infrastructure.Backend.Keys;
 public static class ServiceCollectionExtensions
 {
 	/// <summary>
-	/// Registers a single <see cref="DevelopmentSubjectKeyStore"/> instance under both
-	/// <see cref="ISubjectKeyStore"/> and <see cref="ILookupKeyRing"/>, rooted at
-	/// <paramref name="rootPath"/>. Dev-grade only — never a production path.
+	///     Registers a single <see cref="DevelopmentSubjectKeyStore" /> instance under both
+	///     <see cref="ISubjectKeyStore" /> and <see cref="ILookupKeyRing" />, rooted at
+	///     <paramref name="rootPath" />. Dev-grade only — never a production path.
 	/// </summary>
 	public static IServiceCollection AddNorseDevelopmentKeys(this IServiceCollection services, string rootPath)
 	{

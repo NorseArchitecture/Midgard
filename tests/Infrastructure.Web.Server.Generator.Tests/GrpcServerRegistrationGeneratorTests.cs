@@ -1,6 +1,11 @@
 using System.Collections.Immutable;
+using System.ServiceModel;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Norse.Abstractions.Contracts;
+using Norse.Infrastructure.Web.Grpc;
+using ProtoBuf.Meta;
 
 namespace Norse.Infrastructure.Web.Server.Generator.Tests;
 
@@ -34,12 +39,39 @@ public sealed class GrpcServerRegistrationGeneratorTests
 		}
 		""";
 
+	// Every assembly under the .NET / ASP.NET Core shared framework directories the
+	// FrameworkReference resolves against — enumerated from already-loaded types' own assembly
+	// directories rather than hardcoding an SDK path, so this survives an SDK bump untouched.
+	// Two directories: object/IHost live in Microsoft.NETCore.App, WebApplication et al. in
+	// Microsoft.AspNetCore.App.
+	static readonly MetadataReference[] _sharedFrameworks =
+	[
+		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
+			.Select(f => MetadataReference.CreateFromFile(f)),
+		.. Directory.GetFiles(Path.GetDirectoryName(typeof(WebApplication).Assembly.Location)!, "*.dll")
+			.Select(f => MetadataReference.CreateFromFile(f))
+	];
+
+	static readonly MetadataReference[] _extraReferences =
+	[
+		MetadataReference.CreateFromFile(typeof(ServiceContractAttribute).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(Outcome<>).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(RuntimeTypeModel).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(TypeModel).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(GrpcEndpointRouteBuilderExtensions).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(GrpcWebEndpointConventionBuilderExtensions).Assembly.Location),
+		MetadataReference.CreateFromFile(typeof(IdentifierSerializers).Assembly.Location),
+		.. _sharedFrameworks
+	];
+
 	[Fact]
 	void Emits_MapGrpcService_and_EnableGrpcWeb_for_the_discovered_implementation()
 	{
 		var generated = Generate(Contract);
-		generated.ShouldContain("global::Microsoft.AspNetCore.Builder.GrpcEndpointRouteBuilderExtensions.MapGrpcService<global::Norse.Identity.Web.Server.AuthenticationService>(app)");
-		generated.ShouldContain("global::Microsoft.AspNetCore.Builder.GrpcWebEndpointConventionBuilderExtensions.EnableGrpcWeb(");
+		generated.ShouldContain(
+			"global::Microsoft.AspNetCore.Builder.GrpcEndpointRouteBuilderExtensions.MapGrpcService<global::Norse.Identity.Web.Server.AuthenticationService>(app)");
+		generated.ShouldContain(
+			"global::Microsoft.AspNetCore.Builder.GrpcWebEndpointConventionBuilderExtensions.EnableGrpcWeb(");
 	}
 
 	[Fact]
@@ -67,7 +99,8 @@ public sealed class GrpcServerRegistrationGeneratorTests
 	{
 		var generated = Generate(Contract);
 		var mapMethodIndex = generated.IndexOf("MapNorseGrpcServices", StringComparison.Ordinal);
-		var callIndex = generated.IndexOf("RegisterNorseOutcomeSurrogates();", mapMethodIndex, StringComparison.Ordinal);
+		var callIndex =
+			generated.IndexOf("RegisterNorseOutcomeSurrogates();", mapMethodIndex, StringComparison.Ordinal);
 		var mapGrpcServiceIndex = generated.IndexOf("MapGrpcService<", StringComparison.Ordinal);
 		callIndex.ShouldBeGreaterThan(-1);
 		callIndex.ShouldBeLessThan(mapGrpcServiceIndex);
@@ -189,33 +222,9 @@ public sealed class GrpcServerRegistrationGeneratorTests
 			count++;
 			index += needle.Length;
 		}
+
 		return count;
 	}
-
-	// Every assembly under the .NET / ASP.NET Core shared framework directories the
-	// FrameworkReference resolves against — enumerated from already-loaded types' own assembly
-	// directories rather than hardcoding an SDK path, so this survives an SDK bump untouched.
-	// Two directories: object/IHost live in Microsoft.NETCore.App, WebApplication et al. in
-	// Microsoft.AspNetCore.App.
-	static readonly MetadataReference[] _sharedFrameworks =
-	[
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f)),
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(Microsoft.AspNetCore.Builder.WebApplication).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f)),
-	];
-
-	static readonly MetadataReference[] _extraReferences =
-	[
-		MetadataReference.CreateFromFile(typeof(System.ServiceModel.ServiceContractAttribute).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Norse.Abstractions.Contracts.Outcome<>).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(ProtoBuf.Meta.RuntimeTypeModel).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(ProtoBuf.Meta.TypeModel).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.AspNetCore.Builder.GrpcEndpointRouteBuilderExtensions).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Microsoft.AspNetCore.Builder.GrpcWebEndpointConventionBuilderExtensions).Assembly.Location),
-		MetadataReference.CreateFromFile(typeof(Norse.Infrastructure.Web.Grpc.IdentifierSerializers).Assembly.Location),
-		.. _sharedFrameworks,
-	];
 
 	static (ImmutableArray<Diagnostic> Diagnostics, Compilation OutputCompilation) Run(params string[] sources)
 	{
@@ -225,7 +234,7 @@ public sealed class GrpcServerRegistrationGeneratorTests
 			[.. ReferenceAssemblies.Net110, .. _extraReferences],
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-		_ = CSharpGeneratorDriver.Create([new GrpcServerRegistrationGenerator().AsSourceGenerator()])
+		_ = CSharpGeneratorDriver.Create(new GrpcServerRegistrationGenerator().AsSourceGenerator())
 			.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
 
 		return (diagnostics, outputCompilation);

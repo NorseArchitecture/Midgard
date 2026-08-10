@@ -26,7 +26,8 @@ public sealed class RepositoryReadTests(PostgresContainerFixture fixture)
 	[Fact]
 	async Task Get_with_projection_projects_in_sql()
 	{
-		var outcome = await CreateRepository().GetAsync(fixture.KnownWidgetId, v => v.Name, TestContext.Current.CancellationToken);
+		var outcome = await CreateRepository()
+			.GetAsync(fixture.KnownWidgetId, v => v.Name, TestContext.Current.CancellationToken);
 		outcome.Match(name => name, _ => "<problem>").ShouldBe("alpha");
 	}
 
@@ -36,21 +37,24 @@ public sealed class RepositoryReadTests(PostgresContainerFixture fixture)
 		// Pins the Take(1)+count materialization of projection overloads: a FirstOrDefaultAsync
 		// "simplification" would return default(Guid) here and fabricate a succeeded Outcome
 		// from absence.
-		var outcome = await CreateRepository().GetAsync(Guid.NewGuid(), v => v.Id, TestContext.Current.CancellationToken);
+		var outcome = await CreateRepository()
+			.GetAsync(Guid.NewGuid(), v => v.Id, TestContext.Current.CancellationToken);
 		outcome.Match(_ => ErrorCategory.Unspecified, p => p.Category).ShouldBe(ErrorCategory.NotFound);
 	}
 
 	[Fact]
 	async Task First_returns_not_found_over_an_empty_match()
 	{
-		var outcome = await CreateRepository().FirstAsync(v => v.Name == "no-such", TestContext.Current.CancellationToken);
+		var outcome = await CreateRepository()
+			.FirstAsync(v => v.Name == "no-such", TestContext.Current.CancellationToken);
 		outcome.Match(_ => ErrorCategory.Unspecified, p => p.Category).ShouldBe(ErrorCategory.NotFound);
 	}
 
 	[Fact]
 	async Task List_returns_an_empty_list_as_a_value_never_a_problem()
 	{
-		var outcome = await CreateRepository().ListAsync(v => v.Name == "no-such", TestContext.Current.CancellationToken);
+		var outcome = await CreateRepository()
+			.ListAsync(v => v.Name == "no-such", TestContext.Current.CancellationToken);
 		outcome.Match(list => list.Count, _ => -1).ShouldBe(0);
 	}
 

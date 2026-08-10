@@ -7,11 +7,11 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Byte-exact tests for <see cref="ProblemXmlWriter"/> — Futhark's one deliberate exception to its own
-/// "everything is an attribute" ethos (spec §11.1): RFC 9457 XML, <c>urn:ietf:rfc:7807</c> namespace,
-/// elements not attributes, <c>errors</c> extension rendered as <c>[{path, detail}]</c> array entries
-/// via <c>&lt;i&gt;</c> item elements — the identical <see cref="ProblemErrorEntry"/> shape Asgard's
-/// <c>GrpcControllerBase</c> and Midgard's <c>ModelState</c>-driven 400 factory both populate.
+///     Byte-exact tests for <see cref="ProblemXmlWriter" /> — Futhark's one deliberate exception to its own
+///     "everything is an attribute" ethos (spec §11.1): RFC 9457 XML, <c>urn:ietf:rfc:7807</c> namespace,
+///     elements not attributes, <c>errors</c> extension rendered as <c>[{path, detail}]</c> array entries
+///     via <c>&lt;i&gt;</c> item elements — the identical <see cref="ProblemErrorEntry" /> shape Asgard's
+///     <c>GrpcControllerBase</c> and Midgard's <c>ModelState</c>-driven 400 factory both populate.
 /// </summary>
 public sealed class ProblemXmlWriterTests
 {
@@ -40,15 +40,12 @@ public sealed class ProblemXmlWriterTests
 	[Fact]
 	void Null_members_and_an_absent_errors_extension_are_omitted_entirely()
 	{
-		ProblemDetails problem = new()
-		{
-			Title = "Conflict",
-			Status = 409
-		};
+		ProblemDetails problem = new() { Title = "Conflict", Status = 409 };
 
 		var xml = WriteToString(problem);
 
-		xml.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><problem xmlns="urn:ietf:rfc:7807"><title>Conflict</title><status>409</status></problem>""");
+		xml.ShouldBe(
+			"""<?xml version="1.0" encoding="utf-8"?><problem xmlns="urn:ietf:rfc:7807"><title>Conflict</title><status>409</status></problem>""");
 	}
 
 	[Fact]
@@ -72,7 +69,8 @@ public sealed class ProblemXmlWriterTests
 
 		var xml = WriteToString(problem);
 
-		xml.ShouldBe("""<?xml version="1.0" encoding="utf-8"?><problem xmlns="urn:ietf:rfc:7807"><title>Validation</title><status>400</status><errors /></problem>""");
+		xml.ShouldBe(
+			"""<?xml version="1.0" encoding="utf-8"?><problem xmlns="urn:ietf:rfc:7807"><title>Validation</title><status>400</status><errors /></problem>""");
 	}
 
 	[Fact]
@@ -83,11 +81,7 @@ public sealed class ProblemXmlWriterTests
 		{
 			Title = "Erased",
 			Status = 410,
-			Extensions =
-			{
-				["receipt"] = receiptId,
-				["severedAt"] = "2026-08-03T12:00:00.0000000+00:00"
-			}
+			Extensions = { ["receipt"] = receiptId, ["severedAt"] = "2026-08-03T12:00:00.0000000+00:00" }
 		};
 		var xml = WriteToString(problem);
 		xml.ShouldContain($"<receipt>{receiptId}</receipt>");

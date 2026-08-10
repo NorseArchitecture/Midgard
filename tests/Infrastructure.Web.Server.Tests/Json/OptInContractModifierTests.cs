@@ -7,12 +7,12 @@ namespace Norse.Infrastructure.Web.Server.Tests.Json;
 sealed record OptInFixture
 {
 	[DataMember(Order = 1)] public string Name { get; set; } = "";
-	public string Shadow { get; set; } = "";   // undecorated — must not exist to STJ
+	public string Shadow { get; set; } = ""; // undecorated — must not exist to STJ
 }
 
 sealed record PlainFixture
 {
-	public string Name { get; set; } = "";     // no [DataContract] — default STJ behavior holds
+	public string Name { get; set; } = ""; // no [DataContract] — default STJ behavior holds
 }
 
 public sealed class OptInContractModifierTests

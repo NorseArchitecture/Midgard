@@ -39,14 +39,16 @@ public sealed class WireModelRegistrationGuardTests
 		var runCount = 0;
 
 		firstModel.EnsureRegistered(typeof(WireModelRegistrationGuardTests), () => Interlocked.Increment(ref runCount));
-		secondModel.EnsureRegistered(typeof(WireModelRegistrationGuardTests), () => Interlocked.Increment(ref runCount));
+		secondModel.EnsureRegistered(typeof(WireModelRegistrationGuardTests),
+			() => Interlocked.Increment(ref runCount));
 
 		runCount.ShouldBe(2);
 	}
 
 	[Fact]
 	void Throws_on_a_null_model() =>
-		Should.Throw<ArgumentNullException>(() => WireModelRegistrationGuard.EnsureRegistered(null!, typeof(string), () => { }));
+		Should.Throw<ArgumentNullException>(() =>
+			WireModelRegistrationGuard.EnsureRegistered(null!, typeof(string), () => { }));
 
 	[Fact]
 	void Throws_on_a_null_key()
@@ -81,7 +83,8 @@ public sealed class WireModelRegistrationGuardTests
 			await Task.WhenAll(Enumerable.Range(0, CallersPerModel).Select(_ => Task.Run(() =>
 			{
 				barrier.SignalAndWait();
-				model.EnsureRegistered(typeof(WireModelRegistrationGuardTests), () => Volatile.Write(ref registeredFlag, 1));
+				model.EnsureRegistered(typeof(WireModelRegistrationGuardTests),
+					() => Volatile.Write(ref registeredFlag, 1));
 				Volatile.Read(ref registeredFlag).ShouldBe(1);
 			})));
 		}));
@@ -93,9 +96,11 @@ public sealed class WireModelRegistrationGuardTests
 		var model = RuntimeTypeModel.Create();
 
 		var firstException = Should.Throw<InvalidOperationException>(() =>
-			model.EnsureRegistered(typeof(WireModelRegistrationGuardTests), () => throw new InvalidOperationException("registration failed")));
+			model.EnsureRegistered(typeof(WireModelRegistrationGuardTests),
+				() => throw new InvalidOperationException("registration failed")));
 		var secondException = Should.Throw<InvalidOperationException>(() =>
-			model.EnsureRegistered(typeof(WireModelRegistrationGuardTests), () => throw new InvalidOperationException("a different message -- never reached")));
+			model.EnsureRegistered(typeof(WireModelRegistrationGuardTests),
+				() => throw new InvalidOperationException("a different message -- never reached")));
 
 		secondException.ShouldBeSameAs(firstException);
 	}

@@ -6,12 +6,6 @@ namespace Norse.Infrastructure.Backend.Tests.Serialization;
 
 public sealed class MaskedValueJsonConverterFactoryTests
 {
-	readonly record struct FakePii(string Secret) : IMaskedValue
-	{
-		public string Masked => "***";
-		public string ToMasked(DateOnly asOf) => Masked;
-	}
-
 	static readonly JsonSerializerOptions _options = BuildOptions();
 
 	static JsonSerializerOptions BuildOptions()
@@ -32,4 +26,10 @@ public sealed class MaskedValueJsonConverterFactoryTests
 	[Fact]
 	void Leaves_non_masked_types_untouched() =>
 		JsonSerializer.Serialize(new { Name = "plain" }, _options).ShouldBe("{\"Name\":\"plain\"}");
+
+	readonly record struct FakePii(string Secret) : IMaskedValue
+	{
+		public string Masked => "***";
+		public string ToMasked(DateOnly asOf) => Masked;
+	}
 }

@@ -40,15 +40,18 @@ public sealed class XmlLexicalTests
 
 	[Fact]
 	void Format_guid_emits_lowercase_d_format() =>
-		XmlLexical.Format(new Guid("0B917371-0000-0000-0000-000000000000")).ShouldBe("0b917371-0000-0000-0000-000000000000");
+		XmlLexical.Format(new Guid("0B917371-0000-0000-0000-000000000000"))
+			.ShouldBe("0b917371-0000-0000-0000-000000000000");
 
 	[Fact]
 	void Format_datetime_emits_round_trip_o_format() =>
-		XmlLexical.Format(new DateTime(2026, 8, 1, 14, 30, 0, DateTimeKind.Utc)).ShouldBe("2026-08-01T14:30:00.0000000Z");
+		XmlLexical.Format(new DateTime(2026, 8, 1, 14, 30, 0, DateTimeKind.Utc))
+			.ShouldBe("2026-08-01T14:30:00.0000000Z");
 
 	[Fact]
 	void Format_datetimeoffset_emits_round_trip_o_format() =>
-		XmlLexical.Format(new DateTimeOffset(2026, 8, 1, 14, 30, 0, TimeSpan.FromHours(2))).ShouldBe("2026-08-01T14:30:00.0000000+02:00");
+		XmlLexical.Format(new DateTimeOffset(2026, 8, 1, 14, 30, 0, TimeSpan.FromHours(2)))
+			.ShouldBe("2026-08-01T14:30:00.0000000+02:00");
 
 	[Fact]
 	void Format_dateonly_emits_yyyy_mm_dd() =>

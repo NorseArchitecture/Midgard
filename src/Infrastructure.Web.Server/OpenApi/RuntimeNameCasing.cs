@@ -4,19 +4,19 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.OpenApi;
 
 /// <summary>
-/// A runtime port of the Xml.Generator's <c>NameCasing</c> (Task 5) — same word-splitting algorithm,
-/// same five-way join, byte-identical output. Duplicated rather than shared: the generator lives in a
-/// netstandard2.0, compile-time-only assembly this runtime library cannot reference (and the
-/// generator's own <c>NameCasing.cs</c> carries the mirror-image remark for its side of the same
-/// boundary, keying off a process-local enum with ordinal values pinned to match this assembly's
-/// public <see cref="XmlCaseStyle"/>). <see cref="XmlMetadataTransformer"/> uses this to case-style
-/// the wire names it stamps into the OpenAPI document's <c>xml</c> objects, so the document's
-/// declared names match what the generated shapes actually emit on the wire at the host's chosen
-/// case style — never a second, independently-drifting casing rule.
+///     A runtime port of the Xml.Generator's <c>NameCasing</c> (Task 5) — same word-splitting algorithm,
+///     same five-way join, byte-identical output. Duplicated rather than shared: the generator lives in a
+///     netstandard2.0, compile-time-only assembly this runtime library cannot reference (and the
+///     generator's own <c>NameCasing.cs</c> carries the mirror-image remark for its side of the same
+///     boundary, keying off a process-local enum with ordinal values pinned to match this assembly's
+///     public <see cref="XmlCaseStyle" />). <see cref="XmlMetadataTransformer" /> uses this to case-style
+///     the wire names it stamps into the OpenAPI document's <c>xml</c> objects, so the document's
+///     declared names match what the generated shapes actually emit on the wire at the host's chosen
+///     case style — never a second, independently-drifting casing rule.
 /// </summary>
 static class RuntimeNameCasing
 {
-	/// <summary>Projects <paramref name="name"/> through <paramref name="style"/>.</summary>
+	/// <summary>Projects <paramref name="name" /> through <paramref name="style" />.</summary>
 	public static string Apply(XmlCaseStyle style, string name)
 	{
 		var words = Split(name);
@@ -47,12 +47,19 @@ static class RuntimeNameCasing
 		string.Concat(words.Select(UpperFirst));
 
 	static string UpperFirst(string word) =>
-		word.Length == 0 ? word : char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
+		word.Length == 0 ?
+			word :
+			char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
 
 	static string LowerFirst(string word) =>
-		word.Length == 0 ? word : char.ToLowerInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
+		word.Length == 0 ?
+			word :
+			char.ToLowerInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
 
-	/// <summary>Splits an identifier into words on Pascal/camel word boundaries — identical rule set to the generator's own <c>NameCasing.Split</c>.</summary>
+	/// <summary>
+	///     Splits an identifier into words on Pascal/camel word boundaries — identical rule set to the generator's own
+	///     <c>NameCasing.Split</c>.
+	/// </summary>
 	static List<string> Split(string name)
 	{
 		List<string> words = [];
@@ -65,7 +72,8 @@ static class RuntimeNameCasing
 			var boundary = false;
 			if (char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]))
 				boundary = true; // lower/digit -> upper
-			else if (char.IsUpper(name[i]) && char.IsUpper(name[i - 1]) && i + 1 < name.Length && char.IsLower(name[i + 1]))
+			else if (char.IsUpper(name[i]) && char.IsUpper(name[i - 1]) && i + 1 < name.Length &&
+				char.IsLower(name[i + 1]))
 				boundary = true; // acronym run -> the last capital starts the next word
 
 			if (boundary)
@@ -74,6 +82,7 @@ static class RuntimeNameCasing
 				start = i;
 			}
 		}
+
 		words.Add(name.Substring(start));
 		return words;
 	}

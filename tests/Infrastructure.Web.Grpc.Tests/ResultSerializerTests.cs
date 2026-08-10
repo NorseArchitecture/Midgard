@@ -6,22 +6,22 @@ using ProtoBuf.Meta;
 namespace Norse.Infrastructure.Web.Grpc.Tests;
 
 /// <summary>
-/// <see cref="ResultSerializer{T}.Write"/> unwraps a success <see cref="Result{T}"/> to the scalar's
-/// own wire form — the union never rides the wire — and throws <see cref="InvalidOperationException"/>
-/// only for the two illegal states, failure and default; <see cref="ResultEnumSerializer{TEnum}"/>
-/// mirrors it — a defined success unwraps to the enum's own varint, an undefined success or a
-/// failure/default both throw. Most
-/// read-path fixtures below are still built by serializing a <em>plain</em> field of the same type
-/// (never a <see cref="Result{T}"/> one) through a mirror envelope type on the same model, then feeding
-/// those bytes into the real <see cref="Result{T}"/>-typed envelope's <c>Deserialize</c> — proving
-/// <see cref="ResultSerializer{T}"/>'s <c>Read</c> decodes exactly what a real client's plain field
-/// would produce. That now covers <see cref="DateTimeOffset"/> too: <c>DateTimeOffsetSerializer</c>
-/// gives the bare type a registered wire law (the §7 "O" string), so its fixtures ride the same
-/// plain-field mirror as every other row; <see cref="WireBytes"/>'s hand-built payloads remain only
-/// where the wire text itself is the fixture (the malformed-string case and the byte-level
-/// wire-form pin). The success-unwrap oracle tests below invert the technique deliberately: they
-/// construct a <see cref="Result{T}"/>-populated envelope and serialize it, proving the write side
-/// lands on the exact same bytes as the plain-field mirror.
+///     <see cref="ResultSerializer{T}.Write" /> unwraps a success <see cref="Result{T}" /> to the scalar's
+///     own wire form — the union never rides the wire — and throws <see cref="InvalidOperationException" />
+///     only for the two illegal states, failure and default; <see cref="ResultEnumSerializer{TEnum}" />
+///     mirrors it — a defined success unwraps to the enum's own varint, an undefined success or a
+///     failure/default both throw. Most
+///     read-path fixtures below are still built by serializing a <em>plain</em> field of the same type
+///     (never a <see cref="Result{T}" /> one) through a mirror envelope type on the same model, then feeding
+///     those bytes into the real <see cref="Result{T}" />-typed envelope's <c>Deserialize</c> — proving
+///     <see cref="ResultSerializer{T}" />'s <c>Read</c> decodes exactly what a real client's plain field
+///     would produce. That now covers <see cref="DateTimeOffset" /> too: <c>DateTimeOffsetSerializer</c>
+///     gives the bare type a registered wire law (the §7 "O" string), so its fixtures ride the same
+///     plain-field mirror as every other row; <see cref="WireBytes" />'s hand-built payloads remain only
+///     where the wire text itself is the fixture (the malformed-string case and the byte-level
+///     wire-form pin). The success-unwrap oracle tests below invert the technique deliberately: they
+///     construct a <see cref="Result{T}" />-populated envelope and serialize it, proving the write side
+///     lands on the exact same bytes as the plain-field mirror.
 /// </summary>
 public sealed class ResultSerializerTests
 {
@@ -47,7 +47,8 @@ public sealed class ResultSerializerTests
 	void Round_trips_a_present_optional_Result_of_string()
 	{
 		var model = TestModel.Create();
-		var payload = TestModel.Serialize(model, new PlainResultEnvelope { When = new DateOnly(2026, 8, 1), Name = "Bifrost" });
+		var payload = TestModel.Serialize(model,
+			new PlainResultEnvelope { When = new DateOnly(2026, 8, 1), Name = "Bifrost" });
 
 		var back = TestModel.Deserialize<ResultEnvelope>(model, payload);
 
@@ -66,8 +67,7 @@ public sealed class ResultSerializerTests
 
 	public static TheoryData<string, Result<int>> IllegalWriteStates() => new()
 	{
-		{ "failure", new Failure(ParseFailure.Malformed, "x", "Int32") },
-		{ "default", default },
+		{ "failure", new Failure(ParseFailure.Malformed, "x", "Int32") }, { "default", default }
 	};
 
 	[Fact]
@@ -130,7 +130,7 @@ public sealed class ResultSerializerTests
 	public static TheoryData<string, Result<int>?> OptionalResultStates() => new()
 	{
 		{ "failure", new Failure(ParseFailure.Malformed, "x", "Int32") },
-		{ "default", (Result<int>?)default(Result<int>) },
+		{ "default", (Result<int>?)default(Result<int>) }
 	};
 
 	[Fact]
@@ -138,8 +138,10 @@ public sealed class ResultSerializerTests
 	{
 		var model = TestModel.Create();
 
-		var wrapped = TestModel.Serialize(model, new ResultEnvelope { When = new DateOnly(2026, 8, 2), Name = new Success<string>("Bifrost") });
-		var plain = TestModel.Serialize(model, new PlainResultEnvelope { When = new DateOnly(2026, 8, 2), Name = "Bifrost" });
+		var wrapped = TestModel.Serialize(model,
+			new ResultEnvelope { When = new DateOnly(2026, 8, 2), Name = new Success<string>("Bifrost") });
+		var plain = TestModel.Serialize(model,
+			new PlainResultEnvelope { When = new DateOnly(2026, 8, 2), Name = "Bifrost" });
 
 		wrapped.ShouldBe(plain);
 	}
@@ -347,7 +349,8 @@ public sealed class ResultSerializerTests
 	void Writing_a_success_enum_emits_the_plain_fields_exact_wire_bytes()
 	{
 		var model = TestModel.Create();
-		var wrapped = TestModel.Serialize(model, new Envelope<WireStatus> { Value = new Success<WireStatus>(WireStatus.Inactive) });
+		var wrapped = TestModel.Serialize(model,
+			new Envelope<WireStatus> { Value = new Success<WireStatus>(WireStatus.Inactive) });
 		var plain = TestModel.Serialize(model, new PlainEnvelope<WireStatus> { Value = WireStatus.Inactive });
 		wrapped.ShouldBe(plain);
 	}
@@ -356,15 +359,18 @@ public sealed class ResultSerializerTests
 	void Writing_an_undefined_enum_success_throws_the_illegal_write_law()
 	{
 		var exception = Should.Throw<InvalidOperationException>(() =>
-			TestModel.Serialize(TestModel.Create(), new Envelope<WireStatus> { Value = new Success<WireStatus>((WireStatus)99) }));
-		exception.Message.ShouldBe($"'{(WireStatus)99}' is an undefined value of '{typeof(WireStatus)}' and is illegal to write.");
+			TestModel.Serialize(TestModel.Create(),
+				new Envelope<WireStatus> { Value = new Success<WireStatus>((WireStatus)99) }));
+		exception.Message.ShouldBe(
+			$"'{(WireStatus)99}' is an undefined value of '{typeof(WireStatus)}' and is illegal to write.");
 	}
 
 	[Fact]
 	void Writing_a_failed_enum_Result_still_throws()
 	{
 		var exception = Should.Throw<InvalidOperationException>(() =>
-			TestModel.Serialize(TestModel.Create(), new Envelope<WireStatus> { Value = new Failure(ParseFailure.Malformed, "x", nameof(WireStatus)) }));
+			TestModel.Serialize(TestModel.Create(),
+				new Envelope<WireStatus> { Value = new Failure(ParseFailure.Malformed, "x", nameof(WireStatus)) }));
 		exception.Message.ShouldBe(IllegalWriteMessage);
 	}
 
@@ -402,13 +408,13 @@ public sealed class ResultSerializerTests
 	}
 
 	/// <summary>
-	/// Builds a fixture by serializing <paramref name="value"/> through a <em>plain</em>
-	/// <typeparamref name="T"/> field (<see cref="PlainEnvelope{T}"/> — never a <see cref="Result{T}"/>
-	/// one, since <see cref="ResultSerializer{T}.Write"/> always throws) on the same model, then proves
-	/// <see cref="ResultSerializer{T}.Read"/> decodes those exact bytes back to <paramref name="value"/>
-	/// through the <see cref="Result{T}"/>-typed <see cref="Envelope{T}"/>. Valid for every §7 row —
-	/// <see cref="DateTimeOffset"/> included, now that <c>DateTimeOffsetSerializer</c> gives the bare
-	/// type a registered wire law — and for enums, whose plain fields ride protobuf-net's native varint.
+	///     Builds a fixture by serializing <paramref name="value" /> through a <em>plain</em>
+	///     <typeparamref name="T" /> field (<see cref="PlainEnvelope{T}" /> — never a <see cref="Result{T}" />
+	///     one, since <see cref="ResultSerializer{T}.Write" /> always throws) on the same model, then proves
+	///     <see cref="ResultSerializer{T}.Read" /> decodes those exact bytes back to <paramref name="value" />
+	///     through the <see cref="Result{T}" />-typed <see cref="Envelope{T}" />. Valid for every §7 row —
+	///     <see cref="DateTimeOffset" /> included, now that <c>DateTimeOffsetSerializer</c> gives the bare
+	///     type a registered wire law — and for enums, whose plain fields ride protobuf-net's native varint.
 	/// </summary>
 	static void AssertRoundTrips<T>(T value) where T : notnull
 	{
@@ -440,12 +446,12 @@ public sealed class ResultSerializerTests
 }
 
 /// <summary>
-/// Hand-constructs protobuf wire bytes field-by-field via the low-level <see cref="ProtoWriter.State"/>
-/// API — needed only where the wire text itself is the fixture (a malformed <see cref="DateTimeOffset"/>
-/// string, the byte-level wire-form pin); everything else builds via a plain field on the model
-/// (<see cref="PlainEnvelope{T}"/>). Verified byte-identical to protobuf-net's own encoding of a plain
-/// <c>string</c> field at the same field number (spiked against a reference <see cref="RuntimeTypeModel"/>
-/// before this technique was adopted here).
+///     Hand-constructs protobuf wire bytes field-by-field via the low-level <see cref="ProtoWriter.State" />
+///     API — needed only where the wire text itself is the fixture (a malformed <see cref="DateTimeOffset" />
+///     string, the byte-level wire-form pin); everything else builds via a plain field on the model
+///     (<see cref="PlainEnvelope{T}" />). Verified byte-identical to protobuf-net's own encoding of a plain
+///     <c>string</c> field at the same field number (spiked against a reference <see cref="RuntimeTypeModel" />
+///     before this technique was adopted here).
 /// </summary>
 static class WireBytes
 {
@@ -459,7 +465,7 @@ static class WireBytes
 			foreach (var (field, value) in fields)
 			{
 				state.WriteFieldHeader(field, WireType.String);
-				state.WriteString(value, null);
+				state.WriteString(value);
 			}
 		}
 		finally
@@ -474,58 +480,52 @@ static class WireBytes
 [ProtoContract]
 public sealed class Envelope<T> where T : notnull
 {
-	[ProtoMember(1)]
-	public Result<T> Value { get; set; }
+	[ProtoMember(1)] public Result<T> Value { get; set; }
 }
 
-/// <summary>The plain-field mirror of <see cref="Envelope{T}"/> — same field number, raw <typeparamref name="T"/> instead of <c>Result&lt;T&gt;</c>, so it can actually serialize (Write always throws on the Result-wrapped side).</summary>
+/// <summary>
+///     The plain-field mirror of <see cref="Envelope{T}" /> — same field number, raw <typeparamref name="T" />
+///     instead of <c>Result&lt;T&gt;</c>, so it can actually serialize (Write always throws on the Result-wrapped side).
+/// </summary>
 [ProtoContract]
 public sealed class PlainEnvelope<T> where T : notnull
 {
-	[ProtoMember(1)]
-	public T Value { get; set; } = default!;
+	[ProtoMember(1)] public T Value { get; set; } = default!;
 }
 
 [ProtoContract]
 public sealed class ResultEnvelope
 {
-	[ProtoMember(1)]
-	public Result<DateOnly> When { get; set; }
+	[ProtoMember(1)] public Result<DateOnly> When { get; set; }
 
-	[ProtoMember(2)]
-	public Result<string>? Name { get; set; }
+	[ProtoMember(2)] public Result<string>? Name { get; set; }
 }
 
-/// <summary>The plain-field mirror of <see cref="ResultEnvelope"/> — same field numbers, raw types.</summary>
+/// <summary>The plain-field mirror of <see cref="ResultEnvelope" /> — same field numbers, raw types.</summary>
 [ProtoContract]
 public sealed class PlainResultEnvelope
 {
-	[ProtoMember(1)]
-	public DateOnly When { get; set; }
+	[ProtoMember(1)] public DateOnly When { get; set; }
 
-	[ProtoMember(2)]
-	public string? Name { get; set; }
+	[ProtoMember(2)] public string? Name { get; set; }
 }
 
 [ProtoContract]
 public sealed class IntEnvelope
 {
-	[ProtoMember(1)]
-	public Result<int> Value { get; set; }
+	[ProtoMember(1)] public Result<int> Value { get; set; }
 }
 
 [ProtoContract]
 public sealed class OptionalIntEnvelope
 {
-	[ProtoMember(1)]
-	public Result<int>? Value { get; set; }
+	[ProtoMember(1)] public Result<int>? Value { get; set; }
 }
 
 [ProtoContract]
 public sealed class OptionalEnumEnvelope
 {
-	[ProtoMember(1)]
-	public Result<WireStatus>? Value { get; set; }
+	[ProtoMember(1)] public Result<WireStatus>? Value { get; set; }
 }
 
 /// <summary>§7's enum row on the gRPC leg — explicit values per platform enum convention.</summary>

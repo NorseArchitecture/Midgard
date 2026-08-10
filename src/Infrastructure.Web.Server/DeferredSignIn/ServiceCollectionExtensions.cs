@@ -3,12 +3,12 @@ using Norse.Abstractions.Web.Server.DeferredSignIn;
 
 namespace Norse.Infrastructure.Web.Server.DeferredSignIn;
 
-/// <summary>Composition-root wiring for <see cref="IDeferredSignIn"/>.</summary>
+/// <summary>Composition-root wiring for <see cref="IDeferredSignIn" />.</summary>
 public static class ServiceCollectionExtensions
 {
 	extension(IServiceCollection services)
 	{
-		/// <summary>Registers <see cref="IDeferredSignIn"/> and the <see cref="IMemoryCache"/> it depends on.</summary>
+		/// <summary>Registers <see cref="IDeferredSignIn" /> and the <see cref="IMemoryCache" /> it depends on.</summary>
 		public IServiceCollection AddDeferredSignIn()
 		{
 			services.AddMemoryCache();

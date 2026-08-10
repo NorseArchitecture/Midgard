@@ -26,7 +26,8 @@ public sealed class PostgresTranslationCanaryTests(PostgresContainerFixture fixt
 	async Task Promoted_collection_any_emits_exists_not_client_eval()
 	{
 		var (repository, log) = CreateLoggedRepository();
-		var outcome = await repository.ListAsync(v => v.Tags.Any(t => t.Label == "featured"), TestContext.Current.CancellationToken);
+		var outcome = await repository.ListAsync(v => v.Tags.Any(t => t.Label == "featured"),
+			TestContext.Current.CancellationToken);
 		TranslationCanarySupport.Dump(output, "Postgres: Promoted_collection_any_emits_exists_not_client_eval", log);
 
 		outcome.Match(list => list.Count, _ => -1).ShouldBe(1);
@@ -41,7 +42,8 @@ public sealed class PostgresTranslationCanaryTests(PostgresContainerFixture fixt
 		// routes this Any() through the JSON path (e.View.Labels), not a relational navigation. The
 		// EF-version-sensitive canary: if this doesn't translate, EF throws InvalidOperationException
 		// here and the test fails loudly rather than silently falling back — see this file's header.
-		var outcome = await repository.ListAsync(v => v.Labels.Any(l => l == "featured"), TestContext.Current.CancellationToken);
+		var outcome = await repository.ListAsync(v => v.Labels.Any(l => l == "featured"),
+			TestContext.Current.CancellationToken);
 		TranslationCanarySupport.Dump(output, "Postgres: Unpromoted_json_collection_any_translates_server_side", log);
 
 		outcome.Match(list => list.Count, _ => -1).ShouldBe(1);
@@ -56,15 +58,19 @@ public sealed class PostgresTranslationCanaryTests(PostgresContainerFixture fixt
 		var (repository, repositoryLog) = CreateLoggedRepository();
 		await repository.SingleAsync(v => v.Name == "beta", TestContext.Current.CancellationToken);
 
-		var (context, nativeLog) = TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorsePostgresEfProvider.Instance);
+		var (context, nativeLog) =
+			TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorsePostgresEfProvider.Instance);
 		await using var contextDisposable = context.ConfigureAwait(false);
 		var map = WellMap.For<WidgetEntity, WidgetView>();
 		var rewritten = PredicateRewriter.Rewrite<WidgetEntity, WidgetView>(v => v.Name == "beta", map);
-		await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
+		await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten)
+			.Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
 			.SingleOrDefaultAsync(TestContext.Current.CancellationToken);
 
-		TranslationCanarySupport.Dump(output, "Postgres: Single_take_two_sql_matches_native_single_or_default (repository)", repositoryLog);
-		TranslationCanarySupport.Dump(output, "Postgres: Single_take_two_sql_matches_native_single_or_default (native SingleOrDefaultAsync)", nativeLog);
+		TranslationCanarySupport.Dump(output,
+			"Postgres: Single_take_two_sql_matches_native_single_or_default (repository)", repositoryLog);
+		TranslationCanarySupport.Dump(output,
+			"Postgres: Single_take_two_sql_matches_native_single_or_default (native SingleOrDefaultAsync)", nativeLog);
 
 		// Discovered SQL-shape nuance (not a translation gap — both queries run and both are a
 		// 2-row limiting operation, same query plan family): EF Core always parameterizes an
@@ -81,29 +87,34 @@ public sealed class PostgresTranslationCanaryTests(PostgresContainerFixture fixt
 [Collection(nameof(SqlServerCollection))]
 public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fixture, ITestOutputHelper output)
 {
-	public static bool IsSqlServerTestable => DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
+	public static bool IsSqlServerTestable =>
+		DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
 
 	(Repository<WellContext, WidgetEntity, WidgetView> Repository, List<string> Log) CreateLoggedRepository() =>
 		TranslationCanarySupport.CreateLoggedRepository(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
 
-	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable),
+		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Promoted_collection_any_emits_exists_not_client_eval()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
 		var (repository, log) = CreateLoggedRepository();
-		var outcome = await repository.ListAsync(v => v.Tags.Any(t => t.Label == "featured"), TestContext.Current.CancellationToken);
+		var outcome = await repository.ListAsync(v => v.Tags.Any(t => t.Label == "featured"),
+			TestContext.Current.CancellationToken);
 		TranslationCanarySupport.Dump(output, "SqlServer: Promoted_collection_any_emits_exists_not_client_eval", log);
 
 		outcome.Match(list => list.Count, _ => -1).ShouldBe(1);
 		log.ShouldContain(l => l.Contains("EXISTS", StringComparison.Ordinal));
 	}
 
-	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable),
+		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Unpromoted_json_collection_any_translates_server_side()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
 		var (repository, log) = CreateLoggedRepository();
-		var outcome = await repository.ListAsync(v => v.Labels.Any(l => l == "featured"), TestContext.Current.CancellationToken);
+		var outcome = await repository.ListAsync(v => v.Labels.Any(l => l == "featured"),
+			TestContext.Current.CancellationToken);
 		TranslationCanarySupport.Dump(output, "SqlServer: Unpromoted_json_collection_any_translates_server_side", log);
 
 		outcome.Match(list => list.Count, _ => -1).ShouldBe(1);
@@ -121,40 +132,47 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 			l.Contains("OPENJSON", StringComparison.OrdinalIgnoreCase));
 	}
 
-	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable),
+		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Single_take_two_sql_matches_native_single_or_default()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
 		var (repository, repositoryLog) = CreateLoggedRepository();
 		await repository.SingleAsync(v => v.Name == "beta", TestContext.Current.CancellationToken);
 
-		var (context, nativeLog) = TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
+		var (context, nativeLog) =
+			TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
 		await using var contextDisposable = context.ConfigureAwait(false);
 		var map = WellMap.For<WidgetEntity, WidgetView>();
 		var rewritten = PredicateRewriter.Rewrite<WidgetEntity, WidgetView>(v => v.Name == "beta", map);
-		await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
+		await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten)
+			.Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
 			.SingleOrDefaultAsync(TestContext.Current.CancellationToken);
 
-		TranslationCanarySupport.Dump(output, "SqlServer: Single_take_two_sql_matches_native_single_or_default (repository)", repositoryLog);
-		TranslationCanarySupport.Dump(output, "SqlServer: Single_take_two_sql_matches_native_single_or_default (native SingleOrDefaultAsync)", nativeLog);
+		TranslationCanarySupport.Dump(output,
+			"SqlServer: Single_take_two_sql_matches_native_single_or_default (repository)", repositoryLog);
+		TranslationCanarySupport.Dump(output,
+			"SqlServer: Single_take_two_sql_matches_native_single_or_default (native SingleOrDefaultAsync)", nativeLog);
 
 		// Same discovered nuance as the Postgres half (see its remarks): EF Core parameterizes an
 		// explicit user-code Take(2) but keeps SingleOrDefaultAsync's own injected row-limiting
 		// clause a literal — compared by bound value, not raw text.
-		repositoryLog.ShouldContain(l => l.Contains("TOP(@__p_0)", StringComparison.Ordinal) || l.Contains("TOP(@p)", StringComparison.Ordinal));
+		repositoryLog.ShouldContain(l =>
+			l.Contains("TOP(@__p_0)", StringComparison.Ordinal) || l.Contains("TOP(@p)", StringComparison.Ordinal));
 		repositoryLog.ShouldContain(l => l.Contains("='2'", StringComparison.Ordinal));
 		nativeLog.ShouldContain(l => l.Contains("TOP(2)", StringComparison.Ordinal));
 	}
 }
 
 /// <summary>
-/// Shared plumbing for both provider halves of the canary suite, and reused by
-/// <c>SeekVerificationTests.cs</c> — building a per-test, LogTo-instrumented
-/// <see cref="WellContext"/> the fixtures' own fixed-option factories cannot provide.
+///     Shared plumbing for both provider halves of the canary suite, and reused by
+///     <c>SeekVerificationTests.cs</c> — building a per-test, LogTo-instrumented
+///     <see cref="WellContext" /> the fixtures' own fixed-option factories cannot provide.
 /// </summary>
 static class TranslationCanarySupport
 {
-	public static (WellContext Context, List<string> Log) CreateLoggedContext(string connectionString, INorseEfProvider provider)
+	public static (WellContext Context, List<string> Log) CreateLoggedContext(string connectionString,
+		INorseEfProvider provider)
 	{
 		List<string> log = [];
 		DbContextOptionsBuilder<WellContext> optionsBuilder = new();
@@ -169,7 +187,8 @@ static class TranslationCanarySupport
 		return (new WellContext(optionsBuilder.Options), log);
 	}
 
-	public static (Repository<WellContext, WidgetEntity, WidgetView> Repository, List<string> Log) CreateLoggedRepository(string connectionString, INorseEfProvider provider)
+	public static (Repository<WellContext, WidgetEntity, WidgetView> Repository, List<string> Log)
+		CreateLoggedRepository(string connectionString, INorseEfProvider provider)
 	{
 		List<string> log = [];
 		DbContextOptionsBuilder<WellContext> optionsBuilder = new();
@@ -188,15 +207,16 @@ static class TranslationCanarySupport
 	}
 
 	/// <summary>
-	/// Runtime (not attribute-time) skip gate for SQL Server tests — see
-	/// <see cref="SqlServerContainerFixture.Available"/>'s remarks: a collection fixture's
-	/// <c>InitializeAsync</c> throwing fails every test in the collection before any test body ever
-	/// runs, so the container-actually-came-up check can only be applied here, inside each test.
+	///     Runtime (not attribute-time) skip gate for SQL Server tests — see
+	///     <see cref="SqlServerContainerFixture.Available" />'s remarks: a collection fixture's
+	///     <c>InitializeAsync</c> throwing fails every test in the collection before any test body ever
+	///     runs, so the container-actually-came-up check can only be applied here, inside each test.
 	/// </summary>
 	public static void SkipUnlessAvailable(SqlServerContainerFixture fixture)
 	{
 		if (!fixture.Available)
-			Assert.Skip($"SQL Server container did not come up in this environment: {fixture.UnavailableReason ?? "Docker unreachable"}");
+			Assert.Skip(
+				$"SQL Server container did not come up in this environment: {fixture.UnavailableReason ?? "Docker unreachable"}");
 	}
 
 	sealed class SingleUseContextFactory(DbContextOptions<WellContext> options) : IDbContextFactory<WellContext>

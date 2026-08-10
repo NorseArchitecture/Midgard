@@ -7,10 +7,10 @@ using Norse.Abstractions.Migrations.Seeding;
 namespace Norse.Infrastructure.Migrations.Tests;
 
 /// <summary>
-/// Regression coverage for the captive-dependency crash: contributors resolve from a scoped call
-/// site (an <c>EfMigrationContributor&lt;TContext&gt;</c> is registered transient but takes a scoped
-/// <c>DbContext</c>), so a singleton <see cref="IHostedService"/> that injects them directly is
-/// rejected the moment scope validation is on — which is exactly what Aspire hands its children.
+///     Regression coverage for the captive-dependency crash: contributors resolve from a scoped call
+///     site (an <c>EfMigrationContributor&lt;TContext&gt;</c> is registered transient but takes a scoped
+///     <c>DbContext</c>), so a singleton <see cref="IHostedService" /> that injects them directly is
+///     rejected the moment scope validation is on — which is exactly what Aspire hands its children.
 /// </summary>
 public sealed class ScopedContributorResolutionTests
 {
@@ -62,11 +62,7 @@ public sealed class ScopedContributorResolutionTests
 	static HostApplicationBuilder CreateValidatingBuilder()
 	{
 		var builder = Host.CreateApplicationBuilder();
-		ServiceProviderOptions options = new()
-		{
-			ValidateOnBuild = true,
-			ValidateScopes = true
-		};
+		ServiceProviderOptions options = new() { ValidateOnBuild = true, ValidateScopes = true };
 		DefaultServiceProviderFactory factory = new(options);
 		builder.ConfigureContainer(factory);
 		return builder;

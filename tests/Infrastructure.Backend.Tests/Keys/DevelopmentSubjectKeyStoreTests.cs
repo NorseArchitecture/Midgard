@@ -8,6 +8,7 @@ namespace Norse.Infrastructure.Backend.Tests.Keys;
 public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 {
 	readonly string _root = Path.Combine(Path.GetTempPath(), $"norse-keys-{Guid.NewGuid():N}");
+
 	// Deliberately mints a fresh instance per access: correct ONLY because the store is file-backed,
 	// so state lives on disk, not in the instance. An in-memory refactor would silently break every
 	// multi-access test here — this comment is the tripwire.
@@ -68,8 +69,8 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 	async Task Destroy_throws_key_missing_for_a_subject_with_no_key_and_no_receipt()
 	{
 		var subject = Guid.NewGuid(); // never touched via GetOrCreateAsync — no key, no receipt, no marker
-		await Should.ThrowAsync<KeyMissingException>(
-			async () => await Store.DestroyAsync(subject, TestContext.Current.CancellationToken));
+		await Should.ThrowAsync<KeyMissingException>(async () =>
+			await Store.DestroyAsync(subject, TestContext.Current.CancellationToken));
 	}
 
 	[Fact]
@@ -85,7 +86,8 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 		var pendingPath = Path.Combine(_root, $"{subject:N}.receipt.pending");
 		await File.WriteAllBytesAsync(
 			pendingPath,
-			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt), KeysJsonContext.Default.ReceiptDocument),
+			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt),
+				KeysJsonContext.Default.ReceiptDocument),
 			TestContext.Current.CancellationToken);
 
 		var store = Store;
@@ -96,7 +98,8 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 		File.Exists(pendingPath).ShouldBeFalse();
 
 		var result = await store.GetAsync(subject, TestContext.Current.CancellationToken);
-		result.Match(_ => "available", r => r.ReceiptId.ToString(), () => "missing").ShouldBe(receipt.ReceiptId.ToString());
+		result.Match(_ => "available", r => r.ReceiptId.ToString(), () => "missing")
+			.ShouldBe(receipt.ReceiptId.ToString());
 	}
 
 	[Fact]
@@ -108,8 +111,8 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 		await Store.GetOrCreateAsync(subject, TestContext.Current.CancellationToken);
 		var receipt = await Store.DestroyAsync(subject, TestContext.Current.CancellationToken);
 		DevelopmentSubjectKeyStore reopened = new(_root);
-		var exception = await Should.ThrowAsync<KeyDestroyedException>(
-			async () => await reopened.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
+		var exception = await Should.ThrowAsync<KeyDestroyedException>(async () =>
+			await reopened.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
 		exception.Receipt.ShouldBe(receipt);
 	}
 
@@ -126,11 +129,12 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 		Directory.CreateDirectory(_root);
 		await File.WriteAllBytesAsync(
 			Path.Combine(_root, $"{subject:N}.receipt.pending"),
-			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt), KeysJsonContext.Default.ReceiptDocument),
+			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt),
+				KeysJsonContext.Default.ReceiptDocument),
 			TestContext.Current.CancellationToken);
 
-		var exception = await Should.ThrowAsync<KeyDestroyedException>(
-			async () => await Store.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
+		var exception = await Should.ThrowAsync<KeyDestroyedException>(async () =>
+			await Store.GetOrCreateAsync(subject, TestContext.Current.CancellationToken));
 		exception.Receipt.ShouldBe(receipt);
 		File.Exists(Path.Combine(_root, $"{subject:N}.key")).ShouldBeFalse();
 	}
@@ -146,11 +150,13 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 		Directory.CreateDirectory(_root);
 		await File.WriteAllBytesAsync(
 			Path.Combine(_root, $"{subject:N}.receipt.pending"),
-			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt), KeysJsonContext.Default.ReceiptDocument),
+			JsonSerializer.SerializeToUtf8Bytes(new ReceiptDocument(receipt.ReceiptId, receipt.SeveredAt),
+				KeysJsonContext.Default.ReceiptDocument),
 			TestContext.Current.CancellationToken);
 
 		var result = await Store.GetAsync(subject, TestContext.Current.CancellationToken);
-		result.Match(_ => "available", r => r.ReceiptId.ToString(), () => "missing").ShouldBe(receipt.ReceiptId.ToString());
+		result.Match(_ => "available", r => r.ReceiptId.ToString(), () => "missing")
+			.ShouldBe(receipt.ReceiptId.ToString());
 	}
 
 	[Fact]

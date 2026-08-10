@@ -7,12 +7,12 @@ using Norse.Infrastructure.Web.Grpc.Generator.Shared;
 namespace Norse.Infrastructure.Web.Client.Generator;
 
 /// <summary>
-/// Discovers a compilation's FluentValidation validators and Blazor-routable assemblies at compile
-/// time and emits <c>AddNorseClientComponents()</c> — idempotent validator registration via
-/// <c>TryAddEnumerable</c>, plus a <c>RoutesAdditionalAssemblies</c> singleton when Yggdrasil's
-/// routing composition seam (<c>Norse.Hosting.Web.Components.RoutesAdditionalAssemblies</c>) is
-/// visible to the compilation. Emits nothing when neither a validator nor the routing seam is
-/// discovered.
+///     Discovers a compilation's FluentValidation validators and Blazor-routable assemblies at compile
+///     time and emits <c>AddNorseClientComponents()</c> — idempotent validator registration via
+///     <c>TryAddEnumerable</c>, plus a <c>RoutesAdditionalAssemblies</c> singleton when Yggdrasil's
+///     routing composition seam (<c>Norse.Hosting.Web.Components.RoutesAdditionalAssemblies</c>) is
+///     visible to the compilation. Emits nothing when neither a validator nor the routing seam is
+///     discovered.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class ClientComponentRegistrationGenerator : IIncrementalGenerator
@@ -32,11 +32,14 @@ public sealed class ClientComponentRegistrationGenerator : IIncrementalGenerator
 			if (result.Discovery.Validators.IsEmpty && !result.Discovery.RoutesAdditionalAssembliesTypeExists)
 				return;
 			productionContext.AddSource("NorseClientComponentRegistration.g.cs",
-				SourceText.From(ClientComponentRegistrationEmitter.Emit(result.RootNamespace, result.Discovery), Utf8NoBom.Encoding));
+				SourceText.From(ClientComponentRegistrationEmitter.Emit(result.RootNamespace, result.Discovery),
+					Utf8NoBom.Encoding));
 		});
 	}
 
-	static DiscoveryResult Discover(((Compilation Compilation, AnalyzerConfigOptionsProvider Options) Semantic, bool OwnAssemblyDeclaresRazorRoutes) input, CancellationToken cancellationToken)
+	static DiscoveryResult Discover(
+		((Compilation Compilation, AnalyzerConfigOptionsProvider Options) Semantic, bool OwnAssemblyDeclaresRazorRoutes)
+			input, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 

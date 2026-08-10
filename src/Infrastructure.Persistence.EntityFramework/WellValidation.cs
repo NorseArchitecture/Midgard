@@ -6,21 +6,22 @@ using Norse.Abstractions.Backend;
 namespace Norse.Infrastructure.Persistence.EntityFramework;
 
 /// <summary>
-/// The total-mirror law (well-and-wire spec §4.2), enforced against real EF model metadata rather
-/// than the two CLR shapes alone. <see cref="WellMap.For{TEntity,TView}"/> silently skips an
-/// unmatched entity scalar or collection — it just doesn't promote it, no error, since it exists to
-/// build the promotion map, not police the shape. This is the check that turns an unmirrored member
-/// into a loud startup failure, per <see cref="ServiceCollectionExtensions.AddWell{TContext}"/>'s
-/// deferred-into-first-resolution validation step.
+///     The total-mirror law (well-and-wire spec §4.2), enforced against real EF model metadata rather
+///     than the two CLR shapes alone. <see cref="WellMap.For{TEntity,TView}" /> silently skips an
+///     unmatched entity scalar or collection — it just doesn't promote it, no error, since it exists to
+///     build the promotion map, not police the shape. This is the check that turns an unmirrored member
+///     into a loud startup failure, per <see cref="ServiceCollectionExtensions.AddWell{TContext}" />'s
+///     deferred-into-first-resolution validation step.
 /// </summary>
 static class WellValidation
 {
 	/// <summary>
-	/// Validates <paramref name="entityType"/> (a well root's EF model metadata) against
-	/// <paramref name="viewType"/>, throwing <see cref="InvalidOperationException"/> naming the
-	/// entity, view, and offending member on the first violation found.
+	///     Validates <paramref name="entityType" /> (a well root's EF model metadata) against
+	///     <paramref name="viewType" />, throwing <see cref="InvalidOperationException" /> naming the
+	///     entity, view, and offending member on the first violation found.
 	/// </summary>
-	[RequiresUnreferencedCode("Calls WellMap.ElementType to check a view collection property's IEnumerable<T> shape; that check is itself RequiresUnreferencedCode (reflects over the element type's interfaces), safe under the mirror law but not statically provable to the trimmer.")]
+	[RequiresUnreferencedCode(
+		"Calls WellMap.ElementType to check a view collection property's IEnumerable<T> shape; that check is itself RequiresUnreferencedCode (reflects over the element type's interfaces), safe under the mirror law but not statically provable to the trimmer.")]
 	public static void Validate(IEntityType entityType, Type viewType)
 	{
 		foreach (var property in entityType.GetProperties())

@@ -5,24 +5,24 @@ using ProtoBuf.Meta;
 namespace Norse.Infrastructure.Web.Grpc;
 
 /// <summary>
-/// Applies the Norse wire law to a protobuf-net <see cref="RuntimeTypeModel"/>: every member of every
-/// contract type at <see cref="CompatibilityLevel.Level300"/>, and every identifier on the wire as a
-/// bare <c>bytes</c> field carrying 16 bytes in RFC 9562 order — never the legacy <c>bcl.Guid</c>
-/// encoding, never the 36-character string.
+///     Applies the Norse wire law to a protobuf-net <see cref="RuntimeTypeModel" />: every member of every
+///     contract type at <see cref="CompatibilityLevel.Level300" />, and every identifier on the wire as a
+///     bare <c>bytes</c> field carrying 16 bytes in RFC 9562 order — never the legacy <c>bcl.Guid</c>
+///     encoding, never the 36-character string.
 /// </summary>
 /// <remarks>
-/// The level is applied per <see cref="ValueMember"/> rather than via
-/// <see cref="RuntimeTypeModel.DefaultCompatibilityLevel"/> because protobuf-net categorically refuses
-/// that setter on <see cref="RuntimeTypeModel.Default"/> — and the default model is exactly where the
-/// generated client/server wiring registers. Member-level configuration wins over every ambient level,
-/// so the two paths are wire-identical.
+///     The level is applied per <see cref="ValueMember" /> rather than via
+///     <see cref="RuntimeTypeModel.DefaultCompatibilityLevel" /> because protobuf-net categorically refuses
+///     that setter on <see cref="RuntimeTypeModel.Default" /> — and the default model is exactly where the
+///     generated client/server wiring registers. Member-level configuration wins over every ambient level,
+///     so the two paths are wire-identical.
 /// </remarks>
 public static class IdentifierSerializers
 {
 	/// <summary>
-	/// Registers the wire law on <paramref name="model"/>. Idempotent and safe under concurrent first
-	/// call — see <see cref="WireModelRegistrationGuard.EnsureRegistered"/>. Must run before contract
-	/// types enter the model — the sweep only sees types added after registration.
+	///     Registers the wire law on <paramref name="model" />. Idempotent and safe under concurrent first
+	///     call — see <see cref="WireModelRegistrationGuard.EnsureRegistered" />. Must run before contract
+	///     types enter the model — the sweep only sees types added after registration.
 	/// </summary>
 	public static void Register(RuntimeTypeModel model) =>
 		model.EnsureRegistered(typeof(IdentifierSerializers), () =>

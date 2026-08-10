@@ -5,12 +5,12 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Tests <see cref="XmlContractOutputFormatter"/>'s plumbing — the canonical <c>XmlWriterSettings</c>
-/// (declaration on, UTF-8 no BOM, no indent) and the unregistered-type refusal — against a hand-rolled
-/// <see cref="WidgetXmlShape"/>, never generated code (matches <c>InputFormatterTests</c>'s own
-/// instruction). Task 6's own correction is honored literally: .NET's <see cref="System.Xml.XmlWriter"/>
-/// always renders a self-closing element with a space before <c>/&gt;</c> — the exact-string assertion
-/// below reflects that, not the design doc's original (now-corrected) no-space examples.
+///     Tests <see cref="XmlContractOutputFormatter" />'s plumbing — the canonical <c>XmlWriterSettings</c>
+///     (declaration on, UTF-8 no BOM, no indent) and the unregistered-type refusal — against a hand-rolled
+///     <see cref="WidgetXmlShape" />, never generated code (matches <c>InputFormatterTests</c>'s own
+///     instruction). Task 6's own correction is honored literally: .NET's <see cref="System.Xml.XmlWriter" />
+///     always renders a self-closing element with a space before <c>/&gt;</c> — the exact-string assertion
+///     below reflects that, not the design doc's original (now-corrected) no-space examples.
 /// </summary>
 public sealed class OutputFormatterTests
 {
@@ -19,8 +19,10 @@ public sealed class OutputFormatterTests
 	{
 		var registry = new XmlShapeRegistry();
 		registry.Add(new WidgetXmlShape());
-		var formatter = new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
-		var (context, responseBody) = FormatterTestSupport.BuildWriteContext(new Widget { Name = "lantern" }, typeof(Widget));
+		var formatter =
+			new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var (context, responseBody) =
+			FormatterTestSupport.BuildWriteContext(new Widget { Name = "lantern" }, typeof(Widget));
 
 		await formatter.WriteResponseBodyAsync(context, Encoding.UTF8);
 
@@ -33,7 +35,8 @@ public sealed class OutputFormatterTests
 	{
 		var registry = new XmlShapeRegistry();
 		registry.Add(new WidgetXmlShape());
-		var formatter = new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var (context, responseBody) = FormatterTestSupport.BuildWriteContext(new Widget { Name = "x" }, typeof(Widget));
 
 		await formatter.WriteResponseBodyAsync(context, Encoding.UTF8);
@@ -46,10 +49,13 @@ public sealed class OutputFormatterTests
 	async Task An_unregistered_type_is_refused_loudly()
 	{
 		var registry = new XmlShapeRegistry(); // Widget's shape deliberately never registered.
-		var formatter = new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var (context, _) = FormatterTestSupport.BuildWriteContext(new Widget(), typeof(Widget));
 
-		var exception = await Should.ThrowAsync<InvalidOperationException>(() => formatter.WriteResponseBodyAsync(context, Encoding.UTF8));
+		var exception =
+			await Should.ThrowAsync<InvalidOperationException>(() =>
+				formatter.WriteResponseBodyAsync(context, Encoding.UTF8));
 		exception.Message.ShouldContain("Widget");
 	}
 
@@ -57,10 +63,12 @@ public sealed class OutputFormatterTests
 	async Task A_null_response_body_is_refused_loudly()
 	{
 		var registry = new XmlShapeRegistry();
-		var formatter = new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
+		var formatter =
+			new XmlContractOutputFormatter(registry, new NorseXmlOptions { CaseStyle = XmlCaseStyle.CamelCase });
 		var (context, _) = FormatterTestSupport.BuildWriteContext(null, typeof(Widget));
 
-		await Should.ThrowAsync<InvalidOperationException>(() => formatter.WriteResponseBodyAsync(context, Encoding.UTF8));
+		await Should.ThrowAsync<InvalidOperationException>(() =>
+			formatter.WriteResponseBodyAsync(context, Encoding.UTF8));
 	}
 
 	[Fact]

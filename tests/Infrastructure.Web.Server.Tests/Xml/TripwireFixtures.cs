@@ -35,7 +35,11 @@ public sealed class UnregisteredPayload
 	public string Value { get; init; } = "";
 }
 
-/// <summary>The implicit-body-binding payload: no <c>[FromBody]</c>, but it's the action's only parameter and a non-scalar type — the same convention <c>ClosureWalker</c> treats as body-bound (spec §4.1) that <see cref="XmlShapeTripwireStartupFilter"/> must catch too.</summary>
+/// <summary>
+///     The implicit-body-binding payload: no <c>[FromBody]</c>, but it's the action's only parameter and a non-scalar
+///     type — the same convention <c>ClosureWalker</c> treats as body-bound (spec §4.1) that
+///     <see cref="XmlShapeTripwireStartupFilter" /> must catch too.
+/// </summary>
 public sealed class ImplicitBodyPayload
 {
 	public string Value { get; init; } = "";
@@ -49,7 +53,10 @@ public sealed class ImplicitBodyController : GrpcControllerBase
 #pragma warning restore CA1822
 }
 
-/// <summary>Derives from plain <see cref="ControllerBase"/>, never <c>GrpcControllerBase</c> — the tripwire must never scan this.</summary>
+/// <summary>
+///     Derives from plain <see cref="ControllerBase" />, never <c>GrpcControllerBase</c> — the tripwire must never
+///     scan this.
+/// </summary>
 public sealed class PlainMvcController : ControllerBase
 {
 #pragma warning disable CA1822 // See TripwireController's identical suppression above.
@@ -58,7 +65,10 @@ public sealed class PlainMvcController : ControllerBase
 #pragma warning restore CA1822
 }
 
-/// <summary>A hand-written stand-in shape — the tripwire only ever calls <see cref="XmlShapeRegistry.TryGet"/>, never <c>Write</c>/<c>Read</c>, so no real XML behavior is needed here.</summary>
+/// <summary>
+///     A hand-written stand-in shape — the tripwire only ever calls <see cref="XmlShapeRegistry.TryGet" />, never
+///     <c>Write</c>/<c>Read</c>, so no real XML behavior is needed here.
+/// </summary>
 sealed class FakeXmlShape<T> : IXmlShape<T> where T : class
 {
 	public Type ContractType =>

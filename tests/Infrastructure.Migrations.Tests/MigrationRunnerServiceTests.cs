@@ -104,13 +104,6 @@ public sealed class MigrationRunnerServiceTests
 		return services.BuildServiceProvider();
 	}
 
-	sealed class AlwaysEnabledLogger : ILogger<MigrationRunnerService>
-	{
-		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-		public bool IsEnabled(LogLevel logLevel) => true;
-		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
-	}
-
 	[Fact]
 	void AddNorseMigrationsRunner_registers_MigrationRunnerService_as_hosted_service()
 	{
@@ -120,7 +113,19 @@ public sealed class MigrationRunnerServiceTests
 
 		builder.AddNorseMigrationsRunner();
 
-		services.Any(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(MigrationRunnerService))
+		services.Any(d =>
+				d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(MigrationRunnerService))
 			.ShouldBeTrue();
+	}
+
+	sealed class AlwaysEnabledLogger : ILogger<MigrationRunnerService>
+	{
+		public bool IsEnabled(LogLevel logLevel) => true;
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+			Func<TState, Exception?, string> formatter)
+		{
+		}
 	}
 }

@@ -8,12 +8,12 @@ public static class ServiceCollectionExtensions
 	extension(IServiceCollection services)
 	{
 		/// <summary>
-		/// Registers the standard behavior chain — registration order <b>is</b> chain order, and it is
-		/// law (spec §2.2): Telemetry → ExceptionTranslation → Authorization → Validation → handler —
-		/// plus the scoped <see cref="PrincipalAccessor"/>, the dispatch map, and the
-		/// <see cref="ISender"/>. A product realm appends its own <c>IBehavior&lt;,&gt;</c> registration
-		/// after this call; it lands between Validation and the handler. Idempotent: a second call
-		/// no-ops rather than double-running the chain.
+		///     Registers the standard behavior chain — registration order <b>is</b> chain order, and it is
+		///     law (spec §2.2): Telemetry → ExceptionTranslation → Authorization → Validation → handler —
+		///     plus the scoped <see cref="PrincipalAccessor" />, the dispatch map, and the
+		///     <see cref="ISender" />. A product realm appends its own <c>IBehavior&lt;,&gt;</c> registration
+		///     after this call; it lands between Validation and the handler. Idempotent: a second call
+		///     no-ops rather than double-running the chain.
 		/// </summary>
 		public IServiceCollection AddNorsePipeline()
 		{

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 	<PropertyGroup>
-		<Description>Norse.Infrastructure.Web.Server: gRPC server-side failure encoding. Mediator/Grpc translates Problem into google.rpc.Status + ErrorInfo/BadRequest/DebugInfo well-known types on a grpc-status-details-bin trailer, paired with Infrastructure.Web.Client for symmetrical decoding. Bundles the gRPC server registration generator (analyzers/dotnet/cs/), which discovers a compilation's Norse gRPC contracts and their implementations at compile time and emits MapNorseGrpcServices() — code-first MapGrpcService/EnableGrpcWeb registration plus idempotent Outcome&lt;T&gt; surrogate wiring and the Norse.Infrastructure.Web.Grpc identifier wire law (CompatibilityLevel 300, 16-byte RFC 9562 identifier bytes fields). Also bundles Futhark's XML shape generator (analyzers/dotnet/cs/), which discovers a compilation's facade-controller (GrpcControllerBase descendant) request/response closures at compile time, enforces the XML shape law (NORSE022-028), and emits NorseXmlShapeRegistration.Build() for AddNorseXml.</Description>
+		<Description>Norse.Infrastructure.Web.Server: gRPC server-side failure encoding. Mediator/Grpc translates Problem into google.rpc.Status + ErrorInfo/BadRequest/DebugInfo well-known types on a grpc-status-details-bin trailer, paired with Infrastructure.Web.Client for symmetrical decoding. Bundles the gRPC server registration generator (analyzers/dotnet/cs/), which discovers a compilation's Norse gRPC contracts and their implementations at compile time and emits MapNorseGrpcServices() — code-first MapGrpcService/EnableGrpcWeb registration plus idempotent Outcome&lt;T&gt; surrogate wiring and the Norse.Infrastructure.Web.Grpc identifier wire law (CompatibilityLevel 300, 16-byte RFC 9562 identifier bytes fields). The same generator assembly carries Futhark's XML shape generator, which discovers facade-controller (GrpcControllerBase descendant) request/response closures at compile time — across the compilation and its reference closure, enforces the XML shape law (NORSE022-028), and emits NorseXmlShapeRegistration.Build() for AddNorseXml.</Description>
 	</PropertyGroup>
 	<ItemGroup>
 		<NorseRef Include="Abstractions.Web.Server">
@@ -16,18 +16,11 @@
 			Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj"
 			OutputItemType="Analyzer"
 			ReferenceOutputAssembly="false" />
-		<ProjectReference
-			Include="../../gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj"
-			OutputItemType="Analyzer"
-			ReferenceOutputAssembly="false" />
 		<ProjectReference Include="../Infrastructure.Backend/Infrastructure.Backend.csproj" />
 		<ProjectReference Include="../Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" />
 	</ItemGroup>
 	<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">
 		<MSBuild Projects="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj"
-			Targets="Build"
-			Properties="Configuration=$(Configuration)" />
-		<MSBuild Projects="../../gen/Infrastructure.Web.Server.Xml.Generator/Infrastructure.Web.Server.Xml.Generator.csproj"
 			Targets="Build"
 			Properties="Configuration=$(Configuration)" />
 		<ItemGroup>
@@ -36,10 +29,6 @@
 				PackagePath="analyzers/dotnet/cs/"
 				Visible="false" />
 			<None Include="../../gen/Infrastructure.Web.Server.Generator/bin/$(Configuration)/netstandard2.0/Norse.Abstractions.Emit.dll"
-				Pack="true"
-				PackagePath="analyzers/dotnet/cs/"
-				Visible="false" />
-			<None Include="../../gen/Infrastructure.Web.Server.Xml.Generator/bin/$(Configuration)/netstandard2.0/Norse.Infrastructure.Web.Server.Xml.Generator.dll"
 				Pack="true"
 				PackagePath="analyzers/dotnet/cs/"
 				Visible="false" />

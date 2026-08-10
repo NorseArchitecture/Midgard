@@ -45,7 +45,7 @@ public sealed class GrpcWebCallInvokerTests
 	{
 		HttpResponseMessage response = new(HttpStatusCode.OK)
 		{
-			Content = new ByteArrayContent([.. frames.SelectMany(f => f)]),
+			Content = new ByteArrayContent([.. frames.SelectMany(f => f)])
 		};
 		response.Content.Headers.ContentType = new("application/grpc-web+proto");
 		return response;
@@ -93,14 +93,15 @@ public sealed class GrpcWebCallInvokerTests
 		var serverException = new Problem
 		{
 			Category = ErrorCategory.Validation,
-			Errors = new Dictionary<string, string[]> { ["code"] = ["banana"] },
+			Errors = new Dictionary<string, string[]> { ["code"] = ["banana"] }
 		}.ToRpcException();
 		StringBuilder trailerBlock = new();
 		trailerBlock.Append(CultureInfo.InvariantCulture, $"grpc-status: {(int)serverException.StatusCode}\r\n");
 		foreach (var entry in serverException.Trailers)
 		{
 			if (entry.IsBinary)
-				trailerBlock.Append(CultureInfo.InvariantCulture, $"{entry.Key}: {Convert.ToBase64String(entry.ValueBytes)}\r\n");
+				trailerBlock.Append(CultureInfo.InvariantCulture,
+					$"{entry.Key}: {Convert.ToBase64String(entry.ValueBytes)}\r\n");
 			else
 				trailerBlock.Append(CultureInfo.InvariantCulture, $"{entry.Key}: {entry.Value}\r\n");
 		}
@@ -163,7 +164,8 @@ public sealed class GrpcWebCallInvokerTests
 	[Fact]
 	async Task A_non_success_http_status_throws_unavailable()
 	{
-		using var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new ByteArrayContent([]) };
+		using var response =
+			new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new ByteArrayContent([]) };
 		using RecordingHandler handler = new(response);
 		var invoker = CreateInvoker(handler);
 
@@ -213,7 +215,8 @@ public sealed class GrpcWebCallInvokerTests
 		var invoker = CreateInvoker(handler);
 
 		var thrown = await Should.ThrowAsync<RpcException>(
-			invoker.AsyncUnaryCall(Method(), null, new CallOptions(cancellationToken: cts.Token), "ping").ResponseAsync);
+			invoker.AsyncUnaryCall(Method(), null, new CallOptions(cancellationToken: cts.Token), "ping")
+				.ResponseAsync);
 
 		thrown.StatusCode.ShouldBe(StatusCode.Cancelled);
 	}
@@ -226,8 +229,12 @@ public sealed class GrpcWebCallInvokerTests
 		var invoker = CreateInvoker(handler);
 		Method<string, string> method = new(MethodType.DuplexStreaming, "test.v1.TestService", "Stream", _utf8, _utf8);
 
-		Should.Throw<NotSupportedException>(() => invoker.AsyncServerStreamingCall(Method(), null, new CallOptions(), "ping"));
-		Should.Throw<NotSupportedException>(() => invoker.AsyncClientStreamingCall(new Method<string, string>(MethodType.ClientStreaming, "test.v1.TestService", "Stream", _utf8, _utf8), null, new CallOptions()));
+		Should.Throw<NotSupportedException>(() =>
+			invoker.AsyncServerStreamingCall(Method(), null, new CallOptions(), "ping"));
+		Should.Throw<NotSupportedException>(() =>
+			invoker.AsyncClientStreamingCall(
+				new Method<string, string>(MethodType.ClientStreaming, "test.v1.TestService", "Stream", _utf8, _utf8),
+				null, new CallOptions()));
 		Should.Throw<NotSupportedException>(() => invoker.AsyncDuplexStreamingCall(method, null, new CallOptions()));
 		Should.Throw<NotSupportedException>(() => invoker.BlockingUnaryCall(Method(), null, new CallOptions(), "ping"));
 	}
@@ -247,11 +254,14 @@ public sealed class GrpcWebCallInvokerTests
 
 		internal byte[]? RequestBody { get; private set; }
 
-		protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+			CancellationToken cancellationToken)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 			Request = request;
-			RequestBody = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+			RequestBody = request.Content is null ?
+				null :
+				await request.Content.ReadAsByteArrayAsync(cancellationToken);
 			return response;
 		}
 	}

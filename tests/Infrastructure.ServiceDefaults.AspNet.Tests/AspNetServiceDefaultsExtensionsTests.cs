@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
@@ -9,7 +10,6 @@ using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
-using System.Diagnostics;
 
 namespace Norse.Infrastructure.ServiceDefaults.AspNet.Tests;
 
@@ -49,6 +49,7 @@ public sealed class AspNetServiceDefaultsExtensionsTests
 				return;
 			await Task.Delay(10, TestContext.Current.CancellationToken);
 		}
+
 		exported.Count.ShouldBeGreaterThanOrEqualTo(count, "the expected span never arrived");
 	}
 

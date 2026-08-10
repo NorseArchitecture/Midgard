@@ -1,4 +1,5 @@
 using System.Runtime.Serialization;
+using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
@@ -17,11 +18,11 @@ using ProtoBuf.Meta;
 namespace Norse.Infrastructure.Web.Client.Tests.Grpc;
 
 /// <summary>
-/// The wire shapes every other test in this folder hand-assembles, produced by the real
-/// <c>Grpc.AspNetCore.Server</c> + <c>Grpc.AspNetCore.Web</c> stack instead. That gap is what let a
-/// <c>Failed(Problem)</c> decode as <see cref="ErrorCategory.Fault"/> on a live browser while every
-/// hand-assembled unit test stayed green: the invoker's trailers-only branch was exercised only
-/// against a response nobody had checked against a real server's bytes.
+///     The wire shapes every other test in this folder hand-assembles, produced by the real
+///     <c>Grpc.AspNetCore.Server</c> + <c>Grpc.AspNetCore.Web</c> stack instead. That gap is what let a
+///     <c>Failed(Problem)</c> decode as <see cref="ErrorCategory.Fault" /> on a live browser while every
+///     hand-assembled unit test stayed green: the invoker's trailers-only branch was exercised only
+///     against a response nobody had checked against a real server's bytes.
 /// </summary>
 [Collection(nameof(GrpcWebRoundTripTests))]
 [CollectionDefinition(nameof(GrpcWebRoundTripTests), DisableParallelization = true)]
@@ -29,15 +30,14 @@ public sealed class GrpcWebRoundTripTests
 {
 	// The same shape the generated AddNorseGrpcClients/MapNorseGrpcServices wiring emits, guard and all.
 	static void RegisterSurrogates() =>
-		WireModelRegistrationGuard.EnsureRegistered(
-			RuntimeTypeModel.Default,
-			typeof(GrpcWebRoundTripTests),
+		RuntimeTypeModel.Default.EnsureRegistered(typeof(GrpcWebRoundTripTests),
 			static () =>
 			{
 				var model = RuntimeTypeModel.Default;
 				IdentifierSerializers.Register(model);
 				if (!model.IsDefined(typeof(Outcome<ProbeResponse>)))
-					model.Add(typeof(Outcome<ProbeResponse>), applyDefaultBehaviour: false).SetSurrogate(typeof(ProbeResponse));
+					model.Add(typeof(Outcome<ProbeResponse>), applyDefaultBehaviour: false)
+						.SetSurrogate(typeof(ProbeResponse));
 			});
 
 	static WebApplication BuildHost()
@@ -58,8 +58,7 @@ public sealed class GrpcWebRoundTripTests
 	// GrpcWebCallInvoker over an HttpClient, wrapped by OutcomeClientInterceptor, handed to
 	// protobuf-net.Grpc's proxy factory (see the generated AddNorseGrpcClients).
 	static IProbeService CreateClient(HttpClient httpClient) =>
-		GrpcClientFactory.CreateGrpcService<IProbeService>(
-			new GrpcWebCallInvoker(httpClient).Intercept(new OutcomeClientInterceptor()));
+		new GrpcWebCallInvoker(httpClient).Intercept(new OutcomeClientInterceptor()).CreateGrpcService<IProbeService>();
 
 	[Fact]
 	async Task A_successful_outcome_decodes_over_the_real_grpc_web_stack()
@@ -69,7 +68,8 @@ public sealed class GrpcWebRoundTripTests
 		using var httpClient = app.GetTestClient();
 
 		var outcome = await CreateClient(httpClient).SucceedAsync(
-			new ProbeRequest(), new CallContext(new(cancellationToken: TestContext.Current.CancellationToken)));
+			new ProbeRequest(),
+			new CallContext(new CallOptions(cancellationToken: TestContext.Current.CancellationToken)));
 
 		outcome.TryGetValue(out Success<ProbeResponse> success).ShouldBeTrue();
 		success.Value.Value.ShouldBe("ok");
@@ -83,7 +83,8 @@ public sealed class GrpcWebRoundTripTests
 		using var httpClient = app.GetTestClient();
 
 		var outcome = await CreateClient(httpClient).FailAsync(
-			new ProbeRequest(), new CallContext(new(cancellationToken: TestContext.Current.CancellationToken)));
+			new ProbeRequest(),
+			new CallContext(new CallOptions(cancellationToken: TestContext.Current.CancellationToken)));
 
 		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
 		failed.Problem.Category.ShouldBe(ErrorCategory.InvalidCredentials);
@@ -107,8 +108,7 @@ public sealed class GrpcWebRoundTripTests
 	[DataContract]
 	public sealed class ProbeResponse
 	{
-		[DataMember(Order = 1)]
-		public string Value { get; set; } = string.Empty;
+		[DataMember(Order = 1)] public string Value { get; set; } = string.Empty;
 	}
 
 	sealed class ProbeService : IProbeService
@@ -122,7 +122,9 @@ public sealed class GrpcWebRoundTripTests
 		public Task<Outcome<ProbeResponse>> FailAsync(ProbeRequest request, CallContext context = default)
 		{
 			var outcome = Outcome<ProbeResponse>.Err(ErrorCategory.InvalidCredentials);
-			return outcome is Failed(var problem) ? throw problem.ToRpcException() : Task.FromResult(outcome);
+			return outcome is Failed(var problem) ?
+				throw problem.ToRpcException() :
+				Task.FromResult(outcome);
 		}
 	}
 }

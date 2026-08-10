@@ -5,9 +5,10 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 
 public sealed class DeterministicGuidSerializerTests
 {
+	const string KnownWireHex = "0A102ED6657DE927568B95E12665A8AEA6A2";
+
 	// The RFC 9562 §A.4 example UUIDv5 (DNS namespace, "www.example.com").
 	static readonly Guid _knownV5 = new("2ed6657d-e927-568b-95e1-2665a8aea6a2");
-	const string KnownWireHex = "0A102ED6657DE927568B95E12665A8AEA6A2";
 
 	[Fact]
 	void Serializes_as_sixteen_rfc_9562_bytes()
@@ -66,13 +67,11 @@ public sealed class DeterministicGuidSerializerTests
 [ProtoContract]
 public sealed class DeterministicGuidEnvelope
 {
-	[ProtoMember(1)]
-	public DeterministicGuid Id { get; set; }
+	[ProtoMember(1)] public DeterministicGuid Id { get; set; }
 }
 
 [ProtoContract]
 public sealed class NullableDeterministicGuidEnvelope
 {
-	[ProtoMember(1)]
-	public DeterministicGuid? Id { get; set; }
+	[ProtoMember(1)] public DeterministicGuid? Id { get; set; }
 }

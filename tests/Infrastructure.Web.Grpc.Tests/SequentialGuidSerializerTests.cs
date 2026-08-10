@@ -5,9 +5,10 @@ namespace Norse.Infrastructure.Web.Grpc.Tests;
 
 public sealed class SequentialGuidSerializerTests
 {
+	const string KnownWireHex = "0A10017F22E279B07CC398C4DC0C0C07398F";
+
 	// The RFC 9562 §A.6 example UUIDv7.
 	static readonly Guid _knownV7 = new("017f22e2-79b0-7cc3-98c4-dc0c0c07398f");
-	const string KnownWireHex = "0A10017F22E279B07CC398C4DC0C0C07398F";
 
 	[Fact]
 	void Serializes_as_sixteen_rfc_9562_bytes()
@@ -78,13 +79,11 @@ public sealed class SequentialGuidSerializerTests
 [ProtoContract]
 public sealed class SequentialGuidEnvelope
 {
-	[ProtoMember(1)]
-	public SequentialGuid Id { get; set; }
+	[ProtoMember(1)] public SequentialGuid Id { get; set; }
 }
 
 [ProtoContract]
 public sealed class NullableSequentialGuidEnvelope
 {
-	[ProtoMember(1)]
-	public SequentialGuid? Id { get; set; }
+	[ProtoMember(1)] public SequentialGuid? Id { get; set; }
 }

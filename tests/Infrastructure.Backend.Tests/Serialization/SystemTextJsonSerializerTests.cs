@@ -7,24 +7,6 @@ namespace Norse.Infrastructure.Backend.Tests.Serialization;
 
 public sealed class SystemTextJsonSerializerTests
 {
-	sealed record Payload
-	{
-		public required string FirstName { get; init; }
-		public string? MiddleName { get; init; }
-		public required int Age { get; init; }
-	}
-
-	readonly record struct FakePii : IMaskedValue
-	{
-		public string Masked => "***";
-		public string ToMasked(DateOnly asOf) => Masked;
-	}
-
-	sealed record MaskedPayload
-	{
-		public FakePii Email { get; init; }
-	}
-
 	static readonly ISerializerProvider _provider = BuildProvider();
 
 	static ISerializerProvider BuildProvider()
@@ -112,7 +94,25 @@ public sealed class SystemTextJsonSerializerTests
 	{
 		// Spec §1.5 layer 2, relocated: accidental egress through the seam renders the mask, never
 		// the wire value. Deliberate egress never routes PII structs through a serializer at all.
-		var json = _provider[NamingStrategy.CamelCase].Serialize(new MaskedPayload { Email = new() });
+		var json = _provider[NamingStrategy.CamelCase].Serialize(new MaskedPayload { Email = new FakePii() });
 		json.ShouldContain("\"***\"");
+	}
+
+	sealed record Payload
+	{
+		public required string FirstName { get; init; }
+		public string? MiddleName { get; init; }
+		public required int Age { get; init; }
+	}
+
+	readonly record struct FakePii : IMaskedValue
+	{
+		public string Masked => "***";
+		public string ToMasked(DateOnly asOf) => Masked;
+	}
+
+	sealed record MaskedPayload
+	{
+		public FakePii Email { get; init; }
 	}
 }

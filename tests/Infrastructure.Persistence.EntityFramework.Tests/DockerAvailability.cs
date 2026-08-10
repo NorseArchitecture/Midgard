@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace Norse.Infrastructure.Persistence.EntityFramework.Tests;
@@ -25,13 +26,13 @@ static class DockerAvailability
 				{
 					RedirectStandardOutput = true,
 					RedirectStandardError = true,
-					UseShellExecute = false,
-				},
+					UseShellExecute = false
+				}
 			};
 			process.Start();
 			return process.WaitForExit(TimeSpan.FromSeconds(5)) && process.ExitCode == 0;
 		}
-		catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+		catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
 		{
 			// docker CLI not on PATH at all — the same "not available" outcome as a daemon that
 			// won't answer, not a reason to fail the whole run loudly: this is a portability probe,

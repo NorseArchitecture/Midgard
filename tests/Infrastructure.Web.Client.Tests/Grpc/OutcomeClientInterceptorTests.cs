@@ -14,12 +14,14 @@ public sealed class OutcomeClientInterceptorTests
 	{
 		var requestMarshaller = Marshallers.Create<TRequest>(_ => [], _ => default!);
 		var responseMarshaller = Marshallers.Create<TResponse>(_ => [], _ => default!);
-		Method<TRequest, TResponse> method = new(MethodType.Unary, "Test", "Method", requestMarshaller, responseMarshaller);
-		return new(method, "localhost", new CallOptions());
+		Method<TRequest, TResponse> method = new(MethodType.Unary, "Test", "Method", requestMarshaller,
+			responseMarshaller);
+		return new ClientInterceptorContext<TRequest, TResponse>(method, "localhost", new CallOptions());
 	}
 
 	static AsyncUnaryCall<TResponse> CreateCall<TResponse>(Task<TResponse> responseAsync) =>
-		new(responseAsync, Task.FromResult<Metadata>([]), () => new Status(StatusCode.OK, string.Empty), () => [], () => { });
+		new(responseAsync, Task.FromResult<Metadata>([]), () => new Status(StatusCode.OK, string.Empty), () => [],
+			() => { });
 
 	[Fact]
 	async Task Decodes_a_thrown_RpcException_into_a_Failed_outcome()

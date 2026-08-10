@@ -9,37 +9,42 @@ using Norse.Persistence.EntityFramework;
 namespace Norse.Infrastructure.Persistence.EntityFramework;
 
 /// <summary>
-/// The one public member of this project (well-and-wire spec §5, smallest-footprint law) —
-/// <see cref="Repository{TContext,TEntity,TView}"/>, <see cref="WellMap"/>, and
-/// <see cref="WellValidation"/> all stay internal.
+///     The one public member of this project (well-and-wire spec §5, smallest-footprint law) —
+///     <see cref="Repository{TContext,TEntity,TView}" />, <see cref="WellMap" />, and
+///     <see cref="WellValidation" /> all stay internal.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
 	/// <summary>
-	/// A well that models its entities correctly gets its repositories by existing: scans
-	/// <c>TContext</c>'s public <see cref="DbSet{TEntity}"/> properties for
-	/// <see cref="IViewBearer{TView}"/> implementors — DbSet-rooted-ness is the discovery law, so a
-	/// view-bearing entity reachable only by navigation is not a well root and gets no repository —
-	/// and registers a singleton <see cref="IReadRepository{TView}"/> per pair. Two roots claiming
-	/// the same view throw immediately, from the CLR scan itself; the total-mirror law
-	/// (<see cref="WellValidation"/>) is deferred into each singleton's factory closure and
-	/// validated once, at first resolution, since it needs a live <see cref="DbContext.Model"/> that
-	/// discovery cannot wait for MS DI's own closed-service-type requirement to produce.
+	///     A well that models its entities correctly gets its repositories by existing: scans
+	///     <c>TContext</c>'s public <see cref="DbSet{TEntity}" /> properties for
+	///     <see cref="IViewBearer{TView}" /> implementors — DbSet-rooted-ness is the discovery law, so a
+	///     view-bearing entity reachable only by navigation is not a well root and gets no repository —
+	///     and registers a singleton <see cref="IReadRepository{TView}" /> per pair. Two roots claiming
+	///     the same view throw immediately, from the CLR scan itself; the total-mirror law
+	///     (<see cref="WellValidation" />) is deferred into each singleton's factory closure and
+	///     validated once, at first resolution, since it needs a live <see cref="DbContext.Model" /> that
+	///     discovery cannot wait for MS DI's own closed-service-type requirement to produce.
 	/// </summary>
-	[RequiresUnreferencedCode("Scans TContext's public DbSet<TEntity> properties and each entity's interfaces via runtime reflection to discover well roots, then dispatches to RegisterCore<TContext,TEntity,TView> — the well-and-wire mirror law (spec §4.2) guarantees the shapes are valid at runtime, but neither the discovery scan nor the generic dispatch is statically provable to the trimmer.")]
-	[RequiresDynamicCode("Closes RegisterCore<TContext,TEntity,TView> via MakeGenericMethod over CLR types discovered at startup by reflection; a well's entity/view pairs are not known at compile time, so ahead-of-time generic instantiation cannot cover them.")]
+	[RequiresUnreferencedCode(
+		"Scans TContext's public DbSet<TEntity> properties and each entity's interfaces via runtime reflection to discover well roots, then dispatches to RegisterCore<TContext,TEntity,TView> — the well-and-wire mirror law (spec §4.2) guarantees the shapes are valid at runtime, but neither the discovery scan nor the generic dispatch is statically provable to the trimmer.")]
+	[RequiresDynamicCode(
+		"Closes RegisterCore<TContext,TEntity,TView> via MakeGenericMethod over CLR types discovered at startup by reflection; a well's entity/view pairs are not known at compile time, so ahead-of-time generic instantiation cannot cover them.")]
 	public static IServiceCollection AddWell<TContext>(this IServiceCollection services) where TContext : DbContext
 	{
 		// Looked up fresh, not cached in a static field: RegisterCore is itself
 		// RequiresUnreferencedCode, and a static field initializer runs in the implicit, unannotated
 		// static constructor — AddWell is already the correctly annotated home for this lookup, and
 		// it is one-time startup wiring, not a hot path.
-		var registerCore = typeof(ServiceCollectionExtensions).GetMethod(nameof(RegisterCore), BindingFlags.NonPublic | BindingFlags.Static)!;
+		var registerCore =
+			typeof(ServiceCollectionExtensions).GetMethod(nameof(RegisterCore),
+				BindingFlags.NonPublic | BindingFlags.Static)!;
 
 		Dictionary<Type, Type> rootByView = [];
 		foreach (var dbSetProperty in typeof(TContext).GetProperties(BindingFlags.Public | BindingFlags.Instance))
 		{
-			if (!dbSetProperty.PropertyType.IsGenericType || dbSetProperty.PropertyType.GetGenericTypeDefinition() != typeof(DbSet<>))
+			if (!dbSetProperty.PropertyType.IsGenericType ||
+				dbSetProperty.PropertyType.GetGenericTypeDefinition() != typeof(DbSet<>))
 				continue;
 			var entityType = dbSetProperty.PropertyType.GetGenericArguments()[0];
 
@@ -57,25 +62,28 @@ public static class ServiceCollectionExtensions
 				registerCore.MakeGenericMethod(typeof(TContext), entityType, viewType).Invoke(null, [services]);
 			}
 		}
+
 		return services;
 	}
 
 	/// <summary>
-	/// Composes <see cref="NorseContextExtensions.AddNorseContextFactory{TContext}"/> (Urðarbrunnr's
-	/// provider seam, factory-shaped) with <see cref="AddWell{TContext}"/> (this class's own
-	/// well/repository discovery) into one call — the entry point every realm's runtime composition
-	/// should use instead of hand-rolling EF registration and remembering to chain discovery
-	/// afterward (well-composition spec §3.2).
+	///     Composes <see cref="NorseContextExtensions.AddNorseContextFactory{TContext}" /> (Urðarbrunnr's
+	///     provider seam, factory-shaped) with <see cref="AddWell{TContext}" /> (this class's own
+	///     well/repository discovery) into one call — the entry point every realm's runtime composition
+	///     should use instead of hand-rolling EF registration and remembering to chain discovery
+	///     afterward (well-composition spec §3.2).
 	/// </summary>
 	/// <typeparam name="TContext">
-	/// The <see cref="DbContext"/> type to register. Must implement <see cref="INorseDbContext"/>.
+	///     The <see cref="DbContext" /> type to register. Must implement <see cref="INorseDbContext" />.
 	/// </typeparam>
 	/// <param name="builder">The host application builder.</param>
 	/// <param name="provider">The provider binding.</param>
 	/// <param name="connectionStringName">The configuration key under <c>ConnectionStrings</c>.</param>
-	/// <returns>The same <paramref name="builder"/> for chaining.</returns>
-	[RequiresUnreferencedCode("Scans TContext's public DbSet<TEntity> properties and each entity's interfaces via runtime reflection to discover well roots, then dispatches to RegisterCore<TContext,TEntity,TView> — the well-and-wire mirror law (spec §4.2) guarantees the shapes are valid at runtime, but neither the discovery scan nor the generic dispatch is statically provable to the trimmer.")]
-	[RequiresDynamicCode("Closes RegisterCore<TContext,TEntity,TView> via MakeGenericMethod over CLR types discovered at startup by reflection; a well's entity/view pairs are not known at compile time, so ahead-of-time generic instantiation cannot cover them.")]
+	/// <returns>The same <paramref name="builder" /> for chaining.</returns>
+	[RequiresUnreferencedCode(
+		"Scans TContext's public DbSet<TEntity> properties and each entity's interfaces via runtime reflection to discover well roots, then dispatches to RegisterCore<TContext,TEntity,TView> — the well-and-wire mirror law (spec §4.2) guarantees the shapes are valid at runtime, but neither the discovery scan nor the generic dispatch is statically provable to the trimmer.")]
+	[RequiresDynamicCode(
+		"Closes RegisterCore<TContext,TEntity,TView> via MakeGenericMethod over CLR types discovered at startup by reflection; a well's entity/view pairs are not known at compile time, so ahead-of-time generic instantiation cannot cover them.")]
 	public static IHostApplicationBuilder AddNorseWell<TContext>(this IHostApplicationBuilder builder,
 		INorseEfProvider provider, string connectionStringName)
 		where TContext : DbContext, INorseDbContext
@@ -85,7 +93,8 @@ public static class ServiceCollectionExtensions
 		return builder;
 	}
 
-	[RequiresUnreferencedCode("Calls WellMap.For<TEntity,TView>, itself RequiresUnreferencedCode (well-and-wire spec §4.2 mirror law promotion map, not statically provable to the trimmer).")]
+	[RequiresUnreferencedCode(
+		"Calls WellMap.For<TEntity,TView>, itself RequiresUnreferencedCode (well-and-wire spec §4.2 mirror law promotion map, not statically provable to the trimmer).")]
 	static void RegisterCore<TContext,
 		[DynamicallyAccessedMembers(
 			DynamicallyAccessedMemberTypes.PublicConstructors |
@@ -94,7 +103,8 @@ public static class ServiceCollectionExtensions
 			DynamicallyAccessedMemberTypes.NonPublicFields |
 			DynamicallyAccessedMemberTypes.PublicProperties |
 			DynamicallyAccessedMemberTypes.NonPublicProperties |
-			DynamicallyAccessedMemberTypes.Interfaces)] TEntity,
+			DynamicallyAccessedMemberTypes.Interfaces)]
+	TEntity,
 		TView>(IServiceCollection services)
 		where TContext : DbContext
 		where TEntity : class, IViewBearer<TView>
@@ -109,13 +119,15 @@ public static class ServiceCollectionExtensions
 			try
 			{
 				var entityModel = context.Model.FindEntityType(typeof(TEntity))
-					?? throw new InvalidOperationException($"'{typeof(TEntity)}' is not part of '{typeof(TContext)}''s EF model.");
+					?? throw new InvalidOperationException(
+						$"'{typeof(TEntity)}' is not part of '{typeof(TContext)}''s EF model.");
 				WellValidation.Validate(entityModel, typeof(TView));
 			}
 			finally
 			{
 				context.Dispose();
 			}
+
 			// Singleton factory semantics already cache the result of this call — including the
 			// WellMap built below — for the lifetime of the provider; no separate cache needed.
 			return new Repository<TContext, TEntity, TView>(factory, WellMap.For<TEntity, TView>());

@@ -19,7 +19,8 @@ public sealed class PostgresSeekVerificationTests(PostgresContainerFixture fixtu
 	[Fact]
 	async Task Anchored_composite_query_produces_an_index_scan_not_a_sequential_scan()
 	{
-		var (context, log) = TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorsePostgresEfProvider.Instance);
+		var (context, log) =
+			TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorsePostgresEfProvider.Instance);
 		await using var contextDisposable = context.ConfigureAwait(false);
 
 		var map = WellMap.For<WidgetEntity, WidgetView>();
@@ -29,9 +30,11 @@ public sealed class PostgresSeekVerificationTests(PostgresContainerFixture fixtu
 		// parameter (`@alphaEffectiveDate`, unresolved in the printed text) — EXPLAIN needs a fully
 		// literal, directly executable statement, and EF.Constant is EF's own sanctioned way to mark
 		// a value for literal inlining rather than parameterization.
-		Expression<Func<WidgetView, bool>> anchored = v => v.CustomerId == "C1" && v.EffectiveDate == EF.Constant(alphaEffectiveDate) && v.Notes == "hot";
+		Expression<Func<WidgetView, bool>> anchored = v =>
+			v.CustomerId == "C1" && v.EffectiveDate == EF.Constant(alphaEffectiveDate) && v.Notes == "hot";
 		var rewritten = PredicateRewriter.Rewrite<WidgetEntity, WidgetView>(anchored, map);
-		var query = context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map));
+		var query = context.Set<WidgetEntity>().AsNoTracking().Where(rewritten)
+			.Select(ViewSelector.For<WidgetEntity, WidgetView>(map));
 
 		var sql = SeekVerificationSupport.StripParameterCommentPreamble(query.ToQueryString());
 		var tableName = context.Model.FindEntityType(typeof(WidgetEntity))!.GetTableName();
@@ -45,13 +48,15 @@ public sealed class PostgresSeekVerificationTests(PostgresContainerFixture fixtu
 		List<string> plan;
 		try
 		{
-			await context.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off", TestContext.Current.CancellationToken);
+			await context.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off",
+				TestContext.Current.CancellationToken);
 			// `sql` is EF's own ToQueryString() output over a parameterized LINQ query the rewriter
 			// built from a strongly-typed predicate — never caller/user input, so the analyzer's
 			// SQL-injection concern does not apply; EXPLAIN accepts no parameters of its own, so
 			// SqlQuery's parameterized-interpolation form is not an option here.
 #pragma warning disable EF1003
-			plan = await context.Database.SqlQueryRaw<string>("EXPLAIN " + sql).ToListAsync(TestContext.Current.CancellationToken);
+			plan = await context.Database.SqlQueryRaw<string>("EXPLAIN " + sql)
+				.ToListAsync(TestContext.Current.CancellationToken);
 #pragma warning restore EF1003
 		}
 		finally
@@ -59,25 +64,34 @@ public sealed class PostgresSeekVerificationTests(PostgresContainerFixture fixtu
 			await context.Database.CloseConnectionAsync();
 		}
 
-		TranslationCanarySupport.Dump(output, "Postgres: Anchored_composite_query_produces_an_index_scan_not_a_sequential_scan (captured SQL)", log);
-		TranslationCanarySupport.Dump(output, "Postgres: Anchored_composite_query_produces_an_index_scan_not_a_sequential_scan (EXPLAIN)", plan);
+		TranslationCanarySupport.Dump(output,
+			"Postgres: Anchored_composite_query_produces_an_index_scan_not_a_sequential_scan (captured SQL)", log);
+		TranslationCanarySupport.Dump(output,
+			"Postgres: Anchored_composite_query_produces_an_index_scan_not_a_sequential_scan (EXPLAIN)", plan);
 
-		plan.ShouldContain(l => l.Contains("Index Scan", StringComparison.Ordinal) || l.Contains("Index Cond", StringComparison.Ordinal));
+		plan.ShouldContain(l =>
+			l.Contains("Index Scan", StringComparison.Ordinal) || l.Contains("Index Cond", StringComparison.Ordinal));
 		plan.ShouldNotContain(l => l.Contains($"Seq Scan on {tableName}", StringComparison.Ordinal));
 	}
 }
 
-/// <summary>SQL Server half — sargable-shape assertion over the captured SQL (spec §9.6: plan XML is telemetry, not asserted).</summary>
+/// <summary>
+///     SQL Server half — sargable-shape assertion over the captured SQL (spec §9.6: plan XML is telemetry, not
+///     asserted).
+/// </summary>
 [Collection(nameof(SqlServerCollection))]
 public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fixture, ITestOutputHelper output)
 {
-	public static bool IsSqlServerTestable => DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
+	public static bool IsSqlServerTestable =>
+		DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
 
-	[Fact(SkipUnless = nameof(IsSqlServerTestable), Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+	[Fact(SkipUnless = nameof(IsSqlServerTestable),
+		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
 	async Task Anchored_composite_query_is_sargable_shaped()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
-		var (context, log) = TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
+		var (context, log) =
+			TranslationCanarySupport.CreateLoggedContext(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
 		await using var contextDisposable = context.ConfigureAwait(false);
 
 		var map = WellMap.For<WidgetEntity, WidgetView>();
@@ -85,12 +99,15 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 		// EF.Constant (not a bare captured local) for the same reason as the Postgres half: the
 		// plan-XML capture below needs a fully literal, standalone-executable statement — a captured
 		// local would leave an unresolved parameter reference in ToQueryString()'s output.
-		Expression<Func<WidgetView, bool>> anchored = v => v.CustomerId == "C1" && v.EffectiveDate == EF.Constant(alphaEffectiveDate) && v.Notes == "hot";
+		Expression<Func<WidgetView, bool>> anchored = v =>
+			v.CustomerId == "C1" && v.EffectiveDate == EF.Constant(alphaEffectiveDate) && v.Notes == "hot";
 		var rewritten = PredicateRewriter.Rewrite<WidgetEntity, WidgetView>(anchored, map);
-		var results = await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
+		var results = await context.Set<WidgetEntity>().AsNoTracking().Where(rewritten)
+			.Select(ViewSelector.For<WidgetEntity, WidgetView>(map))
 			.ToListAsync(TestContext.Current.CancellationToken);
 
-		TranslationCanarySupport.Dump(output, "SqlServer: Anchored_composite_query_is_sargable_shaped (captured SQL)", log);
+		TranslationCanarySupport.Dump(output, "SqlServer: Anchored_composite_query_is_sargable_shaped (captured SQL)",
+			log);
 
 		results.Count.ShouldBe(1);
 		// Sargable-shaped: the indexed columns (CustomerId, EffectiveDate) appear as bare equality
@@ -99,7 +116,8 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 		// assuming a specific table alias (e.g. "[w]" vs "[w0]") — this file's SQL Server half never
 		// ran against a real engine on this task's arm64 dev host (see SqlServerContainerFixture's
 		// remarks), so the assertion avoids guessing EF's exact alias-naming output.
-		var commandText = log.First(l => l.Contains("SELECT", StringComparison.Ordinal) && l.Contains("FROM", StringComparison.Ordinal));
+		var commandText = log.First(l =>
+			l.Contains("SELECT", StringComparison.Ordinal) && l.Contains("FROM", StringComparison.Ordinal));
 		commandText.ShouldContain(".[CustomerId] = ");
 		commandText.ShouldContain(".[EffectiveDate] = ");
 		commandText.ShouldNotContain("CAST(");
@@ -115,7 +133,8 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 		// own SqlConnection is opened, used for exactly this, and disposed here; the DbContext used
 		// above for the real, executed query is never touched by it.
 		var literalSql = SeekVerificationSupport.StripParameterCommentPreamble(
-			context.Set<WidgetEntity>().AsNoTracking().Where(rewritten).Select(ViewSelector.For<WidgetEntity, WidgetView>(map)).ToQueryString());
+			context.Set<WidgetEntity>().AsNoTracking().Where(rewritten)
+				.Select(ViewSelector.For<WidgetEntity, WidgetView>(map)).ToQueryString());
 		await using SqlConnection planConnection = new(fixture.ConnectionString);
 		await planConnection.OpenAsync(TestContext.Current.CancellationToken);
 		string? planXml = null;
@@ -143,7 +162,8 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 			await showplanOff.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
 		}
 
-		output.WriteLine("--- SqlServer: Anchored_composite_query_is_sargable_shaped (SHOWPLAN_XML, telemetry only, not asserted) ---");
+		output.WriteLine(
+			"--- SqlServer: Anchored_composite_query_is_sargable_shaped (SHOWPLAN_XML, telemetry only, not asserted) ---");
 		output.WriteLine(planXml ?? "(no plan returned)");
 	}
 }
@@ -151,14 +171,17 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 static class SeekVerificationSupport
 {
 	/// <summary>
-	/// <c>IQueryable.ToQueryString()</c> prefixes the runnable SQL with commented-out
-	/// parameter-value lines (<c>-- @__p_0='...'</c>) for readability; a raw <c>EXPLAIN</c> needs the
-	/// bare statement immediately after the keyword, so the preamble is stripped before concatenation.
+	///     <c>IQueryable.ToQueryString()</c> prefixes the runnable SQL with commented-out
+	///     parameter-value lines (<c>-- @__p_0='...'</c>) for readability; a raw <c>EXPLAIN</c> needs the
+	///     bare statement immediately after the keyword, so the preamble is stripped before concatenation.
 	/// </summary>
 	public static string StripParameterCommentPreamble(string sql)
 	{
 		var lines = sql.Split('\n');
-		var firstStatementLine = Array.FindIndex(lines, l => !l.TrimStart().StartsWith("--", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(l));
-		return firstStatementLine < 0 ? sql : string.Join('\n', lines[firstStatementLine..]);
+		var firstStatementLine = Array.FindIndex(lines,
+			l => !l.TrimStart().StartsWith("--", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(l));
+		return firstStatementLine < 0 ?
+			sql :
+			string.Join('\n', lines[firstStatementLine..]);
 	}
 }

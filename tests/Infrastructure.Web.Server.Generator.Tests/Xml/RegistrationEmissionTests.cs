@@ -1,13 +1,14 @@
 using System.Reflection;
 using Microsoft.CodeAnalysis;
+using Norse.Infrastructure.Web.Server.Xml;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
-/// Compiles a fixture contract set through the real generator, loads the emitted assembly, and calls
-/// the generated <c>NorseXmlShapeRegistration.Build()</c> — asserting the returned
-/// <see cref="XmlShapeRegistry"/> genuinely resolves every fixture shape by its real CLR
-/// <see cref="Type"/>, not merely that the emitted source text mentions the right names.
+///     Compiles a fixture contract set through the real generator, loads the emitted assembly, and calls
+///     the generated <c>NorseXmlShapeRegistration.Build()</c> — asserting the returned
+///     <see cref="XmlShapeRegistry" /> genuinely resolves every fixture shape by its real CLR
+///     <see cref="Type" />, not merely that the emitted source text mentions the right names.
 /// </summary>
 public sealed class RegistrationEmissionTests
 {
@@ -88,33 +89,6 @@ public sealed class RegistrationEmissionTests
 		}
 		""";
 
-	[Fact]
-	void Build_registers_every_fixture_shape_resolvable_by_its_real_contract_type()
-	{
-		var (registry, resolveType) = BuildRegistration(TwoContractFixture);
-
-		registry.TryGet(resolveType("Norse.Fixtures.Registration.PingRequest"), out var requestShape).ShouldBeTrue();
-		requestShape!.ContractType.ShouldBe(resolveType("Norse.Fixtures.Registration.PingRequest"));
-
-		registry.TryGet(resolveType("Norse.Fixtures.Registration.PingResponse"), out var responseShape).ShouldBeTrue();
-		responseShape!.ContractType.ShouldBe(resolveType("Norse.Fixtures.Registration.PingResponse"));
-	}
-
-	[Fact]
-	void Build_never_double_registers_a_type_shared_across_two_controllers()
-	{
-		// SharedAddress is reachable from both ControllerA and ControllerB — XmlShapeGenerator's own
-		// closure-walk dedup (Task 6) already guarantees exactly one SharedAddressXmlShape class; this
-		// proves Build() only ever calls registry.Add(...) once for it too (XmlShapeRegistry.Add throws
-		// ArgumentException on a duplicate ContractType — Build() succeeding at all is the assertion).
-		var (registry, resolveType) = BuildRegistration(SharedTypeFixture);
-
-		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.SharedAddress"), out var sharedShape).ShouldBeTrue();
-		sharedShape!.ContractType.ShouldBe(resolveType("Norse.Fixtures.RegistrationShared.SharedAddress"));
-		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.RequestA"), out _).ShouldBeTrue();
-		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.RequestB"), out _).ShouldBeTrue();
-	}
-
 	const string EnumFixture = """
 		using System.Runtime.Serialization;
 		using System.Threading.Tasks;
@@ -156,32 +130,6 @@ public sealed class RegistrationEmissionTests
 				Task.FromResult(new ActionResult<PingResponse>(new PingResponse()));
 		}
 		""";
-
-	[Fact]
-	void EnumRegistration_Build_registers_a_table_for_every_reachable_enum_and_none_for_an_unexposed_one()
-	{
-		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(EnumFixture);
-		diagnostics.ShouldBeEmpty();
-
-		var assembly = Emit(outputCompilation);
-		var rootNamespace = outputCompilation.AssemblyName!;
-		var registrationType = assembly.GetType($"{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration")
-			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated.");
-		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
-
-		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
-
-		var statusType = assembly.GetType("Norse.Fixtures.RegistrationEnum.Status")
-			?? throw new InvalidOperationException("Status was not found in the compiled fixture assembly.");
-		var unexposedType = assembly.GetType("Norse.Fixtures.RegistrationEnum.Unexposed")
-			?? throw new InvalidOperationException("Unexposed was not found in the compiled fixture assembly.");
-
-		registry.TryGet(statusType, out var statusTable).ShouldBeTrue();
-		statusTable!.TypeName.ShouldBe("Status");
-		statusTable.Count.ShouldBe(2);
-
-		registry.TryGet(unexposedType, out _).ShouldBeFalse();
-	}
 
 	const string SharedEnumFixture = """
 		using System.Runtime.Serialization;
@@ -232,6 +180,130 @@ public sealed class RegistrationEmissionTests
 		""";
 
 	[Fact]
+	void Build_registers_every_fixture_shape_resolvable_by_its_real_contract_type()
+	{
+		var (registry, resolveType) = BuildRegistration(TwoContractFixture);
+
+		registry.TryGet(resolveType("Norse.Fixtures.Registration.PingRequest"), out var requestShape).ShouldBeTrue();
+		requestShape!.ContractType.ShouldBe(resolveType("Norse.Fixtures.Registration.PingRequest"));
+
+		registry.TryGet(resolveType("Norse.Fixtures.Registration.PingResponse"), out var responseShape).ShouldBeTrue();
+		responseShape!.ContractType.ShouldBe(resolveType("Norse.Fixtures.Registration.PingResponse"));
+	}
+
+	[Fact]
+	void Build_never_double_registers_a_type_shared_across_two_controllers()
+	{
+		// SharedAddress is reachable from both ControllerA and ControllerB — XmlShapeGenerator's own
+		// closure-walk dedup (Task 6) already guarantees exactly one SharedAddressXmlShape class; this
+		// proves Build() only ever calls registry.Add(...) once for it too (XmlShapeRegistry.Add throws
+		// ArgumentException on a duplicate ContractType — Build() succeeding at all is the assertion).
+		var (registry, resolveType) = BuildRegistration(SharedTypeFixture);
+
+		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.SharedAddress"), out var sharedShape)
+			.ShouldBeTrue();
+		sharedShape!.ContractType.ShouldBe(resolveType("Norse.Fixtures.RegistrationShared.SharedAddress"));
+		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.RequestA"), out _).ShouldBeTrue();
+		registry.TryGet(resolveType("Norse.Fixtures.RegistrationShared.RequestB"), out _).ShouldBeTrue();
+	}
+
+	const string FlagsEnumFixture = """
+		using System;
+		using System.Runtime.Serialization;
+		using System.Threading.Tasks;
+		using Microsoft.AspNetCore.Mvc;
+		using Norse.Primitives;
+		using Norse.Abstractions.Web.Server.Facade;
+
+		namespace Norse.Fixtures.RegistrationFlags;
+
+		[Flags]
+		public enum AccessRights
+		{
+			None = 0,
+			Read = 1,
+			Write = 2,
+			Execute = 4,
+			All = Read | Write | Execute
+		}
+
+		[DataContract]
+		public sealed record GrantRequest
+		{
+			[DataMember]
+			public Result<AccessRights> Rights { get; init; }
+		}
+
+		public sealed record GrantResponse
+		{
+			[DataMember]
+			public string Status { get; init; } = "";
+		}
+
+		public sealed class GrantController : GrpcControllerBase
+		{
+			public Task<ActionResult<GrantResponse>> Do([FromBody] GrantRequest request) =>
+				Task.FromResult(new ActionResult<GrantResponse>(new GrantResponse()));
+		}
+		""";
+
+	[Fact]
+	void EnumRegistration_Build_registers_a_flags_enum_table_exactly_as_for_a_plain_one()
+	{
+		// One table, one algorithm (§2.3): a [Flags] enum's table carries every defined member —
+		// the named zero and the composite aggregate included — in declaration order, exactly as a
+		// plain enum's table would; being flags changes how the emitted shape consumes the table,
+		// never how the table is built.
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(FlagsEnumFixture);
+		diagnostics.ShouldBeEmpty();
+
+		var assembly = Emit(outputCompilation);
+		var rootNamespace = outputCompilation.AssemblyName!;
+		var registrationType = assembly.GetType($"{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration")
+			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated.");
+		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
+
+		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
+
+		var accessRightsType = assembly.GetType("Norse.Fixtures.RegistrationFlags.AccessRights")
+			?? throw new InvalidOperationException("AccessRights was not found in the compiled fixture assembly.");
+
+		registry.TryGet(accessRightsType, out var table).ShouldBeTrue();
+		table!.TypeName.ShouldBe("AccessRights");
+		table.Count.ShouldBe(5);
+		table.Value(0).ShouldBe(0L);
+		table.Value(4).ShouldBe(7L);
+		table.Name(1, (int)XmlCaseStyle.SnakeCase).ShouldBe("read");
+		table.Name(4, (int)XmlCaseStyle.SnakeCase).ShouldBe("all");
+	}
+
+	[Fact]
+	void EnumRegistration_Build_registers_a_table_for_every_reachable_enum_and_none_for_an_unexposed_one()
+	{
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(EnumFixture);
+		diagnostics.ShouldBeEmpty();
+
+		var assembly = Emit(outputCompilation);
+		var rootNamespace = outputCompilation.AssemblyName!;
+		var registrationType = assembly.GetType($"{rootNamespace}.NorseXmlShapes.NorseEnumNameRegistration")
+			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated.");
+		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
+
+		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
+
+		var statusType = assembly.GetType("Norse.Fixtures.RegistrationEnum.Status")
+			?? throw new InvalidOperationException("Status was not found in the compiled fixture assembly.");
+		var unexposedType = assembly.GetType("Norse.Fixtures.RegistrationEnum.Unexposed")
+			?? throw new InvalidOperationException("Unexposed was not found in the compiled fixture assembly.");
+
+		registry.TryGet(statusType, out var statusTable).ShouldBeTrue();
+		statusTable!.TypeName.ShouldBe("Status");
+		statusTable.Count.ShouldBe(2);
+
+		registry.TryGet(unexposedType, out _).ShouldBeFalse();
+	}
+
+	[Fact]
 	void EnumRegistration_Build_never_double_registers_an_enum_type_shared_across_two_controllers()
 	{
 		// Status is reachable from both RequestA (via ControllerA) and RequestB (via ControllerB) —
@@ -268,8 +340,10 @@ public sealed class RegistrationEmissionTests
 		diagnostics.ShouldBeEmpty();
 
 		var assembly = Emit(outputCompilation);
-		var registrationType = assembly.GetType($"{outputCompilation.AssemblyName}.NorseXmlShapes.NorseEnumNameRegistration")
-			?? throw new InvalidOperationException("NorseEnumNameRegistration was not generated for an enum-free compilation.");
+		var registrationType =
+			assembly.GetType($"{outputCompilation.AssemblyName}.NorseXmlShapes.NorseEnumNameRegistration")
+			?? throw new InvalidOperationException(
+				"NorseEnumNameRegistration was not generated for an enum-free compilation.");
 		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
 
 		var registry = (EnumNameRegistry)buildMethod.Invoke(null, null)!;
@@ -286,8 +360,10 @@ public sealed class RegistrationEmissionTests
 		diagnostics.ShouldBeEmpty();
 
 		var assembly = Emit(outputCompilation);
-		var registrationType = assembly.GetType($"{outputCompilation.AssemblyName}.NorseXmlShapes.NorseXmlShapeRegistration")
-			?? throw new InvalidOperationException("NorseXmlShapeRegistration was not generated for a controller-free compilation.");
+		var registrationType =
+			assembly.GetType($"{outputCompilation.AssemblyName}.NorseXmlShapes.NorseXmlShapeRegistration")
+			?? throw new InvalidOperationException(
+				"NorseXmlShapeRegistration was not generated for a controller-free compilation.");
 		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
 
 		var registry = (XmlShapeRegistry)buildMethod.Invoke(null, null)!;
@@ -307,8 +383,11 @@ public sealed class RegistrationEmissionTests
 		var buildMethod = registrationType.GetMethod("Build", BindingFlags.Public | BindingFlags.Static)!;
 
 		var registry = (XmlShapeRegistry)buildMethod.Invoke(null, null)!;
+
 		Type ResolveType(string fullyQualifiedName) =>
-			assembly.GetType(fullyQualifiedName) ?? throw new InvalidOperationException($"Type '{fullyQualifiedName}' was not found in the compiled fixture assembly.");
+			assembly.GetType(fullyQualifiedName) ??
+			throw new InvalidOperationException(
+				$"Type '{fullyQualifiedName}' was not found in the compiled fixture assembly.");
 
 		return (registry, ResolveType);
 	}

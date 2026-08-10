@@ -1,12 +1,13 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Norse.Infrastructure.Web.Server.Generator.Xml;
 
-namespace Norse.Infrastructure.Web.Server.Xml.Generator.Tests;
+namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
-/// Proves the load-bearing incremental-pipeline claim (plan Task 5, spec §2): editing a syntax tree
-/// unrelated to any facade controller must not re-run the closure walk. Asserted via
-/// <see cref="GeneratorDriverRunResult"/> tracked-step reasons — incrementality proven, not presumed.
+///     Proves the load-bearing incremental-pipeline claim (plan Task 5, spec §2): editing a syntax tree
+///     unrelated to any facade controller must not re-run the closure walk. Asserted via
+///     <see cref="GeneratorDriverRunResult" /> tracked-step reasons — incrementality proven, not presumed.
 /// </summary>
 public sealed class IncrementalCachingTests
 {
@@ -65,7 +66,8 @@ public sealed class IncrementalCachingTests
 		var compilation1 = CSharpCompilation.Create(
 			"Norse.Hosting.Web.Server",
 			[
-				CSharpSyntaxTree.ParseText(GeneratorTestHarness.StubGrpcControllerBase, cancellationToken: cancellationToken),
+				CSharpSyntaxTree.ParseText(GeneratorTestHarness.StubGrpcControllerBase,
+					cancellationToken: cancellationToken),
 				CSharpSyntaxTree.ParseText(Controller, cancellationToken: cancellationToken),
 				unrelatedTree1
 			],
@@ -88,7 +90,9 @@ public sealed class IncrementalCachingTests
 
 		steps.ShouldNotBeEmpty();
 		steps.SelectMany(step => step.Outputs)
-			.ShouldAllBe(output => output.Reason == IncrementalStepRunReason.Cached || output.Reason == IncrementalStepRunReason.Unchanged);
+			.ShouldAllBe(output =>
+				output.Reason == IncrementalStepRunReason.Cached ||
+				output.Reason == IncrementalStepRunReason.Unchanged);
 	}
 
 	[Fact]
@@ -105,7 +109,11 @@ public sealed class IncrementalCachingTests
 		var controllerTree1 = CSharpSyntaxTree.ParseText(Controller, cancellationToken: cancellationToken);
 		var compilation1 = CSharpCompilation.Create(
 			"Norse.Hosting.Web.Server",
-			[CSharpSyntaxTree.ParseText(GeneratorTestHarness.StubGrpcControllerBase, cancellationToken: cancellationToken), controllerTree1],
+			[
+				CSharpSyntaxTree.ParseText(GeneratorTestHarness.StubGrpcControllerBase,
+					cancellationToken: cancellationToken),
+				controllerTree1
+			],
 			GeneratorTestHarness.ExtraReferences,
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
@@ -115,7 +123,8 @@ public sealed class IncrementalCachingTests
 
 		driver = driver.RunGenerators(compilation1, cancellationToken);
 
-		var controllerTree2 = CSharpSyntaxTree.ParseText(Controller.Replace("Result<string> Value", "Result<int> Value"), cancellationToken: cancellationToken);
+		var controllerTree2 = CSharpSyntaxTree.ParseText(
+			Controller.Replace("Result<string> Value", "Result<int> Value"), cancellationToken: cancellationToken);
 		var compilation2 = compilation1.ReplaceSyntaxTree(controllerTree1, controllerTree2);
 
 		driver = driver.RunGenerators(compilation2, cancellationToken);
@@ -124,6 +133,7 @@ public sealed class IncrementalCachingTests
 		var steps = runResult.Results.Single().TrackedSteps[XmlShapeGenerator.ControllerShapesTrackingName];
 
 		steps.SelectMany(step => step.Outputs)
-			.ShouldContain(output => output.Reason == IncrementalStepRunReason.Modified || output.Reason == IncrementalStepRunReason.New);
+			.ShouldContain(output =>
+				output.Reason == IncrementalStepRunReason.Modified || output.Reason == IncrementalStepRunReason.New);
 	}
 }

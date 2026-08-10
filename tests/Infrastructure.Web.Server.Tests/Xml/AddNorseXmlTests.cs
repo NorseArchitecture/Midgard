@@ -9,21 +9,21 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Tests <see cref="MvcBuilderExtensions.AddNorseXml"/>'s composition seam: the ordinary DI wiring
-/// (registry singleton, <see cref="NorseXmlOptions"/>, both formatter types) via a plain
-/// <see cref="ServiceCollection"/> — mirroring the sibling <c>Json/MvcBuilderExtensionsTests.cs</c>
-/// idiom — plus the library-controller tripwire (spec §3, ratified 2026-08-02), which needs a real
-/// <see cref="WebApplication"/> host to prove it fails at genuine startup, not merely from a validator
-/// method returning false.
+///     Tests <see cref="MvcBuilderExtensions.AddNorseXml" />'s composition seam: the ordinary DI wiring
+///     (registry singleton, <see cref="NorseXmlOptions" />, both formatter types) via a plain
+///     <see cref="ServiceCollection" /> — mirroring the sibling <c>Json/MvcBuilderExtensionsTests.cs</c>
+///     idiom — plus the library-controller tripwire (spec §3, ratified 2026-08-02), which needs a real
+///     <see cref="WebApplication" /> host to prove it fails at genuine startup, not merely from a validator
+///     method returning false.
 /// </summary>
 /// <remarks>
-/// <see cref="BuildHost"/> registers the whole test assembly as one application part, so every
-/// tripwire-scanned fixture controller (<see cref="TripwireController"/> and
-/// <see cref="ImplicitBodyController"/>) is discovered in every host-based test below, regardless of
-/// which one a given test is actually about. Each test therefore builds a registry that fully
-/// satisfies every OTHER scanned controller's types and leaves only the one type under test missing —
-/// otherwise the thrown exception's controller/type names would depend on
-/// <c>ApplicationPartManager</c>'s unspecified enumeration order instead of the test's own intent.
+///     <see cref="BuildHost" /> registers the whole test assembly as one application part, so every
+///     tripwire-scanned fixture controller (<see cref="TripwireController" /> and
+///     <see cref="ImplicitBodyController" />) is discovered in every host-based test below, regardless of
+///     which one a given test is actually about. Each test therefore builds a registry that fully
+///     satisfies every OTHER scanned controller's types and leaves only the one type under test missing —
+///     otherwise the thrown exception's controller/type names would depend on
+///     <c>ApplicationPartManager</c>'s unspecified enumeration order instead of the test's own intent.
 /// </remarks>
 public sealed class AddNorseXmlTests
 {
@@ -106,14 +106,17 @@ public sealed class AddNorseXmlTests
 
 		await using var app = BuildHost(registry);
 
-		var exception = await Should.ThrowAsync<InvalidOperationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+		var exception =
+			await Should.ThrowAsync<InvalidOperationException>(() =>
+				app.StartAsync(TestContext.Current.CancellationToken));
 
 		exception.Message.ShouldBe(
 			"facade controllers are host-compilation source — 'TripwireController' exposes 'TripwireRequest' with no generated shape; controllers shipped in referenced assemblies generate nothing");
 	}
 
 	[Fact]
-	async Task Tripwire_fails_startup_with_the_exact_named_error_for_the_implicit_single_parameter_body_binding_convention()
+	async Task
+		Tripwire_fails_startup_with_the_exact_named_error_for_the_implicit_single_parameter_body_binding_convention()
 	{
 		// ImplicitBodyController.Do(ImplicitBodyPayload payload) carries no [FromBody] — it relies on
 		// MVC's implicit single-non-scalar-parameter convention, the same one ClosureWalker.Analyze
@@ -125,7 +128,9 @@ public sealed class AddNorseXmlTests
 
 		await using var app = BuildHost(registry);
 
-		var exception = await Should.ThrowAsync<InvalidOperationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+		var exception =
+			await Should.ThrowAsync<InvalidOperationException>(() =>
+				app.StartAsync(TestContext.Current.CancellationToken));
 
 		exception.Message.ShouldBe(
 			"facade controllers are host-compilation source — 'ImplicitBodyController' exposes 'ImplicitBodyPayload' with no generated shape; controllers shipped in referenced assemblies generate nothing");

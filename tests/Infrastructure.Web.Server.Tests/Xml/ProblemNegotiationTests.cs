@@ -12,14 +12,14 @@ using Norse.Infrastructure.Web.Server.Xml;
 namespace Norse.Infrastructure.Web.Server.Tests.Xml;
 
 /// <summary>
-/// Drives MVC's real formatter-selection algorithm (<see cref="DefaultOutputFormatterSelector"/>) with the
-/// full registered formatter list a host actually carries — <see cref="ProblemXmlOutputFormatter"/>,
-/// <see cref="XmlContractOutputFormatter"/>, and the default JSON formatter — to prove the negotiation
-/// <em>outcome</em> for a <see cref="ProblemDetails"/> value, not merely the precondition
-/// (<see cref="ObjectResult.ContentTypes"/>) other tests already assert. <see cref="XmlContractOutputFormatter"/>
-/// carries no shape for <see cref="ProblemDetails"/> and throws if the selector ever hands it one — this
-/// is the scenario the content-negotiation fix in <c>GrpcControllerBase.ToProblemResult</c>/
-/// <c>InvalidModelStateProblemFactory</c> exists to prevent.
+///     Drives MVC's real formatter-selection algorithm (<see cref="DefaultOutputFormatterSelector" />) with the
+///     full registered formatter list a host actually carries — <see cref="ProblemXmlOutputFormatter" />,
+///     <see cref="XmlContractOutputFormatter" />, and the default JSON formatter — to prove the negotiation
+///     <em>outcome</em> for a <see cref="ProblemDetails" /> value, not merely the precondition
+///     (<see cref="ObjectResult.ContentTypes" />) other tests already assert. <see cref="XmlContractOutputFormatter" />
+///     carries no shape for <see cref="ProblemDetails" /> and throws if the selector ever hands it one — this
+///     is the scenario the content-negotiation fix in <c>GrpcControllerBase.ToProblemResult</c>/
+///     <c>InvalidModelStateProblemFactory</c> exists to prevent.
 /// </summary>
 public sealed class ProblemNegotiationTests
 {
@@ -32,7 +32,8 @@ public sealed class ProblemNegotiationTests
 	}
 
 	[Fact]
-	void A_generic_XML_Accept_header_the_RFC_9457_media_type_never_matches_still_never_selects_XmlContractOutputFormatter()
+	void
+		A_generic_XML_Accept_header_the_RFC_9457_media_type_never_matches_still_never_selects_XmlContractOutputFormatter()
 	{
 		// "application/xml" is not a subset match of "application/problem+xml" under standard media-type
 		// matching (no RFC 6839 "+xml" suffix-awareness) — an RFC-unaware XML client sending this header
@@ -74,7 +75,10 @@ public sealed class ProblemNegotiationTests
 		[
 			new ProblemXmlOutputFormatter(),
 			new XmlContractOutputFormatter(new XmlShapeRegistry(), new NorseXmlOptions()),
-			new SystemTextJsonOutputFormatter(new JsonSerializerOptions { TypeInfoResolver = new DefaultJsonTypeInfoResolver() })
+			new SystemTextJsonOutputFormatter(new JsonSerializerOptions
+			{
+				TypeInfoResolver = new DefaultJsonTypeInfoResolver()
+			})
 		];
 
 		ProblemDetails problem = new() { Title = "Conflict", Status = 409 };

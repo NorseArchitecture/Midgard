@@ -23,7 +23,8 @@ public sealed class WireModelGuardAnalyzerTests
 	{
 		var diagnostics = await AnalyzerTestHarness.GetDiagnosticsAsync(
 			new WireModelGuardAnalyzer(), "App", [], DirectAddOutsideGuard);
-		diagnostics.ShouldContain(d => d.Id == "NORSE080" && d.GetMessage(CultureInfo.InvariantCulture).Contains("Add", StringComparison.Ordinal));
+		diagnostics.ShouldContain(d =>
+			d.Id == "NORSE080" && d.GetMessage(CultureInfo.InvariantCulture).Contains("Add", StringComparison.Ordinal));
 	}
 
 	[Fact]

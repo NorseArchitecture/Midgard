@@ -7,7 +7,8 @@ namespace Norse.Infrastructure.Web.Server.DeferredSignIn;
 
 sealed class MemoryCacheDeferredSignIn(IMemoryCache cache) : IDeferredSignIn
 {
-	static readonly MemoryCacheEntryOptions _entryOptions = new() { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+	static readonly MemoryCacheEntryOptions _entryOptions =
+		new() { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
 
 	public string StashSignIn(string scheme, ClaimsPrincipal principal, AuthenticationProperties properties)
 	{
@@ -30,6 +31,7 @@ sealed class MemoryCacheDeferredSignIn(IMemoryCache cache) : IDeferredSignIn
 			action = null!;
 			return false;
 		}
+
 		cache.Remove(key);
 		action = found;
 		return true;

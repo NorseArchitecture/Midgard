@@ -16,8 +16,6 @@ public sealed class OutcomeFactoryTests
 	}
 
 	[Fact]
-	void Declines_non_outcome_response_types()
-	{
+	void Declines_non_outcome_response_types() =>
 		OutcomeFactory<string>.CanCreate.ShouldBeFalse();
-	}
 }
