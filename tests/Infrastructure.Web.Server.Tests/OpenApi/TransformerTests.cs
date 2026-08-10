@@ -246,8 +246,11 @@ public sealed class TransformerTests
 		var schema = BuildSchemaFor<QuoteReport>(["Status", "CoverageOptions"]);
 		var context = BuildContextFor<QuoteReport>();
 
+#pragma warning disable xUnit1031 // TransformAsync is synchronous in every implementation (returns Task.CompletedTask); blocking here deliberately fails loudly instead of silently passing if that ever stops being true.
 		new XmlMetadataTransformer(new NorseXmlOptions { CaseStyle = XmlCaseStyle.SnakeCase })
-			.TransformAsync(schema, context, TestContext.Current.CancellationToken);
+			.TransformAsync(schema, context, TestContext.Current.CancellationToken)
+			.GetAwaiter().GetResult();
+#pragma warning restore xUnit1031
 
 		var coverageOptions = ((OpenApiSchema)schema.Properties!["CoverageOptions"]).Xml!;
 		coverageOptions.NodeType.ShouldBeNull();
@@ -263,8 +266,11 @@ public sealed class TransformerTests
 		var schema = BuildSchemaFor<QuoteReport>(["Status", "CoverageOptions"]);
 		var context = BuildContextFor<QuoteReport>();
 
+#pragma warning disable xUnit1031 // TransformAsync is synchronous in every implementation (returns Task.CompletedTask); blocking here deliberately fails loudly instead of silently passing if that ever stops being true.
 		new XmlMetadataTransformer(new NorseXmlOptions { CaseStyle = XmlCaseStyle.SnakeCase })
-			.TransformAsync(schema, context, TestContext.Current.CancellationToken);
+			.TransformAsync(schema, context, TestContext.Current.CancellationToken)
+			.GetAwaiter().GetResult();
+#pragma warning restore xUnit1031
 
 		var status = ((OpenApiSchema)schema.Properties!["Status"]).Xml!;
 		status.NodeType.ShouldBe(OpenApiXmlNodeType.Attribute);

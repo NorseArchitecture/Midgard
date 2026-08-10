@@ -6,7 +6,8 @@ using Norse.Infrastructure.Web.Server.Generator.Xml;
 namespace Norse.Infrastructure.Web.Server.Generator.Tests.Xml;
 
 /// <summary>
-///     One test per Futhark shape-law diagnostic (NORSE022-028) — a controller exposing a contract that
+///     One test per Futhark shape-law diagnostic (NORSE022-028, plus the closure guards NORSE036 and
+///     NORSE037) — a controller exposing a contract that
 ///     violates exactly one law, asserting the diagnostic ID and that the reported location's source
 ///     substring is the offending symbol's own name (the "squiggle lands on the offending symbol" bar).
 ///     Plus the exposure-scoping negative (spec §15): the same kind of violation, unexposed, compiles clean.

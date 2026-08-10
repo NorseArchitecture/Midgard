@@ -9,7 +9,8 @@ namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 ///     parameter types seed the request closure, <c>ActionResult&lt;T&gt;</c>/<c>Task&lt;ActionResult&lt;T&gt;&gt;</c>/
 ///     <c>ValueTask&lt;ActionResult&lt;T&gt;&gt;</c> payload types seed the response closure. Every complex
 ///     type reachable from either seed set gets a <see cref="ShapeModel" />; every shape-law violation
-///     along the way (NORSE022-028) becomes a <see cref="DiagnosticInfo" />. Pure symbol-to-value-model
+///     along the way (NORSE022-028, plus the closure guards NORSE036 and NORSE037) becomes a
+///     <see cref="DiagnosticInfo" />. Pure symbol-to-value-model
 ///     projection — nothing this type touches survives into the returned <see cref="ControllerShapeResult" />.
 /// </summary>
 static class ClosureWalker
@@ -256,7 +257,7 @@ static class ClosureWalker
 		var typeName = type.ToDisplayString(_displayFormat);
 		var message = ctor is null ?
 			$"'{typeName}' has no parameterless constructor at all — the generated reader compiles 'new {typeName} {{ ... }}' in the host assembly, so the contract's construction surface must be reachable from it" :
-			$"'{typeName}''s parameterless constructor is not accessible from the host — the generated reader compiles 'new {typeName} {{ ... }}' in the host assembly, so the contract's construction surface must be reachable from it";
+			$"The parameterless constructor of '{typeName}' is not accessible from the host — the generated reader compiles 'new {typeName} {{ ... }}' in the host assembly, so the contract's construction surface must be reachable from it";
 
 		diagnostics.Add(DiagnosticInfo.Create(Diagnostics.ContractConstructionInaccessible,
 			ctor is not null ? (ISymbol)ctor : type, message));

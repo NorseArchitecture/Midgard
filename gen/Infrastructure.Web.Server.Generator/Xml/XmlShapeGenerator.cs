@@ -11,10 +11,10 @@ namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 /// <summary>
 ///     Discovers facade controllers (<c>GrpcControllerBase</c> descendants, spec §4) in the host
 ///     compilation and — per the spec's 2026-08-09 amendment — in the host's reference closure, enforces
-///     Futhark's XML shape law (NORSE022-028) over their request/response closures at build time, and —
-///     new as of Task 6 — emits the canonical writer (<see cref="WriterEmitter" />) for every distinct
-///     reachable contract shape. Reader emission (a later task) will extend the same emitted classes;
-///     this generator does not yet make them fully functional, only fully compiling.
+///     Futhark's XML shape law (NORSE022-028, plus the closure guards NORSE035-037) over their
+///     request/response closures at build time, and emits the canonical writer (<see cref="WriterEmitter" />)
+///     for every distinct reachable contract shape. Reader emission (<see cref="ReaderEmitter" />) is
+///     composed inside <see cref="WriterEmitter.Emit" /> and is fully functional, not a placeholder.
 /// </summary>
 /// <remarks>
 ///     <b>Incremental pipeline shape is load-bearing (spec §2, plan Task 5):</b> there is no attribute to
@@ -89,7 +89,10 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 					}
 
 				// Every NORSE022-028 diagnostic is an error — "you cannot compile an exposure Futhark
-				// cannot round-trip" (spec §2.2). A shape built alongside a reported violation can carry
+				// cannot round-trip" (spec §2.2) — and NORSE036/037 join the same all-error gate; NORSE035
+				// sits below this gate with its own exclusion path (shapes colliding on a short name are
+				// dropped from emission below, not treated as build-fatal here). A shape built alongside a
+				// reported violation can carry
 				// null ScalarTypeName/ComplexTypeName on the offending member (ClosureWalker.ClassifyMember),
 				// which WriterEmitter has no defined behavior for — skip emission entirely rather than risk
 				// the generator crashing (CS8785) over a shape the build was already going to reject.
