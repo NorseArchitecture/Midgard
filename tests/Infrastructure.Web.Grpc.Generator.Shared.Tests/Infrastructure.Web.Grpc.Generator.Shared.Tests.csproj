@@ -13,5 +13,6 @@
 		<PackageReference Include="FluentValidation" Version="12.*" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
 		<Compile Include="../../gen/Infrastructure.Web.Grpc.Generator.Shared/ComponentDiscovery.cs" Link="Shared/ComponentDiscovery.cs" />
+		<Compile Include="../../gen/Infrastructure.Web.Grpc.Generator.Shared/ContractDiscovery.cs" Link="Shared/ContractDiscovery.cs" />
 	</ItemGroup>
 </Project>

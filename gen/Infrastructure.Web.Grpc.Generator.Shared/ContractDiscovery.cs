@@ -106,15 +106,33 @@ static class ContractDiscovery
 			null;
 	}
 
-	/// <summary>Recursive walk of every named type reachable from <paramref name="root" />, including nested namespaces.</summary>
+	/// <summary>
+	///     Recursive walk of every named type reachable from <paramref name="root" />, including nested
+	///     namespaces and each type's own nested types -- same shape as
+	///     <c>ComponentDiscovery</c>'s deliberately separate local <c>AllTypes</c> pair. A contract
+	///     interface or facade controller declared as a nested type (scoped inside a partial/static
+	///     container, a realm's grouping idiom) is otherwise silently unreachable from a namespace-only
+	///     walk.
+	/// </summary>
 	public static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol root)
 	{
 		foreach (var type in root.GetTypeMembers())
-			yield return type;
+			foreach (var nested in AllTypes(type))
+				yield return nested;
 
 		foreach (var child in root.GetNamespaceMembers())
 			foreach (var type in AllTypes(child))
 				yield return type;
+	}
+
+	/// <summary>Yields <paramref name="type" /> itself followed by every type nested inside it, at any depth.</summary>
+	static IEnumerable<INamedTypeSymbol> AllTypes(INamedTypeSymbol type)
+	{
+		yield return type;
+
+		foreach (var nested in type.GetTypeMembers())
+			foreach (var descendant in AllTypes(nested))
+				yield return descendant;
 	}
 }
 

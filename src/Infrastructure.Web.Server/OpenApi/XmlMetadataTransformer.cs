@@ -8,7 +8,9 @@ namespace Norse.Infrastructure.Web.Server.OpenApi;
 
 /// <summary>
 ///     Stamps OpenAPI's <c>xml</c> object mechanically, per Futhark's fixed wire grammar (spec §6, §12) —
-///     every scalar member (Result-wrapped or raw) becomes an XML attribute; every <c>[DataContract]</c>
+///     every scalar member (Result-wrapped or raw) becomes an XML attribute, except a <c>[Flags]</c>
+///     member, which renders as repeated elements instead (spec §6.5, the 2026-08-09 amendment) and gets
+///     the case-styled element name with no attribute stamp; every <c>[DataContract]</c>
 ///     type's own schema carries the element name its instances render under, case-styled through the
 ///     host's configured <see cref="XmlCaseStyle" /> via <see cref="RuntimeNameCasing" /> — the same casing
 ///     the generated shapes actually emit on the wire, never a second independently-drifting rule.
@@ -56,12 +58,24 @@ public sealed class XmlMetadataTransformer(NorseXmlOptions options) : IOpenApiSc
 				propertySchema is not OpenApiSchema concrete)
 				continue;
 
-			var isScalar = ScalarTaxonomy.TryUnwrapResult(property.PropertyType, out var elementType, out _) ?
-				ScalarTaxonomy.IsClosedScalar(elementType) :
-				ScalarTaxonomy.IsClosedScalar(property.PropertyType);
+			var elementType = ScalarTaxonomy.TryUnwrapResult(property.PropertyType, out var unwrapped, out _) ?
+				unwrapped :
+				property.PropertyType;
 
-			if (!isScalar)
+			if (!ScalarTaxonomy.IsClosedScalar(elementType))
 				continue; // complex members and collections need no attribute stamp — the vocabulary's element default already matches Futhark's law.
+
+			// A [Flags] member — bare or Result<T>-wrapped alike — writes/reads as repeated governed-name
+			// elements (the enum wire law's array projection), never a single attribute value: the same
+			// idiom EnumLexicalJsonConverterFactory uses to fork the converter type. No NodeType is stamped
+			// at all — the vocabulary's own element default already matches that repeated-sibling shape, the
+			// identical reasoning this file's own remarks apply to collections — only the governed element
+			// name carries through.
+			if (elementType.IsEnum && elementType.IsDefined(typeof(FlagsAttribute), inherit: false))
+			{
+				concrete.Xml = new OpenApiXml { Name = RuntimeNameCasing.Apply(_options.CaseStyle, ClrName(property)) };
+				continue;
+			}
 
 			concrete.Xml = new OpenApiXml
 			{

@@ -108,6 +108,35 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 					.OrderBy(static s => s.TypeName, StringComparer.Ordinal)
 					.ToList();
 
+				// NORSE035: two DISTINCT contract types can still collide once reduced to WriterEmitter's
+				// unqualified ShortName — trivially reachable now that reference-closure discovery merges
+				// independent realms (two realms' own "Order" contracts, say). Left unchecked, that collision
+				// either double-adds the same AddSource hint (a generator exception, CS8785) or emits two
+				// classes under the same name (CS0101) — an honest diagnostic beats either crash. Location.None:
+				// this is a closure-level fact spanning two shapes, not a single source site.
+				var shortNameGroups = distinctShapes
+					.GroupBy(static s => WriterEmitter.ShortName(s.TypeName), StringComparer.Ordinal)
+					.ToList();
+				var collidingShortNames = shortNameGroups.Where(static g => g.Count() > 1).ToList();
+				if (collidingShortNames.Count > 0)
+				{
+					var collidingTypeNames = new HashSet<string>(StringComparer.Ordinal);
+					foreach (var group in collidingShortNames)
+					{
+						foreach (var shape in group)
+							collidingTypeNames.Add(shape.TypeName);
+
+						var typeNames = string.Join(", ",
+							group.Select(static s => s.TypeName).OrderBy(static n => n, StringComparer.Ordinal));
+						productionContext.ReportDiagnostic(Diagnostic.Create(
+							Diagnostics.DuplicateShapeShortName, Location.None, group.Key, typeNames));
+					}
+
+					// Excluded from shape-class emission AND both registration emitters below — the
+					// non-colliding shapes in the same run are otherwise unaffected and still emit.
+					distinctShapes = [.. distinctShapes.Where(s => !collidingTypeNames.Contains(s.TypeName))];
+				}
+
 				foreach (var shape in distinctShapes)
 				{
 					var shortName = WriterEmitter.ShortName(shape.TypeName);
@@ -155,7 +184,11 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 	///     <see cref="LocationInfo.None" />, the symbol having no source location). Cheap bail-outs: no
 	///     <c>GrpcControllerBase</c> resolvable means no facade controller can exist anywhere in the
 	///     closure, and BCL/framework assemblies are skipped by name prefix before their namespaces are
-	///     ever walked.
+	///     ever walked. <c>Compilation.IsSymbolAccessibleWithin</c> (2026-08-09 codex review hardening,
+	///     finding 4) excludes a controller the host cannot legally name — an internal controller the
+	///     referenced assembly hasn't granted <c>InternalsVisibleTo</c> to would otherwise emit a shape
+	///     class whose generated source fails CS0122 the moment the host tries to compile it; the check
+	///     honors that grant correctly, unlike a naive <c>DeclaredAccessibility</c> read.
 	/// </summary>
 	static EquatableArray<ControllerShapeResult> DiscoverReferenced(
 		Compilation compilation, CancellationToken cancellationToken)
@@ -174,7 +207,8 @@ public sealed class XmlShapeGenerator : IIncrementalGenerator
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				if (type.TypeKind == TypeKind.Class && DerivesFrom(type, controllerBase))
+				if (type.TypeKind == TypeKind.Class && DerivesFrom(type, controllerBase) &&
+					compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
 					results.Add(ClosureWalker.Analyze(type, compilation));
 			}
 		}

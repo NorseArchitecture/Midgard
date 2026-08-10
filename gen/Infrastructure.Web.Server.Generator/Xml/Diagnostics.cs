@@ -15,6 +15,24 @@ namespace Norse.Infrastructure.Web.Server.Generator.Xml;
 ///     time found NORSE020/NORSE021 already live in this same realm's sibling generator
 ///     (<c>GrpcServerRegistrationGenerator</c> — missing gRPC implementation / payload short-name
 ///     collision). NORSE022-028 sit clean between that pair and Urðarbrunnr's NORSE030-034 block.
+///     NORSE035-037 extend this same block (the codex-review-fixes wave, 2026-08-09): NORSE035
+///     (<see cref="DuplicateShapeShortName" />) covers a short-name collision across distinct contract
+///     types reachable from the closure — trivially reachable once reference-closure discovery merges
+///     independent realms; NORSE036 (<see cref="ContractConstructionInaccessible" />) covers a
+///     contract's construction surface — the parameterless constructor and every wire member's
+///     <c>set</c>/<c>init</c> accessor — going unreachable from the host: the generated reader compiles
+///     <c>new {Contract} { Member = ... }</c> in the HOST assembly, so an internal or private constructor
+///     or accessor that trivially passes same-assembly compilation still fails CS0272/CS0122 the moment
+///     reference-closure discovery pulls the contract in from another assembly. NORSE036 also strikes the
+///     construction surface's third failure mode, one the "inaccessible" framing above doesn't cover: a
+///     contract — most commonly a positional record, whose only generated constructor takes its primary
+///     constructor's parameters — that declares no parameterless constructor AT ALL, accessible or not.
+///     Same law, same diagnostic, distinct message wording ("has no parameterless constructor at all"
+///     rather than "is not accessible from the host"). NORSE037 (<see cref="NestedFacadeController" />,
+///     ruled by Buvy 2026-08-09) covers the controller symbol itself, struck before any closure walk
+///     begins: facade controllers are namespace-level types, so a <c>GrpcControllerBase</c> descendant
+///     nested inside another type is a build error, struck identically whether discovered from host
+///     source or a referenced assembly's reference closure — loud diagnostic, never silent exclusion.
 /// </remarks>
 static class Diagnostics
 {
@@ -59,4 +77,21 @@ static class Diagnostics
 
 	// NORSE029 (FlagsEnumInClosure) lived here until the 2026-08-09 amendment deleted it outright —
 	// flags ride the closure bare and the channels translate. The ID is retired, never reused.
+
+	public static readonly DiagnosticDescriptor DuplicateShapeShortName = new(
+		"NORSE035", "Duplicate shape short name across the closure",
+		"Short name '{0}' collides across distinct contract types reachable from this closure: {1}",
+		"Norse.Xml",
+		DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+	public static readonly DiagnosticDescriptor ContractConstructionInaccessible = new(
+		"NORSE036", "Contract construction surface inaccessible from the host",
+		"{0}", "Norse.Xml",
+		DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+	public static readonly DiagnosticDescriptor NestedFacadeController = new(
+		"NORSE037", "Facade controller nested inside another type",
+		"'{0}' is nested inside '{1}' — facade controllers are namespace-level types",
+		"Norse.Xml",
+		DiagnosticSeverity.Error, isEnabledByDefault: true);
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Norse.Infrastructure.Web.Server.Generator.Xml;
@@ -441,6 +442,44 @@ public sealed class ShapeLawDiagnosticTests
 	}
 
 	[Fact]
+	void NORSE037_fires_on_a_facade_controller_nested_inside_another_type_declared_in_host_source()
+	{
+		// The syntax-path twin of the reference-closure NORSE037 fact in ReferencedAssemblyDiscoveryTests:
+		// ruled by Buvy 2026-08-09, facade controllers are namespace-level types, so a GrpcControllerBase
+		// descendant nested inside another type is a build error struck identically from both discovery
+		// paths -- here, the host's own source, carrying a real source location the referenced-assembly
+		// path can never have.
+		const string Fixture = """
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N037;
+
+			public static class Container
+			{
+				public sealed class NestedController : GrpcControllerBase
+				{
+				}
+			}
+			""";
+
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE037");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		SourceAt(Fixture, diagnostic).ShouldBe("NestedController");
+
+		var message = diagnostic.GetMessage(CultureInfo.InvariantCulture);
+		message.ShouldContain("NestedController");
+		message.ShouldContain("Container");
+
+		outputCompilation.SyntaxTrees
+			.Any(static tree => tree.FilePath.EndsWith("XmlShape.g.cs", StringComparison.Ordinal))
+			.ShouldBeFalse();
+	}
+
+	[Fact]
 	void A_flags_member_in_either_closure_no_longer_strikes()
 	{
 		// The 2026-08-09 amendment overturns the flags ban outright — NORSE029 is deleted, not narrowed.
@@ -488,6 +527,277 @@ public sealed class ShapeLawDiagnosticTests
 		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
 
 		diagnostics.ShouldBeEmpty();
+	}
+
+	[Fact]
+	void NORSE026_fires_when_a_flags_member_collides_with_a_complex_members_type_derived_element_name()
+	{
+		// Flags render repeated governed-name elements now (2026-08-09 amendment) — exactly the shape a
+		// complex member's own type-derived element name takes. A flags property named "Region" collides
+		// with a sibling complex member of type "Region": both project to the element name "Region" in
+		// every casing style, and the reader would misroute between them with no diagnostic to catch it
+		// before this fix.
+		const string Fixture = """
+			using System;
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N026FlagsComplex;
+
+			[Flags]
+			public enum RegionFlags
+			{
+				None = 0,
+				North = 1,
+				South = 2
+			}
+
+			public sealed record Region
+			{
+				[DataMember]
+				public string Name { get; init; } = "";
+			}
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				[DataMember]
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record BadResponse
+			{
+				[DataMember]
+				public RegionFlags Region { get; init; }
+				[DataMember]
+				public Region Somewhere { get; init; } = null!;
+			}
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<BadResponse>(new BadResponse()));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE026");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		SourceAt(Fixture, diagnostic).ShouldBe("Region");
+	}
+
+	[Fact]
+	void NORSE026_fires_when_a_flags_member_collides_with_a_collection_members_type_derived_element_name()
+	{
+		// Same cross-check, collection side: a collection-of-Region member's items render under the
+		// type-derived element name "Region" too — the collection's own arity never changes which
+		// element name it uses.
+		const string Fixture = """
+			using System;
+			using System.Collections.Generic;
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N026FlagsCollection;
+
+			[Flags]
+			public enum RegionFlags
+			{
+				None = 0,
+				North = 1,
+				South = 2
+			}
+
+			public sealed record Region
+			{
+				[DataMember]
+				public string Name { get; init; } = "";
+			}
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				[DataMember]
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record BadResponse
+			{
+				[DataMember]
+				public RegionFlags Region { get; init; }
+				[DataMember]
+				public List<Region> Somewhere { get; init; } = new();
+			}
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<BadResponse>(new BadResponse()));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE026");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		SourceAt(Fixture, diagnostic).ShouldBe("Region");
+	}
+
+	[Fact]
+	void A_flags_member_beside_a_non_colliding_complex_member_stays_clean()
+	{
+		// The negative case: a flags property named "Coverage" beside a complex member of type "Region"
+		// — no shared element name, no strike.
+		const string Fixture = """
+			using System;
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N026FlagsNoCollision;
+
+			[Flags]
+			public enum RegionFlags
+			{
+				None = 0,
+				North = 1,
+				South = 2
+			}
+
+			public sealed record Region
+			{
+				[DataMember]
+				public string Name { get; init; } = "";
+			}
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				[DataMember]
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record GoodResponse
+			{
+				[DataMember]
+				public RegionFlags Coverage { get; init; }
+				[DataMember]
+				public Region Somewhere { get; init; } = null!;
+			}
+
+			public sealed class GoodController : GrpcControllerBase
+			{
+				public Task<ActionResult<GoodResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<GoodResponse>(new GoodResponse()));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		diagnostics.ShouldBeEmpty();
+	}
+
+	[Fact]
+	void NORSE036_does_not_fire_on_a_same_assembly_contract_with_an_internal_construction_surface()
+	{
+		// The law (spec 2026-08-09 codex-review-fixes wave) never special-cases same-assembly reach:
+		// internal is accessible within its own assembly by definition, so a contract with an internal
+		// parameterless constructor AND an internal init accessor, both declared in the SAME compilation
+		// the generated reader lands in, trips nothing — proving the check is IsSymbolAccessibleWithin,
+		// not a same-assembly carve-out layered on top of it.
+		const string Fixture = """
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N036SameAssembly;
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				[DataMember]
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record GoodResponse
+			{
+				internal GoodResponse()
+				{
+				}
+
+				[DataMember]
+				public string Status { get; internal init; } = "";
+			}
+
+			public sealed class GoodController : GrpcControllerBase
+			{
+				public Task<ActionResult<GoodResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<GoodResponse>(new GoodResponse()));
+			}
+			""";
+
+		var (diagnostics, outputCompilation) = GeneratorTestHarness.Run(Fixture);
+
+		diagnostics.ShouldBeEmpty();
+		outputCompilation.GetDiagnostics(TestContext.Current.CancellationToken)
+			.Where(static d => d.Severity == DiagnosticSeverity.Error)
+			.ShouldBeEmpty();
+	}
+
+	[Fact]
+	void NORSE036_fires_with_the_no_constructor_message_when_a_positional_record_contract_has_none_at_all()
+	{
+		// A positional record's only generated constructors are the primary constructor (which takes
+		// arguments) and the protected copy constructor -- never an implicit PARAMETERLESS one. That's the
+		// `ctor is null` branch of CheckConstructorAccessibility -- a distinct error class from "has one,
+		// but it's inaccessible", reachable independent of any assembly boundary or import-options
+		// elevation (this fixture is same-assembly, on purpose, to prove the branch fires without needing
+		// the referenced-assembly machinery at all).
+		const string Fixture = """
+			using System.Runtime.Serialization;
+			using System.Threading.Tasks;
+			using Microsoft.AspNetCore.Mvc;
+			using Norse.Primitives;
+			using Norse.Abstractions.Web.Server.Facade;
+
+			namespace Norse.Fixtures.N036NoCtor;
+
+			[DataContract]
+			public sealed record GoodRequest
+			{
+				[DataMember]
+				public Result<string> Value { get; init; }
+			}
+
+			public sealed record BadResponse([property: DataMember] string Status);
+
+			public sealed class BadController : GrpcControllerBase
+			{
+				public Task<ActionResult<BadResponse>> Do([FromBody] GoodRequest request) =>
+					Task.FromResult(new ActionResult<BadResponse>(new BadResponse("x")));
+			}
+			""";
+
+		var diagnostics = GeneratorTestHarness.GenerateDiagnostics(Fixture);
+
+		var diagnostic = diagnostics.ShouldHaveSingleItem();
+		diagnostic.Id.ShouldBe("NORSE036");
+		diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+		diagnostic.GetMessage(CultureInfo.InvariantCulture).ShouldContain("has no parameterless constructor at all");
+		SourceAt(Fixture, diagnostic).ShouldBe("BadResponse");
 	}
 
 	[Fact]

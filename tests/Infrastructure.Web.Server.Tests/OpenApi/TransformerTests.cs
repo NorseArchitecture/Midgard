@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -211,6 +213,92 @@ public sealed class TransformerTests
 		options["writeOnly"]!.GetValue<bool>().ShouldBeTrue();
 		options.AsObject().ContainsKey("readOnly").ShouldBeFalse();
 	}
+
+	[Fact]
+	async Task Result_wrapped_flags_enum_member_carries_no_attribute_stamp_and_the_cased_element_name()
+	{
+		var document = await BuildDocumentAsync();
+
+		// The Result<TEnum> branch's inline schema (built by ResultSchemaTransformer) is the one concrete
+		// property schema XmlMetadataTransformer's per-property loop ever reaches for a flags member — a
+		// raw/bare flags member stays a $ref the loop never touches (see the two bare facts below, proven
+		// via direct construction since no fixture wiring can force the framework to inline a raw enum's
+		// property schema). A flags member's repeated-sibling wire shape needs no attribute stamp; the
+		// vocabulary's own element default already matches Futhark's law, the identical reasoning the
+		// class doc's remarks already apply to collections.
+		var options = document["components"]!["schemas"]!["QuoteRequest"]!["properties"]!["options"]!["xml"]!;
+		options.AsObject().ContainsKey("nodeType").ShouldBeFalse();
+		options["name"]!.GetValue<string>().ShouldBe("options");
+	}
+
+	[Fact]
+	static void Bare_flags_member_is_not_stamped_attribute_and_carries_the_cased_element_name()
+	{
+		// The full ASP.NET Core OpenAPI pipeline never inlines a raw (non-Result) enum member's property
+		// schema — it stays a $ref to the shared component (see
+		// Flags_enum_member_renders_as_type_array_with_governed_string_items_from_the_same_table above), so
+		// XmlMetadataTransformer's per-property loop structurally never reaches it through the full
+		// pipeline. Constructing the transformer's inputs directly — the same "call the transformer instead
+		// of standing up TestServer" idiom UnionLeakGuardTransformer's own direct-construction facts already
+		// use in this file — is the only way to prove the fix bounds' bare-member law: detected at the
+		// unwrapped element type, so a bare flags member gets the identical treatment a Result-wrapped one
+		// does.
+		var schema = BuildSchemaFor<QuoteReport>(["Status", "CoverageOptions"]);
+		var context = BuildContextFor<QuoteReport>();
+
+		new XmlMetadataTransformer(new NorseXmlOptions { CaseStyle = XmlCaseStyle.SnakeCase })
+			.TransformAsync(schema, context, TestContext.Current.CancellationToken);
+
+		var coverageOptions = ((OpenApiSchema)schema.Properties!["CoverageOptions"]).Xml!;
+		coverageOptions.NodeType.ShouldBeNull();
+		coverageOptions.Name.ShouldBe("coverage_options");
+	}
+
+	[Fact]
+	static void Bare_non_flags_enum_member_still_gets_stamped_attribute()
+	{
+		// The symmetric control for the fact above, exercised via the identical direct-construction
+		// mechanism: a bare non-flags enum member keeps the attribute stamp byte-for-byte — the fix only
+		// forks flags members onto the no-attribute path, never every other scalar.
+		var schema = BuildSchemaFor<QuoteReport>(["Status", "CoverageOptions"]);
+		var context = BuildContextFor<QuoteReport>();
+
+		new XmlMetadataTransformer(new NorseXmlOptions { CaseStyle = XmlCaseStyle.SnakeCase })
+			.TransformAsync(schema, context, TestContext.Current.CancellationToken);
+
+		var status = ((OpenApiSchema)schema.Properties!["Status"]).Xml!;
+		status.NodeType.ShouldBe(OpenApiXmlNodeType.Attribute);
+		status.Name.ShouldBe("status");
+	}
+
+	/// <summary>
+	///     Builds the minimal schema-with-properties precondition <see cref="XmlMetadataTransformer" />'s
+	///     per-property loop needs — a fresh concrete <see cref="OpenApiSchema" /> per named property, the
+	///     same "not yet stamped" state the framework hands the transformer for a Result-wrapped member.
+	/// </summary>
+	static OpenApiSchema BuildSchemaFor<T>(IEnumerable<string> propertyNames) =>
+		new()
+		{
+			Properties = propertyNames.ToDictionary(name => name,
+				IOpenApiSchema (_) => new OpenApiSchema())
+		};
+
+	/// <summary>
+	///     Builds the reflection-driven <see cref="JsonTypeInfo" /> <see cref="XmlMetadataTransformer" />
+	///     reads member/property shape from — no naming policy, so <c>JsonPropertyInfo.Name</c> stays the raw
+	///     CLR member name and lines up with <see cref="BuildSchemaFor{T}" />'s dictionary keys without a
+	///     second casing pass.
+	/// </summary>
+	static OpenApiSchemaTransformerContext BuildContextFor<T>() =>
+		new()
+		{
+			DocumentName = "v1",
+			ParameterDescription = null,
+			JsonTypeInfo = new JsonSerializerOptions { TypeInfoResolver = new DefaultJsonTypeInfoResolver() }
+				.GetTypeInfo<T>(),
+			JsonPropertyInfo = null,
+			ApplicationServices = _emptyServiceProvider
+		};
 
 	[Fact]
 	async Task Result_wrapped_TableStatus_member_renders_the_identical_governed_string_list_under_a_camel_case_host()
