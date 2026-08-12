@@ -490,7 +490,9 @@ public sealed class Envelope<T> where T : notnull
 [ProtoContract]
 public sealed class PlainEnvelope<T> where T : notnull
 {
-	[ProtoMember(1)] public T Value { get; set; } = default!;
+	// IsRequired=true: without it, protobuf-net skips writing Value whenever it equals T's zero-default
+	// (e.g. false, 0), which would silently break the exact-byte round-trip these tests exist to pin.
+	[ProtoMember(1, IsRequired = true)] public T Value { get; set; } = default!;
 }
 
 [ProtoContract]
