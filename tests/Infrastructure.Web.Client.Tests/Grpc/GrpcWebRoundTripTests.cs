@@ -93,12 +93,18 @@ public sealed class GrpcWebRoundTripTests
 	// ProtoBuf.Grpc.Configuration.Service, not System.ServiceModel.ServiceContract: protobuf-net.Grpc's
 	// ServiceBinder treats the two identically, and this one needs no extra package reference.
 	[Service("norse.probe.v1.ProbeService")]
+	// PBN2008: the analyzer can't see RegisterSurrogates()'s runtime RuntimeTypeModel.Add/SetSurrogate call
+	// (the same pattern the generated AddNorseGrpcClients/MapNorseGrpcServices wiring relies on), so it
+	// can't statically confirm Outcome<ProbeResponse> marshals — proving that it does is this file's entire
+	// point, verified below by the round-trip itself, not by the analyzer.
+#pragma warning disable PBN2008
 	public interface IProbeService
 	{
 		Task<Outcome<ProbeResponse>> SucceedAsync(ProbeRequest request, CallContext context = default);
 
 		Task<Outcome<ProbeResponse>> FailAsync(ProbeRequest request, CallContext context = default);
 	}
+#pragma warning restore PBN2008
 
 	[DataContract]
 	public sealed class ProbeRequest
