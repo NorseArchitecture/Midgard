@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<Description>Norse.Infrastructure.Web.Client: WASM-friendly gRPC client-side failure decoding. Grpc/ decodes an RpcException's grpc-status-details-bin trailer using google.rpc well-known types and reconstructs a Problem object from the ErrorInfo.Reason, Errors, and CorrelationId details. Bundles the gRPC client registration generator (analyzers/dotnet/cs/), which discovers a compilation's Norse gRPC contracts at compile time and emits AddNorseGrpcClients() — a code-first client proxy per contract over an OutcomeClientInterceptor-decorated invoker, plus idempotent Outcome&lt;T&gt; surrogate wiring and the Norse.Infrastructure.Web.Grpc identifier wire law (CompatibilityLevel 300, 16-byte RFC 9562 identifier bytes fields).</Description>
+		<NorseFrontendPlatforms>Wasm</NorseFrontendPlatforms>
 	</PropertyGroup>
 	<ItemGroup>
 		<NorseRef Include="Abstractions.Contracts">
