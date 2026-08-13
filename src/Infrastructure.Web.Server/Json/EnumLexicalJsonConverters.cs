@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -75,11 +76,12 @@ public sealed class PlainEnumJsonConverter<TEnum>(EnumNameTable table, int style
 	{
 		if (reader.TokenType != JsonTokenType.String)
 			throw new JsonException($"expected a JSON string reading {table.TypeName}, found {reader.TokenType}");
-		return EnumLexical.Parse<TEnum>(table, reader.GetString() ?? string.Empty, styleIndex) switch
-		{
-			Success<TEnum>(var value) => value,
-			Failure failure => throw new JsonException(FailureDetail.Render(failure))
-		};
+		var result = EnumLexical.Parse<TEnum>(table, reader.GetString() ?? string.Empty, styleIndex);
+		if (result.TryGetValue(out Success<TEnum> success))
+			return success.Value;
+		if (result.TryGetValue(out Failure failure))
+			throw new JsonException(FailureDetail.Render(failure));
+		throw new SwitchExpressionException(result);
 	}
 
 	/// <inheritdoc />
@@ -118,11 +120,12 @@ public sealed class FlagsEnumJsonConverter<TEnum>(EnumNameTable table, int style
 			tokens.Add(reader.GetString() ?? string.Empty);
 		}
 
-		return EnumLexical.ParseFlags<TEnum>(table, tokens, styleIndex) switch
-		{
-			Success<TEnum>(var value) => value,
-			Failure failure => throw new JsonException(FailureDetail.Render(failure))
-		};
+		var result = EnumLexical.ParseFlags<TEnum>(table, tokens, styleIndex);
+		if (result.TryGetValue(out Success<TEnum> success))
+			return success.Value;
+		if (result.TryGetValue(out Failure failure))
+			throw new JsonException(FailureDetail.Render(failure));
+		throw new SwitchExpressionException(result);
 	}
 
 	/// <inheritdoc />

@@ -17,6 +17,8 @@
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="11.*-*" />
 		<PackageReference Include="Testcontainers.MsSql" Version="*" />
 		<PackageReference Include="Testcontainers.PostgreSql" Version="*" />
+		<!-- Testcontainers pulls in SSH.NET 2025.1.0, which has a known high severity vulnerability (GHSA-q939-rpr3-3284); pin past it. -->
+		<PackageReference Include="SSH.NET" Version="*" />
 		<ProjectReference Include="../../src/Infrastructure.Persistence.EntityFramework/Infrastructure.Persistence.EntityFramework.csproj" />
 	</ItemGroup>
 </Project>

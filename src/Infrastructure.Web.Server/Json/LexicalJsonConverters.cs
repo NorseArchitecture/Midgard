@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Norse.Infrastructure.Web.Server.Xml;
@@ -70,10 +71,11 @@ static class LexicalScalars
 	{
 		if (reader.TokenType != JsonTokenType.String)
 			throw new JsonException($"expected a JSON string reading {typeof(T).Name}, found {reader.TokenType}");
-		return Parser.ParseRequired<T>(reader.GetString() ?? string.Empty, CultureInfo.InvariantCulture) switch
-		{
-			Success<T>(var value) => value,
-			Failure failure => throw new JsonException(FailureDetail.Render(failure))
-		};
+		var result = Parser.ParseRequired<T>(reader.GetString() ?? string.Empty, CultureInfo.InvariantCulture);
+		if (result.TryGetValue(out Success<T> success))
+			return success.Value;
+		if (result.TryGetValue(out Failure failure))
+			throw new JsonException(FailureDetail.Render(failure));
+		throw new SwitchExpressionException(result);
 	}
 }
