@@ -4,4 +4,7 @@
 // ShouldBeEmpty() assertion goes non-deterministic. Observed as an intermittent 11/13 vs 12/13 during
 // Task 3. The subject here is process-global diagnostic state; it cannot be tested in parallel.
 
-[assembly: CollectionBehavior(DisableTestParallelization = true)]
+using Xunit.Sdk;
+using Xunit.v3;
+
+[assembly: Parallelization(Mode = ParallelMode.None)]
