@@ -26,14 +26,11 @@ static class ReferenceAssemblies
 		MetadataReference.CreateFromFile(XmlReaderWriterRefPath())
 	];
 
-	// Every assembly under the .NET / ASP.NET Core shared framework directories the FrameworkReference
-	// resolves against — enumerated from already-loaded types' own assembly directories rather than
-	// hardcoding an SDK path, so this survives an SDK bump untouched (mirrors the parent project's
-	// root-level ReferenceAssemblies harness).
+	// Every managed assembly under the ASP.NET Core shared framework directory the FrameworkReference
+	// resolves against — see SharedFrameworkReferences for why the native images there are skipped.
 	public static readonly MetadataReference[] AspNetCore =
 	[
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(ControllerBase).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f))
+		.. SharedFrameworkReferences.In(Path.GetDirectoryName(typeof(ControllerBase).Assembly.Location)!)
 	];
 
 	static string XmlReaderWriterRefPath()

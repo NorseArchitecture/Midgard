@@ -82,10 +82,8 @@ public sealed class ServerComponentRegistrationEmitterTests
 	// ClientComponentRegistrationEmitterTests.cs's own note on the same pitfall).
 	static readonly MetadataReference[] _sharedFrameworks =
 	[
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f)),
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(WebApplication).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f))
+		.. SharedFrameworkReferences.In(Path.GetDirectoryName(typeof(object).Assembly.Location)!),
+		.. SharedFrameworkReferences.In(Path.GetDirectoryName(typeof(WebApplication).Assembly.Location)!)
 	];
 
 	static readonly MetadataReference[] _extraReferences =

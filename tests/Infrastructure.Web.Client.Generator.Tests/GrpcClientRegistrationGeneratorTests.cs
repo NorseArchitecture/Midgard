@@ -35,8 +35,7 @@ public sealed class GrpcClientRegistrationGeneratorTests
 
 	static readonly MetadataReference[] _sharedFramework =
 	[
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f))
+		.. SharedFrameworkReferences.In(Path.GetDirectoryName(typeof(object).Assembly.Location)!)
 	];
 
 	static readonly MetadataReference[] _extraReferences =

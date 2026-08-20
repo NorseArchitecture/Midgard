@@ -46,10 +46,8 @@ public sealed class GrpcServerRegistrationGeneratorTests
 	// Microsoft.AspNetCore.App.
 	static readonly MetadataReference[] _sharedFrameworks =
 	[
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f)),
-		.. Directory.GetFiles(Path.GetDirectoryName(typeof(WebApplication).Assembly.Location)!, "*.dll")
-			.Select(f => MetadataReference.CreateFromFile(f))
+		.. SharedFrameworkReferences.In(Path.GetDirectoryName(typeof(object).Assembly.Location)!),
+		.. SharedFrameworkReferences.In(Path.GetDirectoryName(typeof(WebApplication).Assembly.Location)!)
 	];
 
 	static readonly MetadataReference[] _extraReferences =
