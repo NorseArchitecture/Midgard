@@ -33,20 +33,14 @@ public static class ProblemExtensions
 		/// </summary>
 		public RpcException ToRpcException()
 		{
-			var statusCode = problem.Category switch
-			{
-				ErrorCategory.Validation => StatusCode.InvalidArgument,
-				ErrorCategory.NotFound => StatusCode.NotFound,
-				ErrorCategory.Conflict => StatusCode.AlreadyExists,
-				ErrorCategory.Unauthorized => StatusCode.Unauthenticated,
-				ErrorCategory.Forbidden or ErrorCategory.LockedOut => StatusCode.PermissionDenied,
-				ErrorCategory.NotAllowed => StatusCode.FailedPrecondition,
-				ErrorCategory.InvalidCredentials => StatusCode.Unauthenticated,
-				ErrorCategory.Fault => StatusCode.Internal,
-				ErrorCategory.MultipleMatches => StatusCode.Internal,
-				ErrorCategory.Erased => StatusCode.NotFound,
-				_ => StatusCode.Unknown
-			};
+			var disposition = TransportDispositions.For(problem.Category);
+			var statusCode = (StatusCode)disposition.GrpcStatus;
+
+			// A silent category answers "who am I? -- unknown", and the platform never explains that answer.
+			// No ErrorInfo, no metadata, no detail string: the response is the status and nothing else, which
+			// is what makes two silent categories provably indistinguishable rather than merely similar.
+			if (!disposition.BodyPermitted)
+				return new RpcException(new global::Grpc.Core.Status(statusCode, string.Empty));
 
 			Status richStatus = new()
 			{

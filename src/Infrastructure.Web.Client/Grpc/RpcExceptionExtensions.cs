@@ -1,4 +1,5 @@
 using System.Globalization;
+using Google.Protobuf;
 using Google.Rpc;
 using Grpc.Core;
 using Norse.Abstractions.Contracts;
@@ -9,8 +10,15 @@ namespace Norse.Infrastructure.Web.Client.Grpc;
 /// <summary>
 ///     Client-side companion to Infrastructure.Web.Server's <c>ProblemExtensions.ToRpcException</c>.
 ///     Decodes the <c>grpc-status-details-bin</c> trailer's <c>google.rpc.ErrorInfo.Reason</c> field
-///     authoritatively — never the gRPC status code, which is not injective across all
-///     <see cref="ErrorCategory" /> members (spec §2.1). When <c>ErrorInfo.Metadata</c> carries both
+///     authoritatively <b>when the trailer is present</b> — the gRPC status code alone is not injective
+///     across all <see cref="ErrorCategory" /> members (spec §2.1). A trailer's absence (or a malformed
+///     payload that will not parse) is not a defect to route around; it is the declared shape of a silent
+///     category (<see cref="TransportDisposition.BodyPermitted" /> false — see
+///     <c>ProblemExtensions.ToRpcException</c>'s own gate), and decode falls back to a status-code-only
+///     mapping instead of throwing. That fallback is deliberately lossy: a trailerless
+///     <see cref="StatusCode.Unauthenticated" /> decodes to <see cref="ErrorCategory.Unauthorized" /> and
+///     cannot be told apart from <see cref="ErrorCategory.InvalidCredentials" /> — on purpose, because the
+///     platform never explains a failed authentication attempt. When <c>ErrorInfo.Metadata</c> carries both
 ///     <c>receipt</c> and <c>severedAt</c> entries, they are rehydrated into <see cref="Problem.Receipt" />;
 ///     either entry absent leaves <see cref="Problem.Receipt" /> <see langword="null" /> (tombstone producer).
 /// </summary>
@@ -23,9 +31,18 @@ public static class RpcExceptionExtensions
 		{
 			var trailer = exception.Trailers.Get("grpc-status-details-bin");
 			if (trailer is null)
-				return new Problem { Category = ErrorCategory.Fault };
+				return new Problem { Category = FromStatusAlone(exception.StatusCode) };
 
-			var richStatus = Status.Parser.ParseFrom(trailer.ValueBytes);
+			Status richStatus;
+			try
+			{
+				richStatus = Status.Parser.ParseFrom(trailer.ValueBytes);
+			}
+			catch (InvalidProtocolBufferException)
+			{
+				return new Problem { Category = FromStatusAlone(exception.StatusCode) };
+			}
+
 			var category = ErrorCategory.Fault;
 			Dictionary<string, string[]> errors = [];
 			Guid? correlationId = null;
@@ -69,4 +86,18 @@ public static class RpcExceptionExtensions
 			};
 		}
 	}
+
+	static ErrorCategory FromStatusAlone(StatusCode code) =>
+		code switch
+		{
+			// Deliberately lossy and declared so (design §4.3). Unauthenticated is reached by both
+			// Unauthorized and InvalidCredentials; collapsing them here is the silence ruling working, not
+			// information lost by accident -- the whole point is that the caller cannot tell which it was.
+			StatusCode.Unauthenticated => ErrorCategory.Unauthorized,
+			StatusCode.PermissionDenied => ErrorCategory.Forbidden,
+			StatusCode.NotFound => ErrorCategory.NotFound,
+			StatusCode.InvalidArgument => ErrorCategory.Validation,
+			StatusCode.AlreadyExists => ErrorCategory.Conflict,
+			_ => ErrorCategory.Fault
+		};
 }

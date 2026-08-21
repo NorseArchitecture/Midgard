@@ -141,10 +141,14 @@ public sealed class GrpcWebCallInvokerTests
 		// The shape Grpc.AspNetCore.Server + Grpc.AspNetCore.Web actually emit for every business
 		// failure: the call throws before writing a message, so there is no trailer frame and no body
 		// at all — grpc-status, grpc-message and grpc-status-details-bin ride the HTTP response headers.
-		// The rich-error detail DecodeProblem reads lives only there, so a trailers-only response whose
-		// headers are not promoted to trailers decodes as ErrorCategory.Fault no matter what the server
-		// said.
-		var serverException = new Problem { Category = ErrorCategory.InvalidCredentials }.ToRpcException();
+		// The rich-error detail DecodeProblem reads lives only there, so this proves GrpcWebCallInvoker
+		// promotes those headers into the call's Trailers. LockedOut is the exemplar (not
+		// InvalidCredentials, a silent category that carries no ErrorInfo trailer to promote by
+		// design — see SilentCategoryTests): it shares PermissionDenied with Forbidden, so the promoted
+		// ErrorInfo.Reason is the only way DecodeProblem can tell them apart. A missed promotion would
+		// instead fall through DecodeProblem's trailerless status-alone mapping, which answers Forbidden
+		// for PermissionDenied regardless — a different category, so this still proves promotion happened.
+		var serverException = new Problem { Category = ErrorCategory.LockedOut }.ToRpcException();
 		using HttpResponseMessage response = new(HttpStatusCode.OK) { Content = new ByteArrayContent([]) };
 		response.Content.Headers.ContentType = new("application/grpc-web+proto");
 		response.Headers.Add("grpc-status", $"{(int)serverException.StatusCode}");
@@ -157,8 +161,8 @@ public sealed class GrpcWebCallInvokerTests
 		var thrown = await Should.ThrowAsync<RpcException>(
 			invoker.AsyncUnaryCall(Method(), null, new CallOptions(), "ping").ResponseAsync);
 
-		thrown.StatusCode.ShouldBe(StatusCode.Unauthenticated);
-		thrown.DecodeProblem().Category.ShouldBe(ErrorCategory.InvalidCredentials);
+		thrown.StatusCode.ShouldBe(StatusCode.PermissionDenied);
+		thrown.DecodeProblem().Category.ShouldBe(ErrorCategory.LockedOut);
 	}
 
 	[Fact]

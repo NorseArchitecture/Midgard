@@ -86,8 +86,13 @@ public sealed class GrpcWebRoundTripTests
 			new ProbeRequest(),
 			new CallContext(new CallOptions(cancellationToken: TestContext.Current.CancellationToken)));
 
+		// InvalidCredentials is a silent category (TransportDispositions.For -- Task 8's reprojection):
+		// the server sends Unauthenticated with no grpc-status-details-bin trailer at all, so this proves
+		// the collapse end to end, over the real ASP.NET Core gRPC-Web stack, not just a hand-built
+		// fixture -- InvalidCredentials decodes as Unauthorized and is indistinguishable from it, on
+		// purpose (see SilentCategoryTests / TrailerlessDecodeTests).
 		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
-		failed.Problem.Category.ShouldBe(ErrorCategory.InvalidCredentials);
+		failed.Problem.Category.ShouldBe(ErrorCategory.Unauthorized);
 	}
 
 	// ProtoBuf.Grpc.Configuration.Service, not System.ServiceModel.ServiceContract: protobuf-net.Grpc's

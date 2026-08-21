@@ -50,10 +50,14 @@ public sealed class ProblemExtensionsTests
 	}
 
 	[Fact]
-	void NotAllowed_MapsTo_FailedPrecondition_NotSharedWithLockedOut()
+	void NotAllowed_shares_PermissionDenied_with_LockedOut_and_Forbidden()
 	{
+		// TransportDispositions.For is the single source for this mapping now (Task 8's reprojection
+		// over the former hand-written switch, which disagreed with it here): NotAllowed does not get
+		// its own FailedPrecondition status -- it shares PermissionDenied with LockedOut/Forbidden,
+		// disambiguated by ErrorInfo.Reason on the wire, same as the pair above.
 		var exception = new Problem { Category = ErrorCategory.NotAllowed }.ToRpcException();
-		exception.StatusCode.ShouldBe(StatusCode.FailedPrecondition);
+		exception.StatusCode.ShouldBe(StatusCode.PermissionDenied);
 	}
 
 	[Fact]
