@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
-using Norse.Abstractions.Web.Server.Authorization;
+using Norse.Abstractions.Components.Authorization;
 
 namespace Norse.Infrastructure.ServiceDefaults.AspNet.Tests;
 

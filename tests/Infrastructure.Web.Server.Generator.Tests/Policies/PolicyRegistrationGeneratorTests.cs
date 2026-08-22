@@ -3,7 +3,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Norse.Abstractions.Web.Server.Authorization;
+using Norse.Abstractions.Components.Authorization;
 using Norse.Infrastructure.Web.Server.Generator.Policies;
 
 namespace Norse.Infrastructure.Web.Server.Generator.Tests.Policies;
@@ -30,7 +30,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string AuthNPolicySource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.AuthN.Services;
 
@@ -43,7 +43,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string OtherPolicySameNameSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Other.Services;
 
@@ -142,7 +142,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string PrivateMethodSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -168,7 +168,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string InternalMethodSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -194,7 +194,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string InstanceMethodSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -220,7 +220,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string InaccessibleTypeSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -249,7 +249,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string NonVoidReturnSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -279,7 +279,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string WrongParametersSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -305,7 +305,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string GenericMethodSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -331,7 +331,7 @@ public sealed class PolicyRegistrationGeneratorTests
 
 	const string GenericContainingTypeSource = """
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 
@@ -375,7 +375,7 @@ public sealed class PolicyRegistrationGeneratorTests
 	static string NamelessSource(string literal) =>
 		$$"""
 		using Microsoft.AspNetCore.Authorization;
-		using Norse.Abstractions.Web.Server.Authorization;
+		using Norse.Abstractions.Components.Authorization;
 
 		namespace Norse.Realm.Rejections;
 

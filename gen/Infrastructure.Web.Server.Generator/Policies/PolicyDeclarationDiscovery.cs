@@ -39,7 +39,7 @@ readonly record struct PolicyDiscoveryResult(
 /// </remarks>
 static class PolicyDeclarationDiscovery
 {
-	const string AttributeMetadataName = "Norse.Abstractions.Web.Server.Authorization.NorsePolicyAttribute";
+	const string AttributeMetadataName = "Norse.Abstractions.Components.Authorization.NorsePolicyAttribute";
 
 	internal static PolicyDiscoveryResult Discover(Compilation compilation)
 	{

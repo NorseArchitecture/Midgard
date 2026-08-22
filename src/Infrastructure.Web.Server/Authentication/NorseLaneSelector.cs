@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Controllers;
-using Norse.Abstractions.Web.Server.Authorization;
+using Norse.Abstractions.Components.Authorization;
 using Norse.Abstractions.Web.Server.Facade;
 
 namespace Norse.Infrastructure.Web.Server.Authentication;
