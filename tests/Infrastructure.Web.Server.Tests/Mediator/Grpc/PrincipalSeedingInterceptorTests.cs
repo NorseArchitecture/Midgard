@@ -29,7 +29,7 @@ public sealed class PrincipalSeedingInterceptorTests
 	}
 
 	static ClaimsPrincipal Authenticated() =>
-		new(new ClaimsIdentity(authenticationType: "test"));
+		new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString("D"))], "test"));
 
 	[Fact]
 	async Task Seeds_the_accessor_before_the_continuation_runs_and_passes_the_response_through_unchanged()

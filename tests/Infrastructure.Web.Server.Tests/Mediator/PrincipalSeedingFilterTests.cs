@@ -35,7 +35,7 @@ public sealed class PrincipalSeedingFilterTests
 		services.AddNorsePipeline();
 		using var provider = services.BuildServiceProvider();
 		using var scope = provider.CreateScope();
-		var user = new ClaimsPrincipal(new ClaimsIdentity(authenticationType: "test"));
+		var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString("D"))], "test"));
 
 		new PrincipalSeedingFilter().OnAuthorization(ContextFor(scope.ServiceProvider, user));
 

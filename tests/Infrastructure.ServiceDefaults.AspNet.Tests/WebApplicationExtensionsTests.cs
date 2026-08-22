@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Norse.Abstractions.Web.Server.Authorization;
 using OpenTelemetry.Trace;
 
 namespace Norse.Infrastructure.ServiceDefaults.AspNet.Tests;
@@ -20,8 +21,10 @@ public sealed class WebApplicationExtensionsTests
 		var builder = WebApplication.CreateSlimBuilder();
 		builder.WebHost.UseTestServer();
 		builder.AddAspNetServiceDefaults();
+		builder.Services.AddAuthorizationBuilder().AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe);
 		configure?.Invoke(builder);
 		var app = builder.Build();
+		app.UseAuthorization();
 		app.MapDefaultEndpoints();
 		return app;
 	}
@@ -72,12 +75,12 @@ public sealed class WebApplicationExtensionsTests
 	}
 
 	[Fact]
-	void Both_probe_endpoints_are_anonymous_and_carry_no_http_metrics()
+	void Both_probe_endpoints_declare_the_probe_policy_and_carry_no_http_metrics()
 	{
 		using var app = BuildProbeHost();
 		Endpoint[] probes = [.. ((IEndpointRouteBuilder)app).DataSources.SelectMany(static source => source.Endpoints)];
 		probes.Length.ShouldBe(2);
-		probes.ShouldAllBe(e => e.Metadata.GetMetadata<IAllowAnonymous>() != null);
+		probes.ShouldAllBe(e => e.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(data => data.Policy == NorsePolicies.Probe));
 		probes.ShouldAllBe(e => e.Metadata.GetMetadata<IDisableHttpMetricsMetadata>() != null);
 	}
 
@@ -91,8 +94,10 @@ public sealed class WebApplicationExtensionsTests
 		var builder = WebApplication.CreateSlimBuilder();
 		builder.WebHost.UseTestServer();
 		builder.AddAspNetServiceDefaults();
+		builder.Services.AddAuthorizationBuilder().AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe);
 		builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing.AddInMemoryExporter(exported));
 		await using var app = builder.Build();
+		app.UseAuthorization();
 		app.MapDefaultEndpoints();
 		app.MapGet(Sentinel, static () => Results.Ok());
 		await app.StartAsync(TestContext.Current.CancellationToken);
