@@ -10,7 +10,8 @@ readonly record struct PolicyDeclaration(string Name, string DeclaringType, stri
 ///     One decorated method that is not a usable declaration, with the reason and where to report it.
 ///     <paramref name="Location" /> is the attribute's own syntax location when the declaration is source in
 ///     this compilation, and <see cref="Microsoft.CodeAnalysis.Location.None" /> when it arrived as
-///     metadata — a referenced assembly has no syntax to point at.
+///     metadata — a referenced assembly has no syntax to point at. Not every malformed metadata
+///     declaration reaches this type; see <see cref="PolicyDeclarationDiscovery" />'s remarks.
 /// </summary>
 readonly record struct InvalidDeclaration(string QualifiedMethod, string Reason, Location Location);
 
@@ -28,6 +29,13 @@ readonly record struct PolicyDiscoveryResult(
 ///     Scope is deliberately <c>SourceModule.ReferencedAssemblySymbols</c> and no further. The emitter names
 ///     each declaring type directly, so discovering a symbol this compilation cannot resolve a reference to
 ///     would emit code that does not compile. See the task's discovery-contract note.
+///     <para>
+///     The metadata backstop is not uniform: a real build's default <c>MetadataImportOptions.Public</c>
+///     makes a private or internal <c>[NorsePolicy]</c> method on a referenced assembly invisible to
+///     <see cref="Collect" />'s <c>GetMembers()</c> walk entirely, so NORSE015 can never fire for that
+///     rejection class in production -- only this project's test harness, which overrides to <c>.All</c>,
+///     exercises it.
+///     </para>
 /// </remarks>
 static class PolicyDeclarationDiscovery
 {
