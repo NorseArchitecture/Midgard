@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
 		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
-		<PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="1.*" />
+		<PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="*" />
 		<ProjectReference Include="../../src/Infrastructure.ServiceDefaults.AspNet/Infrastructure.ServiceDefaults.AspNet.csproj" />
 	</ItemGroup>
 </Project>
