@@ -24,7 +24,7 @@ public sealed class SenderTests
 		await using var host = Host<EchoHandler>();
 		await using var scope = host.CreateAsyncScope();
 		scope.ServiceProvider.GetRequiredService<PrincipalAccessor>()
-			.Seed(new ClaimsPrincipal(new ClaimsIdentity(authenticationType: "test")));
+			.Seed(new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString("D"))], "test")));
 
 		var outcome = await scope.ServiceProvider.GetRequiredService<ISender>()
 			.Send(new Echo("hello"), TestContext.Current.CancellationToken);
@@ -39,7 +39,7 @@ public sealed class SenderTests
 		await using var host = Host<ThrowingHandler>();
 		await using var scope = host.CreateAsyncScope();
 		scope.ServiceProvider.GetRequiredService<PrincipalAccessor>()
-			.Seed(new ClaimsPrincipal(new ClaimsIdentity(authenticationType: "test")));
+			.Seed(new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString("D"))], "test")));
 
 		var outcome = await scope.ServiceProvider.GetRequiredService<ISender>()
 			.Send(new Echo("hello"), TestContext.Current.CancellationToken);
