@@ -3,6 +3,9 @@
 		<Description>Norse.Infrastructure.Web.Server: gRPC server-side failure encoding. Mediator/Grpc translates Problem into google.rpc.Status + ErrorInfo/BadRequest/DebugInfo well-known types on a grpc-status-details-bin trailer, paired with Infrastructure.Web.Client for symmetrical decoding. Bundles the gRPC server registration generator (analyzers/dotnet/cs/), which discovers a compilation's Norse gRPC contracts and their implementations at compile time and emits MapNorseGrpcServices() — code-first MapGrpcService/EnableGrpcWeb registration plus idempotent Outcome&lt;T&gt; surrogate wiring and the Norse.Infrastructure.Web.Grpc identifier wire law (CompatibilityLevel 300, 16-byte RFC 9562 identifier bytes fields). The same generator assembly carries Futhark's XML shape generator, which discovers facade-controller (GrpcControllerBase descendant) request/response closures at compile time — across the compilation and its reference closure, enforces the XML shape law (NORSE022-028), and emits NorseXmlShapeRegistration.Build() for AddNorseXml.</Description>
 	</PropertyGroup>
 	<ItemGroup>
+		<NorseRef Include="Abstractions.Components">
+			<Repo>Asgard</Repo>
+		</NorseRef>
 		<NorseRef Include="Abstractions.Web.Server">
 			<Repo>Asgard</Repo>
 		</NorseRef>

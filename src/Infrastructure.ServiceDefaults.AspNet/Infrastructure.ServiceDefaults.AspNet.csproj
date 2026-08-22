@@ -4,7 +4,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-		<NorseRef Include="Abstractions.Web.Server">
+		<NorseRef Include="Abstractions.Components">
 			<Repo>Asgard</Repo>
 		</NorseRef>
 		<PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.*" />

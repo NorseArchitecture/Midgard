@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Norse.Abstractions.Web.Server.Authorization;
+using Norse.Abstractions.Components.Authorization;
 
 namespace Norse.Infrastructure.ServiceDefaults.AspNet;
 
