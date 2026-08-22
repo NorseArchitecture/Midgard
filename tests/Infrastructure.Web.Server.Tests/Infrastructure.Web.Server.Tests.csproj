@@ -9,6 +9,7 @@
 	<ItemGroup>
 		<PackageReference Include="Grpc.Core.Testing" Version="*" />
 		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
+		<PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="*" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>

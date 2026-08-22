@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Time.Testing;
 using Norse.Infrastructure.Web.Server.Authentication;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
@@ -37,7 +38,44 @@ public sealed class NorseAnonymousHandlerTests
 		var second = await harness.AuthenticateAsync();
 
 		second.Principal!.FindFirstValue(ClaimTypes.NameIdentifier).ShouldBe(id);
-		harness.SetCookies.ShouldBeEmpty();
+	}
+
+	[Fact]
+	async Task Refreshes_the_cookie_when_reading_an_existing_identity()
+	{
+		var harness = AuthenticationHarness.ForAnonymous();
+		await harness.AuthenticateAsync();
+		harness.ReplayCookies();
+
+		var second = await harness.AuthenticateAsync();
+
+		second.Principal!.Identity!.IsAuthenticated.ShouldBeTrue();
+		harness.SetCookies.ShouldContain(header => header.StartsWith("Norse.Anonymous=", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	async Task Slides_the_cookie_expiry_forward_on_every_read()
+	{
+		var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+		var harness = AuthenticationHarness.ForAnonymous(clock);
+		await harness.AuthenticateAsync();
+		var firstExpiry = ExpiryOf(harness.SetCookies.Single(h => h.StartsWith("Norse.Anonymous=", StringComparison.Ordinal)));
+		harness.ReplayCookies();
+		clock.Advance(TimeSpan.FromDays(10));
+
+		await harness.AuthenticateAsync();
+
+		var secondExpiry = ExpiryOf(harness.SetCookies.Single(h => h.StartsWith("Norse.Anonymous=", StringComparison.Ordinal)));
+		(secondExpiry - firstExpiry).ShouldBe(TimeSpan.FromDays(10), TimeSpan.FromSeconds(1));
+	}
+
+	static DateTimeOffset ExpiryOf(string setCookieHeader)
+	{
+		const string Marker = "expires=";
+		var start = setCookieHeader.IndexOf(Marker, StringComparison.OrdinalIgnoreCase) + Marker.Length;
+		var end = setCookieHeader.IndexOf(';', start);
+		var raw = end < 0 ? setCookieHeader[start..] : setCookieHeader[start..end];
+		return DateTimeOffset.Parse(raw, System.Globalization.CultureInfo.InvariantCulture);
 	}
 
 	[Fact]

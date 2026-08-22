@@ -10,14 +10,24 @@ public static class AuthenticationBuilderExtensions
 	extension(IServiceCollection services)
 	{
 		/// <summary>
-		///     Registers the lane selector and every lane behind it. Deliberately sets <b>no</b> default
-		///     scheme beyond the selector: an endpoint that declares nothing gets no principal rather than
-		///     the wrong one, which is §2.7's preference order applied to authentication.
+		///     Registers the lane selector and every lane behind it. Must be called <b>after</b> ASP.NET
+		///     Core Identity's <c>AddIdentity</c> in the composition root: <c>AddIdentity</c> sets
+		///     <see cref="AuthenticationOptions.DefaultAuthenticateScheme" /> and
+		///     <see cref="AuthenticationOptions.DefaultChallengeScheme" /> explicitly, which outrank a bare
+		///     <c>DefaultScheme</c> — Options composition is last-registration-wins per property, so this
+		///     call sets all three (plus <c>DefaultForbidScheme</c>) itself to win regardless. Leaves
+		///     <c>DefaultSignInScheme</c> alone — Norse never signs anyone in, that stays Identity's job.
 		/// </summary>
 		/// <returns>The <see cref="AuthenticationBuilder" /> for further chaining (Himinbjorg#49 adds bearer).</returns>
 		public AuthenticationBuilder AddNorseAuthentication() =>
 			services
-				.AddAuthentication(NorseSchemes.Default)
+				.AddAuthentication(options =>
+				{
+					options.DefaultScheme = NorseSchemes.Default;
+					options.DefaultAuthenticateScheme = NorseSchemes.Default;
+					options.DefaultChallengeScheme = NorseSchemes.Default;
+					options.DefaultForbidScheme = NorseSchemes.Default;
+				})
 				.AddPolicyScheme(NorseSchemes.Default, NorseSchemes.Default,
 					options => options.ForwardDefaultSelector =
 						context => NorseLaneSelector.Select(context.GetEndpoint()))

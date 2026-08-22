@@ -76,7 +76,17 @@ public sealed class NorseBrowserHandlerTests
 		var result = await harness.AuthenticateAsync();
 
 		result.Principal!.FindFirstValue(ClaimTypes.NameIdentifier).ShouldBe(id.ToString("D"));
-		harness.SetCookies.ShouldBeEmpty();
+	}
+
+	[Fact]
+	async Task A_valid_anonymous_cookie_is_refreshed_rather_than_reminted()
+	{
+		var id = Guid.NewGuid();
+		var harness = AuthenticationHarness.ForBrowser().WithAnonymousCookie(id);
+
+		await harness.AuthenticateAsync();
+
+		harness.SetCookies.ShouldContain(header => header.StartsWith("Norse.Anonymous=", StringComparison.Ordinal));
 	}
 
 	[Fact]

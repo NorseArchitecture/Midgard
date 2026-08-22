@@ -26,11 +26,18 @@ sealed class NorseAnonymousHandler(
 
 	AuthenticationTicket ReadOrMint()
 	{
+		var now = clock.GetUtcNow();
+
 		if (Request.Cookies.TryGetValue(Options.CookieName, out var payload) && TryUnprotect(payload, out var existing))
+		{
+			// The lifetime is documented as sliding: an active visitor's cookie must not expire out from
+			// under them, so every successful read reissues it with a fresh now + Lifetime expiry rather
+			// than only the mint path writing one.
+			Response.Cookies.Append(Options.CookieName, payload, Options.BuildCookieOptions(now));
 			return Ticket(existing);
+		}
 
 		var minted = Guid.NewGuid();
-		var now = clock.GetUtcNow();
 		Response.Cookies.Append(Options.CookieName, Protector.Protect(minted.ToString("D")),
 			Options.BuildCookieOptions(now));
 		return Ticket(minted);

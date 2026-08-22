@@ -86,8 +86,12 @@ sealed class AuthenticationHarness
 		_identityCookieMonitor?.CurrentValue.Cookie.Name
 		?? throw new InvalidOperationException($"{nameof(IdentityCookieName)} is only available on a harness built via {nameof(ForBrowser)}.");
 
-	/// <summary>Builds a harness wired for <see cref="NorseAnonymousHandler" /> against <see cref="NorseSchemes.Anonymous" />.</summary>
-	public static AuthenticationHarness ForAnonymous()
+	/// <summary>
+	///     Builds a harness wired for <see cref="NorseAnonymousHandler" /> against <see cref="NorseSchemes.Anonymous" />.
+	/// </summary>
+	/// <param name="clock">The handler's clock. Defaults to <see cref="TimeProvider.System" />; pass a
+	/// <c>Microsoft.Extensions.Time.Testing.FakeTimeProvider</c> to control cookie-expiry math precisely.</param>
+	public static AuthenticationHarness ForAnonymous(TimeProvider? clock = null)
 	{
 		NorseAnonymousOptions options = new();
 		var monitor = Substitute.For<IOptionsMonitor<NorseAnonymousOptions>>();
@@ -100,7 +104,7 @@ sealed class AuthenticationHarness
 		return new AuthenticationHarness(scheme, options.CookieName, protection, async (s, ctx) =>
 		{
 			NorseAnonymousHandler handler = new(monitor, NullLoggerFactory.Instance, UrlEncoder.Default, protection,
-				TimeProvider.System);
+				clock ?? TimeProvider.System);
 			await handler.InitializeAsync(s, ctx);
 			return handler;
 		});
