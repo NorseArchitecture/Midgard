@@ -15,7 +15,10 @@ public static class NorseSchemes
 	/// <summary>The anonymous handler. Never selected directly by a policy; the composite invokes it.</summary>
 	public const string Anonymous = "Norse.Anonymous";
 
-	/// <summary>The gRPC lane: identity cookie only, no fallback, no minting.</summary>
+	/// <summary>
+	///     The gRPC lane's composite: identity cookie, then a previously-established anonymous cookie —
+	///     never minting one itself. See <see cref="NorseGrpcHandler" />.
+	/// </summary>
 	public const string IdentityCookieOnly = "Norse.IdentityCookieOnly";
 
 	/// <summary>
