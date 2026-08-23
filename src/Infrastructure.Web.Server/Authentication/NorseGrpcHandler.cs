@@ -62,9 +62,22 @@ sealed class NorseGrpcHandler(
 
 	// Both operations go bare through the machine lane's own handler, same as this scheme's previous
 	// AddPolicyScheme forwarding did -- a gRPC client cannot follow the identity cookie's login redirect
-	// and must not be sent one.
-	protected override Task HandleChallengeAsync(AuthenticationProperties properties) =>
-		Context.ChallengeAsync(NorseSchemes.Machine, properties);
+	// and must not be sent one. Challenge has one extra step Forbid does not need: OpenIddict's real
+	// validation handler only stashes the specific failure reason ("missing_token" -> bare 401) in its
+	// per-request transaction when its OWN HandleAuthenticateAsync has already run in this same request
+	// (decompiled OpenIddict.Validation.AspNetCore 7.6.0, Himinbjorg#49). This handler's own
+	// HandleAuthenticateAsync above never touches the Machine scheme, so without an explicit
+	// AuthenticateAsync(Machine) call first, OpenIddict's Challenge handler finds nothing stashed and
+	// falls back to its generic "insufficient_access" default, which maps to 403 -- the bug this call
+	// fixes. The result is discarded: this call exists solely so OpenIddict's real handler runs its own
+	// Authenticate pass and populates that transaction state before Challenge reads it. Forbid needs no
+	// equivalent -- 403 is already OpenIddict's correct, unconditional default for Forbid, prior
+	// Authenticate or not.
+	protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
+	{
+		await Context.AuthenticateAsync(NorseSchemes.Machine).ConfigureAwait(false);
+		await Context.ChallengeAsync(NorseSchemes.Machine, properties).ConfigureAwait(false);
+	}
 
 	protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
 		Context.ForbidAsync(NorseSchemes.Machine, properties);

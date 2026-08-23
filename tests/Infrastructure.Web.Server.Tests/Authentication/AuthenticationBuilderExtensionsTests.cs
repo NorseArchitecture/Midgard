@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Norse.Infrastructure.Web.Server.Authentication;
+using OpenIddict.Validation.AspNetCore;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
 
@@ -30,5 +31,17 @@ public sealed class AuthenticationBuilderExtensionsTests
 		options.DefaultForbidScheme.ShouldBe(NorseSchemes.Default);
 		// Norse never signs anyone in -- Identity's sign-in scheme is untouched.
 		options.DefaultSignInScheme.ShouldBe("Identity.External");
+	}
+
+	[Fact]
+	void The_machine_scheme_forwards_to_OpenIddicts_validation_scheme()
+	{
+		ServiceCollection services = new();
+		services.AddNorseAuthentication();
+
+		var provider = services.BuildServiceProvider();
+		var options = provider.GetRequiredService<IOptionsMonitor<PolicySchemeOptions>>().Get(NorseSchemes.Machine);
+
+		options.ForwardDefault.ShouldBe(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
 	}
 }

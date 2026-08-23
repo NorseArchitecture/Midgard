@@ -13,6 +13,7 @@ public sealed class LaneWireupTests
 		var response = await host.Client.PostAsync(new Uri("/probe.ProbeService/Ping", UriKind.Relative), body,
 			TestContext.Current.CancellationToken);
 
+		response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
 		response.Headers.TryGetValues("Set-Cookie", out _).ShouldBeFalse();
 	}
 
