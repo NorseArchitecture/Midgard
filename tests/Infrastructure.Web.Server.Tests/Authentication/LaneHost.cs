@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -12,9 +14,11 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Norse.Abstractions.Components.Authorization;
 using Norse.Abstractions.Web.Server.Facade;
 using Norse.Infrastructure.Web.Server.Authentication;
+using OpenIddict.Validation.AspNetCore;
 using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Server;
@@ -29,7 +33,17 @@ namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
 ///     (<c>"/alive"</c>/<c>"/health"</c>) that pin blocker 2's regression. The <see cref="IdentityConstants.ApplicationScheme" />
 ///     cookie handler is registered with its defaults (never exercised by any credentialless request below)
 ///     purely so <see cref="NorseSchemes.IdentityCookieOnly" />'s unconditional <c>ForwardAuthenticate</c>
-///     resolves to a real handler instead of throwing a handler-lookup exception.
+///     resolves to a real handler instead of throwing a handler-lookup exception. <see cref="NorseSchemes.Machine" />'s
+///     forward target, <see cref="OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme" />, gets the same
+///     treatment via <see cref="MachineStandInHandler" /> — a real OpenIddict validation registration is out of
+///     scope for this fixture, so this test-only stand-in reproduces the pre-Himinbjorg#49 rejection behavior
+///     for authenticate/forbid, purely so the forward resolves instead of throwing; challenge branches on
+///     whether authenticate already ran, modeling the real Authenticate-before-Challenge asymmetry this
+///     fixture pins (see <see cref="MachineStandInHandler" />'s own doc comment). <see cref="NorsePolicies.Machine" /> is
+///     registered alongside <see cref="NorsePolicies.Probe" /> for the same class of reason on the
+///     authorization side: <see cref="GrpcControllerBase" />'s class-level <c>[Authorize(Policy = ...)]</c>
+///     names it, and an unregistered named policy throws at request time rather than the clean 401 below —
+///     a pre-existing gap in this fixture, independent of and predating the Machine-scheme bridge.
 /// </summary>
 sealed class LaneHost : IDisposable
 {
@@ -63,9 +77,12 @@ sealed class LaneHost : IDisposable
 		builder.Services.AddSingleton(facadeInvocations);
 
 		builder.Services.AddNorseAuthentication()
-			.AddCookie(IdentityConstants.ApplicationScheme);
+			.AddCookie(IdentityConstants.ApplicationScheme)
+			.AddScheme<AuthenticationSchemeOptions, MachineStandInHandler>(
+				OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, null);
 		builder.Services.AddAuthorizationBuilder()
-			.AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe);
+			.AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe)
+			.AddPolicy(NorsePolicies.Machine, NorsePlatformPolicies.Machine);
 
 		// The default ApplicationPartManager scans the entire entry assembly for controllers -- under
 		// Microsoft.Testing.Platform that IS this test assembly, so plain AddControllers() would also pick
@@ -122,6 +139,53 @@ sealed class LaneHost : IDisposable
 		Client.Dispose();
 		_app.StopAsync().GetAwaiter().GetResult();
 		_app.DisposeAsync().AsTask().GetAwaiter().GetResult();
+	}
+}
+
+/// <summary>
+///     A test-only stand-in for <see cref="OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme" /> --
+///     <see cref="LaneHost" /> composes <see cref="AuthenticationBuilderExtensions.AddNorseAuthentication" /> for
+///     real but never registers a real OpenIddict validation handler (out of scope for this fixture), so
+///     <see cref="NorseSchemes.Machine" />'s forward needs *something* registered under that exact scheme name
+///     or it throws a handler-lookup exception rather than the clean 401 a credentialless facade caller must
+///     get. Reproduces the deleted <c>NorseMachineRejectionHandler</c>'s behavior for authenticate (nothing,
+///     ever) and forbid (always 403, silently, never a cookie) exactly. Challenge is the one place this stand-in
+///     deliberately diverges from that deleted handler and instead models real OpenIddict's own asymmetry
+///     (decompiled <c>OpenIddict.Validation.AspNetCore</c> 7.6.0, Himinbjorg#49): Challenge only resolves to
+///     the specific "missing_token" -&gt; 401 outcome when <em>this scheme's own</em>
+///     <see cref="HandleAuthenticateAsync" /> already ran earlier in the same request and stashed that
+///     transaction; called cold, with no prior Authenticate pass on this scheme, it falls back to the generic
+///     "insufficient_access" default, which maps to 403. The <c>_authenticateRan</c> field is safe as
+///     per-request state -- ASP.NET Core's <c>AuthenticationHandlerProvider</c> is a scoped service that
+///     caches one handler instance per scheme for the lifetime of a single request, never reused across
+///     requests.
+/// </summary>
+sealed class MachineStandInHandler(
+	IOptionsMonitor<AuthenticationSchemeOptions> options,
+	ILoggerFactory logger,
+	UrlEncoder encoder)
+	: AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+{
+	bool _authenticateRan;
+
+	protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+	{
+		_authenticateRan = true;
+		return Task.FromResult(AuthenticateResult.NoResult());
+	}
+
+	protected override Task HandleChallengeAsync(AuthenticationProperties properties)
+	{
+		Response.StatusCode = _authenticateRan ? StatusCodes.Status401Unauthorized : StatusCodes.Status403Forbidden;
+		Response.ContentLength = 0;
+		return Task.CompletedTask;
+	}
+
+	protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
+	{
+		Response.StatusCode = StatusCodes.Status403Forbidden;
+		Response.ContentLength = 0;
+		return Task.CompletedTask;
 	}
 }
 
@@ -213,7 +277,16 @@ sealed class PingResponse
 	[DataMember(Order = 1)] public string Value { get; set; } = string.Empty;
 }
 
-/// <summary>The gRPC lane's probe: a code-first protobuf-net.Grpc service, mapped with no authorization metadata -- exactly what <see cref="NorseLaneSelector.Select" /> matches for the identity-cookie-only lane.</summary>
+/// <summary>
+///     The gRPC lane's probe: a code-first protobuf-net.Grpc service, exactly what
+///     <see cref="NorseLaneSelector.Select" /> matches for the identity-cookie-only lane. Carries
+///     <see cref="NorsePolicies.Machine" /> the same way a real production service does (mirroring
+///     <see cref="GrpcControllerBase" />'s class-level attribute on the facade lane) -- without an
+///     authorization requirement here, a credential-less call never reaches Challenge/Forbid at all,
+///     which is why the original fixture's total absence of one let the Challenge/Forbid status-code
+///     bug (Himinbjorg#49) go unnoticed.
+/// </summary>
+[Authorize(Policy = NorsePolicies.Machine)]
 sealed class ProbeGrpcService : IProbeGrpcService
 {
 	public Task<PingResponse> PingAsync(PingRequest request, CallContext context = default) =>

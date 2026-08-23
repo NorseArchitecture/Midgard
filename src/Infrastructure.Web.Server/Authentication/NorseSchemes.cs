@@ -30,10 +30,11 @@ public static class NorseSchemes
 	public const string Probe = "Norse.Probe";
 
 	/// <summary>
-	///     The machine lane. Until Himinbjorg#49 lands its handler is
-	///     <c>NorseMachineRejectionHandler</c>; #49 forwards this name to bearer instead. Registered from
-	///     day one either way — forwarding to an unregistered scheme throws a handler-lookup exception
-	///     rather than producing a clean 401.
+	///     The machine lane. Forwards to OpenIddict's own validation scheme
+	///     (<c>OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme</c>) — registered as a
+	///     <c>AddPolicyScheme</c> forward, not a hand-rolled handler, since OpenIddict's validation
+	///     builder always registers under its own fixed scheme name and cannot be told to use this one
+	///     directly (Himinbjorg#49).
 	/// </summary>
 	public const string Machine = "Norse.Machine";
 }

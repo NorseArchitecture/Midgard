@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using OpenIddict.Validation.AspNetCore;
 
 namespace Norse.Infrastructure.Web.Server.Authentication;
 
@@ -17,7 +18,7 @@ public static class AuthenticationBuilderExtensions
 		///     call sets all three (plus <c>DefaultForbidScheme</c>) itself to win regardless. Leaves
 		///     <c>DefaultSignInScheme</c> alone — Norse never signs anyone in, that stays Identity's job.
 		/// </summary>
-		/// <returns>The <see cref="AuthenticationBuilder" /> for further chaining (Himinbjorg#49 adds bearer).</returns>
+		/// <returns>The <see cref="AuthenticationBuilder" /> for further chaining.</returns>
 		public AuthenticationBuilder AddNorseAuthentication() =>
 			services
 				.AddAuthentication(options =>
@@ -33,7 +34,8 @@ public static class AuthenticationBuilderExtensions
 				.AddScheme<AuthenticationSchemeOptions, NorseBrowserHandler>(NorseSchemes.Browser, null)
 				.AddScheme<NorseAnonymousOptions, NorseAnonymousHandler>(NorseSchemes.Anonymous, null)
 				.AddScheme<AuthenticationSchemeOptions, NorseGrpcHandler>(NorseSchemes.IdentityCookieOnly, null)
-				.AddScheme<AuthenticationSchemeOptions, NorseMachineRejectionHandler>(NorseSchemes.Machine, null)
+				.AddPolicyScheme(NorseSchemes.Machine, NorseSchemes.Machine,
+					options => options.ForwardDefault = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
 				.AddScheme<AuthenticationSchemeOptions, NorseProbeHandler>(NorseSchemes.Probe, null);
 	}
 }
