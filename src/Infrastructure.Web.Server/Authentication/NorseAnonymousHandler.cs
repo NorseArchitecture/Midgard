@@ -8,8 +8,12 @@ namespace Norse.Infrastructure.Web.Server.Authentication;
 
 /// <summary>
 ///     Mints or reads the anonymous identity. Never self-selects: the lane selector (§2.2 layer 1) decides
-///     which lane a request is in, and only the browser composite invokes this handler. That is what keeps
-///     a facade or gRPC caller from ever being handed a free identity.
+///     which lane a request is in, and only the browser and gRPC composites invoke this handler — the
+///     facade (machine) lane never does, so a bearer-only caller is never handed a free identity. The two
+///     composites that do invoke it differ in how: the browser composite (<see cref="NorseBrowserHandler" />)
+///     calls it unconditionally, so it is the only lane that can ever mint; the gRPC composite
+///     (<see cref="NorseGrpcHandler" />) gates on the cookie's presence first, so calling it there can only
+///     ever read one the browser lane already minted.
 /// </summary>
 sealed class NorseAnonymousHandler(
 	IOptionsMonitor<NorseAnonymousOptions> options,
