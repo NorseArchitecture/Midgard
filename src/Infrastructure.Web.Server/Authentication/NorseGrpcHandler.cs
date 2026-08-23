@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 
@@ -22,7 +23,8 @@ sealed class NorseGrpcHandler(
 	ILoggerFactory logger,
 	UrlEncoder encoder,
 	IOptionsMonitor<CookieAuthenticationOptions> cookieOptions,
-	IOptionsMonitor<NorseAnonymousOptions> anonymousOptions)
+	IOptionsMonitor<NorseAnonymousOptions> anonymousOptions,
+	IDataProtectionProvider protection)
 	: AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
 	protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -43,10 +45,16 @@ sealed class NorseGrpcHandler(
 		}
 
 		// Read-only, never blind: NorseAnonymousHandler mints unconditionally once invoked (design §2.3),
-		// so this lane gates on the cookie's presence itself rather than calling the handler and hoping it
-		// has nothing to do. Only the browser lane is allowed to mint a visitor's anonymous identity; this
-		// lane only ever reads one back that the browser lane already established.
-		if (Request.Cookies.ContainsKey(anonymousOptions.Get(NorseSchemes.Anonymous).CookieName))
+		// and treats a payload it cannot decode as absence -- indistinguishable, by design, from a cookie
+		// that was never there (the browser lane's own tolerance for a tampered/key-rotated cookie). Gating
+		// on mere presence would let a garbage Norse.Anonymous value walk a credential-less caller straight
+		// through that mint path (codex review, PR #78), so this lane validates a genuine decode itself
+		// first -- the same protector, the same payload -- and only then calls in, at which point the
+		// second decode inside NorseAnonymousHandler is guaranteed to succeed identically rather than fall
+		// through to its own mint branch.
+		if (Request.Cookies.TryGetValue(anonymousOptions.Get(NorseSchemes.Anonymous).CookieName, out var anonymousPayload) &&
+			NorseAnonymousCookieReader.TryUnprotect(
+				protection.CreateProtector(NorseAnonymousOptions.ProtectionPurpose), anonymousPayload, out _))
 			return await Context.AuthenticateAsync(NorseSchemes.Anonymous).ConfigureAwait(false);
 
 		return AuthenticateResult.NoResult();
