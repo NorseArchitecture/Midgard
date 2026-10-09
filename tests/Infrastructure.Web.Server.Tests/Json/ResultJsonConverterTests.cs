@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Norse.Infrastructure.Web.Server.Xml;
 using Norse.Primitives;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Json;
@@ -212,5 +213,17 @@ public sealed class ResultJsonConverterTests
 
 		result.ShouldNotBeNull();
 		resultType.GetProperty(nameof(Result<>.HasValue))!.GetValue(result).ShouldBe(true);
+	}
+
+	[Fact]
+	void Read_string_token_that_overflows_the_target_captures_an_out_of_range_failure()
+	{
+		var options = NorseJsonTestOptions.Create();
+
+		var result = JsonSerializer.Deserialize<Result<byte>>("\"256\"", options);
+
+		var failure = result.Value.ShouldBeOfType<Failure>();
+		failure.Reason.ShouldBe(ParseFailure.OutOfRange);
+		FailureDetail.Render(failure).ShouldBe("value '256' is out of range for Byte");
 	}
 }
