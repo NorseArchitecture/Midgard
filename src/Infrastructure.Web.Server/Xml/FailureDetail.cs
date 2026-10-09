@@ -19,7 +19,9 @@ public static class FailureDetail
 	///     (<see cref="EnumLexical.ParseFlags{TEnum}" />) is the only current source — appends it after an
 	///     em dash; every failure constructed without a <see cref="Failure.Detail" /> renders exactly as
 	///     before, byte-for-byte. A <see cref="ParseFailure.Duplicate" /> failure never says "cannot parse"
-	///     — the token parsed fine; it repeated where each token may appear only once.
+	///     — the token parsed fine; it repeated where each token may appear only once. A
+	///     <see cref="ParseFailure.OutOfRange" /> failure never says "cannot parse" either: the text parsed, the
+	///     value did not fit the type (engines-cut law, 2026-10-09).
 	/// </remarks>
 	/// <exception cref="ArgumentOutOfRangeException">
 	///     <paramref name="failure" />'s <see cref="Failure.Reason" /> is not a
@@ -32,6 +34,7 @@ public static class FailureDetail
 				$"cannot parse '{failure.Input}' as {failure.ExpectedType}" :
 				$"cannot parse '{failure.Input}' as {failure.ExpectedType} — {failure.Detail}",
 			ParseFailure.Empty => "required value missing",
+			ParseFailure.OutOfRange => $"value '{failure.Input}' is out of range for {failure.ExpectedType}",
 			ParseFailure.Duplicate => $"duplicate value '{failure.Input}'",
 			_ => throw new ArgumentOutOfRangeException(nameof(failure), failure.Reason,
 				"Unrecognized ParseFailure reason.")

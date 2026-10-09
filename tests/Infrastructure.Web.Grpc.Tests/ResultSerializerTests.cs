@@ -190,7 +190,10 @@ public sealed class ResultSerializerTests
 		var back = TestModel.Deserialize<Envelope<DateTimeOffset>>(TestModel.Create(), payload);
 
 		var failure = back.Value.Value.ShouldBeOfType<Failure>();
-		failure.Reason.ShouldBe(ParseFailure.Malformed);
+		failure.Reason.ShouldBe(ParseFailure.OutOfRange);
+		// February 30th is syntactically a timestamp whose day is past the month's end: HyperCast's
+		// timestamp door (the engine behind the gateway since the engines cut) classifies that as
+		// OutOfRange, not Malformed — a typed failure either way, which is the law under test.
 	}
 
 	[Fact]
