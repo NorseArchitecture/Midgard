@@ -18,7 +18,7 @@ namespace Norse.Infrastructure.Persistence.EntityFramework.Tests;
 /// </summary>
 public sealed class PostgresContainerFixture : IAsyncLifetime
 {
-	readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:19beta4")
+	readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:19rc1")
 		.WithDatabase("norse_well")
 		.Build();
 
