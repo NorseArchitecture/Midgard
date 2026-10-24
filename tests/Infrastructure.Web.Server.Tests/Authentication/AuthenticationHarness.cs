@@ -272,7 +272,7 @@ sealed class AuthenticationHarness
 		var payload = protector.Protect(id.ToString("D"));
 
 		DefaultHttpContext scratch = new();
-		scratch.Response.Cookies.Append(_cookieName, payload);
+		scratch.Response.Cookies.Append(_cookieName, payload, new CookieOptions { Secure = true });
 		return scratch.Response.Headers.SetCookie[0]!;
 	}
 
