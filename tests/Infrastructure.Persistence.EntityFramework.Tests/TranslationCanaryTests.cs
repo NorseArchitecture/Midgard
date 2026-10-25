@@ -94,7 +94,7 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 		TranslationCanarySupport.CreateLoggedRepository(fixture.ConnectionString, NorseSqlServerEfProvider.Instance);
 
 	[Fact(SkipUnless = nameof(IsSqlServerTestable),
-		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+		Skip = "Requires a running Docker daemon on a host other than Windows on ARM.")]
 	async Task Promoted_collection_any_emits_exists_not_client_eval()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
@@ -108,7 +108,7 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 	}
 
 	[Fact(SkipUnless = nameof(IsSqlServerTestable),
-		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+		Skip = "Requires a running Docker daemon on a host other than Windows on ARM.")]
 	async Task Unpromoted_json_collection_any_translates_server_side()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
@@ -133,7 +133,7 @@ public sealed class SqlServerTranslationCanaryTests(SqlServerContainerFixture fi
 	}
 
 	[Fact(SkipUnless = nameof(IsSqlServerTestable),
-		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+		Skip = "Requires a running Docker daemon on a host other than Windows on ARM.")]
 	async Task Single_take_two_sql_matches_native_single_or_default()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);

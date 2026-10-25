@@ -23,15 +23,19 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime
 	readonly MsSqlContainer _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2025-latest").Build();
 
 	/// <summary>
-	///     SQL Server's Linux container image is x86_64-only. Discovered live on this task's own arm64
-	///     dev host: both the 2022 and 2025 images reproducibly segfault under Docker Desktop's qemu
-	///     emulation there (verified via a direct `docker run`, outside this fixture — not a guess). Real
-	///     x86_64 CI runners hit neither path. This is a control-flow gate, not a try/catch-and-hope:
-	///     checked in <see cref="InitializeAsync" /> before <c>StartAsync</c> is ever called, so an arm64
-	///     host never attempts to pull the (multi-gigabyte) image only to watch it die — skip by knowing,
-	///     not by downloading first and catching the failure.
+	///     SQL Server's Linux container image is x86_64-only, so an arm64 host must emulate it — and which
+	///     emulator decides everything. Windows on ARM runs it under Docker Desktop's qemu emulation, where
+	///     both the 2022 and 2025 images reproducibly segfault (verified via a direct `docker run`, outside
+	///     this fixture — not a guess); that host is excluded here. Apple silicon runs it under Rosetta
+	///     (Docker Desktop's x86_64/amd64 emulation), where SQL Server 2025 comes up and passes this suite
+	///     (verified 2026-10-25), so macOS arm64 is supported. x86_64 CI runners need neither. This is a
+	///     control-flow gate, not a try/catch-and-hope: checked in <see cref="InitializeAsync" /> before
+	///     <c>StartAsync</c> is ever called, so a Windows-on-ARM host never attempts to pull the
+	///     (multi-gigabyte) image only to watch it die. A Mac with Rosetta emulation switched off falls back
+	///     to qemu and dies the same way; that degrades through the narrow catch below into a skip.
 	/// </summary>
-	public static bool IsSupportedArchitecture { get; } = RuntimeInformation.ProcessArchitecture == Architecture.X64;
+	public static bool IsSupportedArchitecture { get; } =
+		!(OperatingSystem.IsWindows() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 
 	/// <summary>
 	///     True once a real, usable container is up. False when Docker was not available at
@@ -74,7 +78,7 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime
 		if (!IsSupportedArchitecture)
 		{
 			UnavailableReason =
-				$"SQL Server's Linux image is x86_64-only; this host reports {RuntimeInformation.ProcessArchitecture}.";
+				"SQL Server's Linux image is x86_64-only and segfaults under qemu emulation on Windows on ARM.";
 			return;
 		}
 

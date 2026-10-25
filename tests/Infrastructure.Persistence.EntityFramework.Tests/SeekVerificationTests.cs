@@ -86,7 +86,7 @@ public sealed class SqlServerSeekVerificationTests(SqlServerContainerFixture fix
 		DockerAvailability.IsAvailable && SqlServerContainerFixture.IsSupportedArchitecture;
 
 	[Fact(SkipUnless = nameof(IsSqlServerTestable),
-		Skip = "Requires a running Docker daemon on a supported (x64) architecture.")]
+		Skip = "Requires a running Docker daemon on a host other than Windows on ARM.")]
 	async Task Anchored_composite_query_is_sargable_shaped()
 	{
 		TranslationCanarySupport.SkipUnlessAvailable(fixture);
