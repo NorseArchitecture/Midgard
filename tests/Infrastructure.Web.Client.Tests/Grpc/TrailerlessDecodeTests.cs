@@ -14,6 +14,7 @@ public sealed class TrailerlessDecodeTests
 	[InlineData(StatusCode.NotFound, ErrorCategory.NotFound)]
 	[InlineData(StatusCode.Internal, ErrorCategory.Fault)]
 	[InlineData(StatusCode.Unavailable, ErrorCategory.Fault)]
+	[InlineData(StatusCode.DeadlineExceeded, ErrorCategory.Indeterminate)]
 	void A_trailerless_status_decodes_to_its_declared_category(StatusCode code, ErrorCategory expected) =>
 		Trailerless(code).DecodeProblem().Category.ShouldBe(expected);
 

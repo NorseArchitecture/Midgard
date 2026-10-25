@@ -172,4 +172,20 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 	[Fact]
 	void Lookup_ring_throws_on_an_unknown_key_id() =>
 		Should.Throw<KeyNotFoundException>(() => Store.GetKey("no-such-key"));
+
+	[Fact]
+	void Constructor_throws_when_exclusion_cannot_be_demonstrated()
+	{
+		var exception = Should.Throw<InvalidOperationException>(() =>
+			new DevelopmentSubjectKeyStore(_root, new NonExclusiveFileLock(), SubjectDestroyLockOptions.Default));
+		exception.Message.ShouldContain(_root);
+		exception.Message.ShouldContain("local filesystem");
+	}
+
+	[Fact]
+	void Constructor_succeeds_on_a_local_filesystem()
+	{
+		_ = Store;
+		Directory.EnumerateFileSystemEntries(_root).ShouldBeEmpty(); // the self-test's probe file is cleaned up
+	}
 }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Web.Server.Mediator;
@@ -56,5 +57,34 @@ public sealed class TelemetryBehaviorTests
 				() => translation.Handle("request",
 					() => throw new OperationCanceledException(cts.Token), cts.Token), cts.Token)
 		);
+	}
+	[Fact]
+	async Task Indeterminate_failure_logs_at_warning_with_correlation_id()
+	{
+		CapturingLogger<TelemetryBehavior<string, bool>> logger = new();
+		TelemetryBehavior<string, bool> telemetry = new(logger);
+		var correlationId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+		await telemetry.Handle("request",
+			() => ValueTask.FromResult(Outcome<bool>.Err(ErrorCategory.Indeterminate, correlationId: correlationId)),
+			TestContext.Current.CancellationToken);
+
+		var entry = logger.Entries.ShouldHaveSingleItem();
+		entry.Level.ShouldBe(LogLevel.Warning);
+		entry.Message.ShouldContain(correlationId.ToString());
+		entry.Message.ShouldContain("indeterminate");
+	}
+
+	sealed class CapturingLogger<T> : ILogger<T>
+	{
+		public List<(LogLevel Level, EventId EventId, string Message)> Entries { get; } = [];
+
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+		public bool IsEnabled(LogLevel logLevel) => true;
+
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+			Func<TState, Exception?, string> formatter) =>
+			Entries.Add((logLevel, eventId, formatter(state, exception)));
 	}
 }

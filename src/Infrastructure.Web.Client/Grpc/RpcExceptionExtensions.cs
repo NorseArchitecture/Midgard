@@ -98,6 +98,7 @@ public static class RpcExceptionExtensions
 			StatusCode.NotFound => ErrorCategory.NotFound,
 			StatusCode.InvalidArgument => ErrorCategory.Validation,
 			StatusCode.AlreadyExists => ErrorCategory.Conflict,
+			StatusCode.DeadlineExceeded => ErrorCategory.Indeterminate,
 			_ => ErrorCategory.Fault
 		};
 }

@@ -69,6 +69,18 @@ public sealed class ProblemExtensionsTests
 	}
 
 	[Fact]
+	void Indeterminate_problem_rich_status_carries_DeadlineExceeded()
+	{
+		// The outer status and the google.rpc.Status trailer must agree; a missing arm in the
+		// google.rpc mapping would report Unknown (2) in the trailer while the outer status says 4.
+		var exception = new Problem { Category = ErrorCategory.Indeterminate }.ToRpcException();
+		exception.StatusCode.ShouldBe(StatusCode.DeadlineExceeded);
+		var trailer = exception.Trailers.Get("grpc-status-details-bin");
+		trailer.ShouldNotBeNull();
+		Status.Parser.ParseFrom(trailer.ValueBytes).Code.ShouldBe((int)Code.DeadlineExceeded);
+	}
+
+	[Fact]
 	void MultipleMatches_MapsTo_Internal_NotACallerError()
 	{
 		// A cardinality violation is a server-side data-integrity failure, not a caller error —
