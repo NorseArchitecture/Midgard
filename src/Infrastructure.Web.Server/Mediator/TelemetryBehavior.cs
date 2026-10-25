@@ -30,6 +30,9 @@ sealed partial class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBeh
 			case Failed({ Category: ErrorCategory.Fault } problem):
 				LogFaulted(logger, typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.CorrelationId);
 				break;
+			case Failed({ Category: ErrorCategory.Indeterminate } problem):
+				LogIndeterminate(logger, typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.CorrelationId);
+				break;
 			case Failed(var problem):
 				LogFailed(logger, typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.Category);
 				break;
@@ -44,6 +47,12 @@ sealed partial class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBeh
 	[LoggerMessage(Level = LogLevel.Warning,
 		Message = "{RequestType} faulted in {ElapsedMs}ms, correlation id {CorrelationId}")]
 	static partial void LogFaulted(ILogger logger, string requestType, long elapsedMs, Guid? correlationId);
+
+	// Same level and fields as LogFaulted, distinct message: an indeterminate outcome (the write may or
+	// may not have landed) is an operator concern on par with a fault, but not the same one.
+	[LoggerMessage(Level = LogLevel.Warning,
+		Message = "{RequestType} outcome indeterminate after {ElapsedMs}ms, correlation id {CorrelationId}")]
+	static partial void LogIndeterminate(ILogger logger, string requestType, long elapsedMs, Guid? correlationId);
 
 	[LoggerMessage(Level = LogLevel.Information, Message = "{RequestType} failed in {ElapsedMs}ms with {Category}")]
 	static partial void LogFailed(ILogger logger, string requestType, long elapsedMs, ErrorCategory category);

@@ -86,6 +86,7 @@ public static class ProblemExtensions
 		StatusCode.Unauthenticated => Code.Unauthenticated,
 		StatusCode.PermissionDenied => Code.PermissionDenied,
 		StatusCode.FailedPrecondition => Code.FailedPrecondition,
+		StatusCode.DeadlineExceeded => Code.DeadlineExceeded,
 		StatusCode.Internal => Code.Internal,
 		_ => Code.Unknown
 	};
