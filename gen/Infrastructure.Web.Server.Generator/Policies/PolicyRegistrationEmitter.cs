@@ -8,7 +8,15 @@ namespace Norse.Infrastructure.Web.Server.Generator.Policies;
 /// <summary>Emits <c>AddNorsePolicies()</c> — the one call that replaces every hand-written policy lambda.</summary>
 static class PolicyRegistrationEmitter
 {
-	internal static string Emit(string rootNamespace, ImmutableArray<PolicyDeclaration> declarations)
+	/// <summary>Emits the <c>NorsePolicyRegistration</c> source for <paramref name="declarations" />.</summary>
+	/// <param name="rootNamespace">The consuming compilation's root namespace the registration lands in.</param>
+	/// <param name="bootstrap">
+	///     The expression that yields the <c>AuthorizationBuilder</c> the policies are added to — the one line
+	///     that differs by host: <c>services.AddAuthorizationBuilder()</c> on the server, where the ASP.NET
+	///     Core shared framework supplies it, and a WASM-reachable construction on the client, where it does not.
+	/// </param>
+	/// <param name="declarations">The policy declarations to register; emitted in ordinal name order.</param>
+	internal static string Emit(string rootNamespace, string bootstrap, ImmutableArray<PolicyDeclaration> declarations)
 	{
 		StringBuilder builder = new();
 		builder.AppendCSharp($$"""
@@ -24,7 +32,7 @@ static class PolicyRegistrationEmitter
 				/// <summary>Registers every discovered authorization policy.</summary>
 				public static IServiceCollection AddNorsePolicies(this IServiceCollection services)
 				{
-					var builder = services.AddAuthorizationBuilder();
+					var builder = {{bootstrap}};
 			{{Registrations(declarations)}}
 					return services;
 				}

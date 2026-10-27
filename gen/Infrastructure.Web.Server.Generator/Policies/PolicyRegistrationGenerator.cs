@@ -32,7 +32,9 @@ public sealed class PolicyRegistrationGenerator : IIncrementalGenerator
 				productionContext.ReportDiagnostic(diagnostic);
 			productionContext.AddSource("NorsePolicyRegistration.g.cs",
 				SourceText.From(
-					PolicyRegistrationEmitter.Emit(result.RootNamespace, result.Declarations), Utf8NoBom.Encoding));
+					PolicyRegistrationEmitter.Emit(
+						result.RootNamespace, "services.AddAuthorizationBuilder()", result.Declarations),
+					Utf8NoBom.Encoding));
 		});
 	}
 

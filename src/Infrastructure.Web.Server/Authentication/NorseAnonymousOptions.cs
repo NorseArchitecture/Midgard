@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Norse.Abstractions.Components.Authorization;
 
 namespace Norse.Infrastructure.Web.Server.Authentication;
 
@@ -8,8 +9,11 @@ namespace Norse.Infrastructure.Web.Server.Authentication;
 /// </summary>
 public sealed class NorseAnonymousOptions : AuthenticationSchemeOptions
 {
-	/// <summary>The role every anonymous principal carries.</summary>
-	public const string AnonymousRole = "anonymous";
+	/// <summary>
+	///     The role every anonymous principal carries — aliases Asgard's constant so Heimdall can name the role
+	///     without referencing Midgard (NORSE071).
+	/// </summary>
+	public const string AnonymousRole = NorseRoles.Anonymous;
 
 	/// <summary>The Data Protection purpose string. Versioned so a format change is a new purpose, not a silent reinterpretation.</summary>
 	public const string ProtectionPurpose = "Norse.Anonymous.v1";

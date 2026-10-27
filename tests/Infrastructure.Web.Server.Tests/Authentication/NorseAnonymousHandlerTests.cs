@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.Extensions.Time.Testing;
+using Norse.Abstractions.Components.Authorization;
 using Norse.Infrastructure.Web.Server.Authentication;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
@@ -99,6 +100,17 @@ public sealed class NorseAnonymousHandlerTests
 
 		result.Principal!.Identity!.IsAuthenticated.ShouldBeTrue();
 		result.Principal.IsInRole(NorseAnonymousOptions.AnonymousRole).ShouldBeTrue();
+	}
+
+	[Fact]
+	async Task The_minted_principal_holds_the_platform_anonymous_role()
+	{
+		var harness = AuthenticationHarness.ForAnonymous();
+
+		var result = await harness.AuthenticateAsync();
+
+		result.Principal!.IsInRole(NorseRoles.Anonymous).ShouldBeTrue();
+		result.Principal.Claims.Count(c => c.Type == ClaimTypes.Role).ShouldBe(1);
 	}
 
 	[Fact]
