@@ -1,5 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
+		<NorseRef Include="Abstractions.Components">
+			<Repo>Asgard</Repo>
+		</NorseRef>
 		<PackageReference Include="FluentValidation" Version="12.*" />
 		<!-- Standalone WASM-safe Blazor package (mirrors Asgard's Abstractions.Components.csproj),
 		     never FrameworkReference Microsoft.AspNetCore.App here: that pulls the whole ASP.NET
@@ -14,6 +17,9 @@
 		<PackageReference Include="protobuf-net.Grpc" Version="1.*" />
 		<PackageReference Include="System.ServiceModel.Primitives" Version="10.*" />
 		<ProjectReference Include="../../gen/Infrastructure.Web.Client.Generator/Infrastructure.Web.Client.Generator.csproj" />
+		<!-- The server generator, referenced as a plain library for one fact only: the client output is
+		     pinned against the server's for the same inputs. -->
+		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
 	</ItemGroup>
 </Project>
