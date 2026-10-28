@@ -335,10 +335,10 @@ sealed class AuthenticationHarness
 	}
 
 	/// <summary>
-	///     A minimal <see cref="IAuthenticationService" /> that dispatches <c>AuthenticateAsync</c>/<c>ChallengeAsync</c>
-	///     to whichever real handler <paramref name="handlerFactories" /> names for the requested scheme — enough
-	///     for <see cref="NorseBrowserHandler" />'s internal <c>Context.AuthenticateAsync</c>/<c>Context.ChallengeAsync</c>
-	///     calls to reach real handler instances without a full ASP.NET Core authentication pipeline.
+	///     A minimal <see cref="IAuthenticationService" /> that dispatches <c>AuthenticateAsync</c>/<c>ChallengeAsync</c>/
+	///     <c>ForbidAsync</c> to whichever real handler <paramref name="handlerFactories" /> names for the requested scheme —
+	///     enough for <see cref="NorseBrowserHandler" />'s internal <c>Context.AuthenticateAsync</c>/<c>Context.ChallengeAsync</c>/
+	///     <c>Context.ForbidAsync</c> calls to reach real handler instances without a full ASP.NET Core authentication pipeline.
 	/// </summary>
 	sealed class SchemeDispatchAuthenticationService(IReadOnlyDictionary<string, Func<HttpContext, Task<IAuthenticationHandler>>> handlerFactories)
 		: IAuthenticationService
@@ -355,8 +355,11 @@ sealed class AuthenticationHarness
 			await handler.ChallengeAsync(properties);
 		}
 
-		public Task ForbidAsync(HttpContext context, string? scheme, AuthenticationProperties? properties) =>
-			throw new NotSupportedException("Not exercised by the browser composite's tests.");
+		public async Task ForbidAsync(HttpContext context, string? scheme, AuthenticationProperties? properties)
+		{
+			var handler = await Resolve(context, scheme);
+			await handler.ForbidAsync(properties);
+		}
 
 		public Task SignInAsync(HttpContext context, string? scheme, ClaimsPrincipal principal, AuthenticationProperties? properties) =>
 			throw new NotSupportedException("Not exercised by the browser composite's tests.");
