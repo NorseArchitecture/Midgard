@@ -21,7 +21,8 @@ public static class DeferredSignInEndpointRouteBuilderExtensions
 		///     Maps the completion endpoint for a deferred sign-in/out — a plain minimal-API endpoint (a real,
 		///     distinct HTTP request, not a Blazor component), safe to write cookies from. Responds with a
 		///     meta-refresh page rather than a redirect: mobile Chrome has a long-standing bug where it silently
-		///     drops Set-Cookie on a 302, which would otherwise loop forever.
+		///     drops Set-Cookie on a 302, which would otherwise loop forever. The refresh lands on the return URL only
+		///     when it is a single-slash-rooted local path; anything else lands on the PathBase root.
 		/// </summary>
 		[SuppressMessage("Trimming", "IL2026",
 			Justification =
@@ -43,11 +44,23 @@ public static class DeferredSignInEndpointRouteBuilderExtensions
 						await context.SignInAsync(action.Scheme, action.Principal!, action.Properties)
 							.ConfigureAwait(false);
 
+					var landing = IsLocal(returnUrl) ?
+						returnUrl :
+						$"{context.Request.PathBase}/";
 					return Results.Content(
-						$"""<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; URL={WebUtility.HtmlEncode(returnUrl)}" /></head><body></body></html>""",
+						$"""<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; URL={WebUtility.HtmlEncode(landing)}" /></head><body></body></html>""",
 						MediaTypeNames.Text.Html);
 				}).ExcludeFromDescription();
 			return endpoints;
 		}
 	}
+
+	// A meta refresh is not a redirect the framework validates: the landing must be a single-slash-rooted local path,
+	// or the endpoint is an open redirect. A browser strips tab and newline from the refresh URL, so a control
+	// character is refused outright, and the test runs again after one percent-decode (/\t/evil collapses to //evil).
+	static bool IsLocal(string url) =>
+		IsSingleSlashRooted(url) && IsSingleSlashRooted(Uri.UnescapeDataString(url));
+
+	static bool IsSingleSlashRooted(string url) =>
+		url is ['/', ..] and not ['/', '/' or '\\', ..] && !url.Any(char.IsControl);
 }

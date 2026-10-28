@@ -62,17 +62,20 @@ sealed class NorseBrowserHandler(
 	protected override Task HandleChallengeAsync(AuthenticationProperties properties) =>
 		Context.ChallengeAsync(IdentityConstants.ApplicationScheme, properties);
 
-	// A bare 403 by default, a login door for exactly one case (Ruling 44, amending design §2.4 on 2026-10-27).
-	// A forbidden caller is already identified -- anonymous principals included -- so the 403 stands for every
-	// identity principal failing a policy and for every gRPC, API, XHR, or non-GET/HEAD forbid: a machine asking
-	// "can I?" gets "no", never an HTML page. The exception is a human: an anonymous principal making a page
-	// navigation carries a GUID but no identity, and a blank 403 page is a dead end for someone whose only way
-	// forward is to log in. That one case gets the same identity-cookie challenge as HandleChallengeAsync, so
-	// the visitor lands on the login path with a returnUrl back to where they were going.
+	// A bare 403 by default, a door for a human on a page navigation (Ruling 44, amending design §2.4 on 2026-10-27).
+	// A forbidden caller is already identified -- anonymous principals included -- so the 403 stands for every gRPC,
+	// API, XHR, or non-GET/HEAD forbid: a machine asking "can I?" gets "no", never an HTML page. A human on a page
+	// navigation gets a page instead of a blank 403. An anonymous principal carries a GUID but no identity, and its
+	// only way forward is to log in, so it gets the same identity-cookie challenge as HandleChallengeAsync and lands
+	// on the login path with a returnUrl back to where it was going. An identity principal is forbidden through the
+	// identity cookie, which redirects to its access-denied path with the same returnUrl (2026-10-28, Ruling T3-3;
+	// AccessDenied is the accepted terminus until the flow is revisited).
 	protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
 	{
-		if (Context.User.IsInRole(NorseRoles.Anonymous) && IsPageNavigation(Context))
-			return Context.ChallengeAsync(IdentityConstants.ApplicationScheme, properties);
+		if (IsPageNavigation(Context))
+			return Context.User.IsInRole(NorseRoles.Anonymous)
+				? Context.ChallengeAsync(IdentityConstants.ApplicationScheme, properties)
+				: Context.ForbidAsync(IdentityConstants.ApplicationScheme, properties);
 
 		Response.StatusCode = StatusCodes.Status403Forbidden;
 		Response.ContentLength = 0;

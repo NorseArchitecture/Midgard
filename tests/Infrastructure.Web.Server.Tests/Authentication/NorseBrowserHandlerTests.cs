@@ -185,11 +185,38 @@ public sealed class NorseBrowserHandlerTests
 	}
 
 	[Fact]
-	async Task Forbid_of_an_identity_principal_failing_a_policy_is_a_bare_403_even_on_a_page_navigation()
+	async Task Forbid_of_an_identity_principal_on_a_page_navigation_redirects_to_access_denied()
 	{
 		var harness = AuthenticationHarness.ForBrowser()
 			.WithRequest("GET", "/Account/Manage", BrowserNavigationAccept)
 			.WithValidIdentityCookie("user@example.test");
+		harness.Request.QueryString = new("?tab=passkeys");
+
+		await harness.ForbidAfterAuthenticatingAsync();
+
+		harness.Response.StatusCode.ShouldBe(302);
+		Uri location = new(harness.Response.Headers.Location.ToString());
+		location.AbsolutePath.ShouldBe("/Account/AccessDenied");
+		QueryHelpers.ParseQuery(location.Query)["ReturnUrl"].ToString().ShouldBe("/Account/Manage?tab=passkeys");
+	}
+
+	// A guard: every identity-principal forbid was already a bare 403; this pins that the access-denied redirect stays
+	// confined to page navigations.
+	[Theory]
+	[InlineData("GET", "application/json", false, false)]
+	[InlineData("GET", BrowserNavigationAccept, true, false)]
+	[InlineData("GET", BrowserNavigationAccept, false, true)]
+	[InlineData("POST", BrowserNavigationAccept, false, false)]
+	async Task Forbid_of_an_identity_principal_off_a_page_navigation_is_a_bare_403(string method, string accept,
+		bool xhrHeader, bool xhrQuery)
+	{
+		var harness = AuthenticationHarness.ForBrowser()
+			.WithRequest(method, "/Account/Manage", accept)
+			.WithValidIdentityCookie("user@example.test");
+		if (xhrHeader)
+			harness.Request.Headers.XRequestedWith = "XMLHttpRequest";
+		if (xhrQuery)
+			harness.Request.QueryString = new("?X-Requested-With=XMLHttpRequest");
 
 		await harness.ForbidAfterAuthenticatingAsync();
 
