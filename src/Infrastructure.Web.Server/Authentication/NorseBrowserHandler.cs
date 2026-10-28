@@ -2,7 +2,10 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
+using Norse.Abstractions.Components.Authorization;
 
 namespace Norse.Infrastructure.Web.Server.Authentication;
 
@@ -59,13 +62,46 @@ sealed class NorseBrowserHandler(
 	protected override Task HandleChallengeAsync(AuthenticationProperties properties) =>
 		Context.ChallengeAsync(IdentityConstants.ApplicationScheme, properties);
 
-	// Never a redirect. A forbidden caller is already identified -- anonymous principals included, which is
-	// the whole point of design §2.4 -- so sending them to a login page would answer "who are you?" to
-	// someone who has already told us. Bare 403, no body.
+	// A bare 403 by default, a login door for exactly one case (Ruling 44, amending design §2.4 on 2026-10-27).
+	// A forbidden caller is already identified -- anonymous principals included -- so the 403 stands for every
+	// identity principal failing a policy and for every gRPC, API, XHR, or non-GET/HEAD forbid: a machine asking
+	// "can I?" gets "no", never an HTML page. The exception is a human: an anonymous principal making a page
+	// navigation carries a GUID but no identity, and a blank 403 page is a dead end for someone whose only way
+	// forward is to log in. That one case gets the same identity-cookie challenge as HandleChallengeAsync, so
+	// the visitor lands on the login path with a returnUrl back to where they were going.
 	protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
 	{
+		if (Context.User.IsInRole(NorseRoles.Anonymous) && IsPageNavigation(Context))
+			return Context.ChallengeAsync(IdentityConstants.ApplicationScheme, properties);
+
 		Response.StatusCode = StatusCodes.Status403Forbidden;
 		Response.ContentLength = 0;
 		return Task.CompletedTask;
+	}
+
+	// A top-level page load a human's browser makes. Endpoint shape is the lane selector's verdict, reused rather
+	// than re-derived: anything it routes off the browser lane (gRPC methods, REST facades, probes) is a machine
+	// endpoint whatever the request looks like. An [ApiController] endpoint is an API by declaration. Beyond
+	// shape: only GET/HEAD navigate; a browser navigation names text/html explicitly in Accept (a bare */* is a
+	// tool, and JSON/gRPC-Web clients name their own types); and X-Requested-With, as header or query string, is
+	// the same XHR marker the cookie handler's own redirect events honor (CookieAuthenticationEvents.IsAjaxRequest).
+	static bool IsPageNavigation(HttpContext context)
+	{
+		var request = context.Request;
+		var endpoint = context.GetEndpoint();
+
+		if (!string.Equals(NorseLaneSelector.Select(endpoint), NorseSchemes.Browser, StringComparison.Ordinal)
+			|| endpoint?.Metadata.GetMetadata<IApiBehaviorMetadata>() is not null)
+			return false;
+
+		if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method))
+			return false;
+
+		if (string.Equals(request.Headers.XRequestedWith, "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(request.Query[HeaderNames.XRequestedWith], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		return request.GetTypedHeaders().Accept
+			.Any(static accept => accept.MediaType.Equals("text/html", StringComparison.OrdinalIgnoreCase));
 	}
 }

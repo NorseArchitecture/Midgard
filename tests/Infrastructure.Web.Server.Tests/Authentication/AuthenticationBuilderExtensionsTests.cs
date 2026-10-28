@@ -44,4 +44,18 @@ public sealed class AuthenticationBuilderExtensionsTests
 
 		options.ForwardDefault.ShouldBe(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
 	}
+
+	[Fact]
+	async Task Registers_no_scheme_with_a_display_name_so_none_is_offered_as_an_external_login()
+	{
+		ServiceCollection services = new();
+		services.AddNorseAuthentication();
+
+		var schemes = await services.BuildServiceProvider().GetRequiredService<IAuthenticationSchemeProvider>().GetAllSchemesAsync();
+
+		// A display name is what SignInManager.GetExternalAuthenticationSchemesAsync keys on: any Norse lane
+		// carrying one would be offered on the ExternalLogins page as a linkable provider.
+		schemes.ShouldNotBeEmpty();
+		schemes.Where(s => s.DisplayName is not null).Select(s => s.Name).ShouldBeEmpty();
+	}
 }

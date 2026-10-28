@@ -198,6 +198,39 @@ sealed class AuthenticationHarness
 	}
 
 	/// <summary>
+	///     Authenticates through the wired handler and assigns the result's principal to
+	///     <see cref="HttpContext.User" /> — what the authentication middleware does before authorization runs —
+	///     then forbids. A forbid only ever reaches a handler after authorization judged that principal, so a
+	///     forbid fact that cares <i>who</i> was forbidden drives it through here.
+	/// </summary>
+	public async Task ForbidAfterAuthenticatingAsync()
+	{
+		var result = await AuthenticateAsync();
+		_context.User = result.Principal!;
+		await ForbidAsync();
+	}
+
+	/// <summary>
+	///     Shapes the current request: its method, path, and <c>Accept</c> header, on host <c>localhost</c> so a
+	///     redirect the cookie handler builds as an absolute URL parses.
+	/// </summary>
+	public AuthenticationHarness WithRequest(string method, string path, string accept)
+	{
+		_context.Request.Host = new HostString("localhost");
+		_context.Request.Method = method;
+		_context.Request.Path = path;
+		_context.Request.Headers.Accept = accept;
+		return this;
+	}
+
+	/// <summary>Sets the endpoint routing selected for the current request.</summary>
+	public AuthenticationHarness WithEndpoint(Endpoint endpoint)
+	{
+		_context.SetEndpoint(endpoint);
+		return this;
+	}
+
+	/// <summary>
 	///     Simulates the browser's round trip: copies every cookie the response just set onto a fresh
 	///     request/response pair, so the next <see cref="AuthenticateAsync" /> call sees them as incoming
 	///     cookies rather than as cookies this same response already wrote.

@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Norse.Infrastructure.Web.Server.Authentication;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
@@ -100,16 +102,98 @@ public sealed class NorseBrowserHandlerTests
 		harness.Response.Headers.Location.ToString().ShouldContain("/Account/Login");
 	}
 
-	[Fact]
-	async Task Forbid_is_a_bare_403_with_no_redirect_and_no_body()
+	[Theory]
+	[InlineData("GET", true, BrowserNavigationAccept, null)]
+	[InlineData("GET", false, BrowserNavigationAccept, null)]
+	[InlineData("HEAD", true, BrowserNavigationAccept, null)]
+	[InlineData("GET", true, "text/html; blazor-enhanced-nav=on", "no-cors")]
+	async Task An_anonymous_page_navigation_is_challenged_to_login_with_a_return_url(string method, bool hasAnonymousCookie,
+		string accept, string? secFetchMode)
 	{
-		var harness = AuthenticationHarness.ForBrowser().WithAnonymousCookie(Guid.NewGuid());
+		var harness = AuthenticationHarness.ForBrowser().WithRequest(method, "/Account/Manage", accept);
+		if (hasAnonymousCookie)
+			harness.WithAnonymousCookie(Guid.NewGuid());
+		if (secFetchMode is not null)
+			harness.Request.Headers["Sec-Fetch-Mode"] = secFetchMode;
 
-		await harness.ForbidAsync();
+		await harness.ForbidAfterAuthenticatingAsync();
 
-		harness.Response.StatusCode.ShouldBe(403);
-		harness.Response.Headers.Location.ToString().ShouldBeEmpty();
-		harness.Response.ContentLength.ShouldBe(0);
+		harness.Response.StatusCode.ShouldBe(302);
+		Uri location = new(harness.Response.Headers.Location.ToString());
+		location.AbsolutePath.ShouldBe("/Account/Login");
+		QueryHelpers.ParseQuery(location.Query)["ReturnUrl"].ToString().ShouldBe("/Account/Manage");
+	}
+
+	[Theory]
+	[InlineData("POST", BrowserNavigationAccept)]
+	[InlineData("PUT", BrowserNavigationAccept)]
+	[InlineData("DELETE", BrowserNavigationAccept)]
+	[InlineData("GET", "application/json")]
+	[InlineData("GET", "*/*")]
+	[InlineData("GET", "application/grpc-web-text")]
+	async Task Forbid_of_an_anonymous_non_navigation_is_a_bare_403_with_no_redirect_and_no_body(string method, string accept)
+	{
+		var harness = AuthenticationHarness.ForBrowser()
+			.WithRequest(method, "/Account/Manage", accept)
+			.WithAnonymousCookie(Guid.NewGuid());
+
+		await harness.ForbidAfterAuthenticatingAsync();
+
+		ShouldBeABare403(harness);
+	}
+
+	[Theory]
+	[InlineData("grpc")]
+	[InlineData("facade")]
+	[InlineData("probe")]
+	[InlineData("api")]
+	async Task Forbid_of_an_anonymous_principal_on_a_machine_shaped_endpoint_is_a_bare_403_even_for_an_html_get(string shape)
+	{
+		var endpoint = shape switch
+		{
+			"grpc" => EndpointFactory.Grpc(),
+			"facade" => EndpointFactory.Facade(),
+			"probe" => EndpointFactory.Probe(),
+			_ => new Endpoint(null, new EndpointMetadataCollection(new ApiControllerAttribute()), displayName: "api")
+		};
+		var harness = AuthenticationHarness.ForBrowser()
+			.WithRequest("GET", "/Account/Manage", BrowserNavigationAccept)
+			.WithEndpoint(endpoint)
+			.WithAnonymousCookie(Guid.NewGuid());
+
+		await harness.ForbidAfterAuthenticatingAsync();
+
+		ShouldBeABare403(harness);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	async Task Forbid_of_an_anonymous_xhr_is_a_bare_403_even_when_it_accepts_html(bool asHeader)
+	{
+		var harness = AuthenticationHarness.ForBrowser()
+			.WithRequest("GET", "/Account/Manage", BrowserNavigationAccept)
+			.WithAnonymousCookie(Guid.NewGuid());
+		if (asHeader)
+			harness.Request.Headers.XRequestedWith = "XMLHttpRequest";
+		else
+			harness.Request.QueryString = new("?X-Requested-With=XMLHttpRequest");
+
+		await harness.ForbidAfterAuthenticatingAsync();
+
+		ShouldBeABare403(harness);
+	}
+
+	[Fact]
+	async Task Forbid_of_an_identity_principal_failing_a_policy_is_a_bare_403_even_on_a_page_navigation()
+	{
+		var harness = AuthenticationHarness.ForBrowser()
+			.WithRequest("GET", "/Account/Manage", BrowserNavigationAccept)
+			.WithValidIdentityCookie("user@example.test");
+
+		await harness.ForbidAfterAuthenticatingAsync();
+
+		ShouldBeABare403(harness);
 	}
 
 	[Fact]
@@ -122,5 +206,15 @@ public sealed class NorseBrowserHandlerTests
 
 		var delete = harness.SetCookies.Single(h => h.StartsWith(harness.IdentityCookieName, StringComparison.Ordinal));
 		delete.ShouldNotContain("secure", Case.Insensitive);
+	}
+
+	/// <summary>What a browser's top-level navigation sends: an explicit <c>text/html</c> among the rest.</summary>
+	const string BrowserNavigationAccept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
+	static void ShouldBeABare403(AuthenticationHarness harness)
+	{
+		harness.Response.StatusCode.ShouldBe(403);
+		harness.Response.Headers.Location.ToString().ShouldBeEmpty();
+		harness.Response.ContentLength.ShouldBe(0);
 	}
 }

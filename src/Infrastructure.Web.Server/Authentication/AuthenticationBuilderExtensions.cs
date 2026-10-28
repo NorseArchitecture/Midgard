@@ -28,13 +28,13 @@ public static class AuthenticationBuilderExtensions
 					options.DefaultChallengeScheme = NorseSchemes.Default;
 					options.DefaultForbidScheme = NorseSchemes.Default;
 				})
-				.AddPolicyScheme(NorseSchemes.Default, NorseSchemes.Default,
+				.AddPolicyScheme(NorseSchemes.Default, null,
 					options => options.ForwardDefaultSelector =
 						context => NorseLaneSelector.Select(context.GetEndpoint()))
 				.AddScheme<AuthenticationSchemeOptions, NorseBrowserHandler>(NorseSchemes.Browser, null)
 				.AddScheme<NorseAnonymousOptions, NorseAnonymousHandler>(NorseSchemes.Anonymous, null)
 				.AddScheme<AuthenticationSchemeOptions, NorseGrpcHandler>(NorseSchemes.IdentityCookieOnly, null)
-				.AddPolicyScheme(NorseSchemes.Machine, NorseSchemes.Machine,
+				.AddPolicyScheme(NorseSchemes.Machine, null,
 					options => options.ForwardDefault = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
 				.AddScheme<AuthenticationSchemeOptions, NorseProbeHandler>(NorseSchemes.Probe, null);
 	}
