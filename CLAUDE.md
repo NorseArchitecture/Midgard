@@ -23,7 +23,7 @@ Midgard is **embodied law** — `Norse.Infrastructure`: the concrete implementat
 | `Infrastructure.Persistence.EntityFramework` | The well-and-wire read law: generic `Repository` closing `IReadRepository<TView>`, promoted-member `PredicateRewriter`, `AddWell<TContext>` with total-mirror validation | Vendor-family named — a document store lands as a sibling project, never here |
 | `Infrastructure.Migrations` | `MigrationRunnerService` + `AddNorseMigrationsRunner()` — resolve every `IMigrationContributor`, run, stop the host on success, throw hard on failure | No swallowed exceptions, no partial migration, no silent fallback |
 | `Infrastructure.Components.Theme` / `.Theme.FluentUI` | App-wide theme bootstrapping seeded from Naglfar's `Norse.DesignSystem.Tokens` | Theme lives in Midgard; Yggdrasil's hosts consume it (`Hosting.Web.Client`, eventually MAUI) — never the other way |
-| `Infrastructure.ServiceDefaults` / `.AspNet` | Aspire's ServiceDefaults convention: OpenTelemetry, health checks, console logging | Ruled into Midgard 2026-06-28 — never Yggdrasil, never Bifröst. Deliberately Norse-free |
+| `Infrastructure.ServiceDefaults` / `.AspNet` | Aspire's ServiceDefaults convention: OpenTelemetry, health checks, console logging, and the `/livez`/`/readyz` probes under `NorsePolicies.Probe`. `AddAssetHostServiceDefaults()` registers that policy itself (from Asgard's `NorsePlatformPolicies.Probe`), because an asset host such as Stories has no identity stack to register it | Ruled into Midgard 2026-06-28 — never Yggdrasil, never Bifröst. Norse-free apart from the probe policy's Asgard names |
 
 ## Build & Test
 

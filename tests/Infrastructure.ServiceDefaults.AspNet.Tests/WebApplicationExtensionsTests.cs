@@ -98,6 +98,27 @@ public sealed class WebApplicationExtensionsTests
 		probes.ShouldAllBe(e => e.Metadata.GetMetadata<IDisableHttpMetricsMetadata>() != null);
 	}
 
+	// An asset host has no identity stack, so nothing else registers the Probe policy for it: the asset root
+	// must, or both probes answer 500 and the orchestrator never passes the container's gates. No explicit
+	// UseAuthorization(): the WebApplication adds it once the asset root registers authorization, which is
+	// exactly what the Stories host relies on.
+	[Theory]
+	[InlineData(HealthEndpoints.Liveness)]
+	[InlineData(HealthEndpoints.Readiness)]
+	async Task An_asset_host_answers_its_probes_with_no_authentication_registered(string path)
+	{
+		var builder = WebApplication.CreateSlimBuilder();
+		builder.WebHost.UseTestServer();
+		builder.AddAssetHostServiceDefaults();
+		await using var app = builder.Build();
+		app.MapDefaultEndpoints();
+		await app.StartAsync(TestContext.Current.CancellationToken);
+		using var client = app.GetTestClient();
+		using var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+		response.StatusCode.ShouldBe(HttpStatusCode.OK);
+		(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldBe("Healthy");
+	}
+
 	[Theory]
 	[InlineData(HealthEndpoints.Liveness)]
 	[InlineData(HealthEndpoints.Readiness)]
