@@ -9,7 +9,24 @@
 	<ItemGroup>
 		<PackageReference Include="Grpc.Core.Testing" Version="*" />
 		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="*" />
+		<!-- The policy registration generator, referenced as a plain library: GeneratedPolicyLaneTests drives it
+		     in memory and evaluates the AddNorsePolicies() it emits. -->
+		<ProjectReference Include="../../gen/Infrastructure.Web.Server.Generator/Infrastructure.Web.Server.Generator.csproj" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
+	</ItemGroup>
+	<!-- Build order only: OpenIddictReferenceScanTests scans every src/ project's built assembly and restored
+	     closure, so each must be built before this project runs. Nothing is referenced and no asset flows in. -->
+	<ItemGroup>
+		<ProjectReference Include="../../src/Infrastructure.Backend/Infrastructure.Backend.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.Components.Theme/Infrastructure.Components.Theme.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.Components.Theme.FluentUI/Infrastructure.Components.Theme.FluentUI.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.Persistence.EntityFramework/Infrastructure.Persistence.EntityFramework.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.ServiceDefaults/Infrastructure.ServiceDefaults.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.ServiceDefaults.AspNet/Infrastructure.ServiceDefaults.AspNet.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+		<ProjectReference Include="../../src/Infrastructure.Web.Grpc/Infrastructure.Web.Grpc.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
 	</ItemGroup>
 </Project>

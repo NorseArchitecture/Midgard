@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Norse.Abstractions.Components.Authorization;
 using Norse.Infrastructure.Web.Server.Authentication;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
@@ -17,6 +19,53 @@ public sealed class NorseBrowserHandlerTests
 
 		result.Principal!.FindFirstValue(ClaimTypes.Name).ShouldBe("user@example.test");
 		harness.SetCookies.ShouldNotContain(h => h.StartsWith("Norse.Anonymous=", StringComparison.Ordinal));
+	}
+
+	// Spec §7.3: the identity cookie's identity reaches policy evaluation stamped Identity, its claims and its name and
+	// role claim types unchanged.
+	[Fact]
+	async Task Identity_cookie_is_stamped_identity()
+	{
+		var harness = AuthenticationHarness.ForBrowser().WithValidIdentityCookie("user@example.test");
+
+		var result = await harness.AuthenticateAsync();
+
+		var identity = result.Principal!.Identities.ShouldHaveSingleItem();
+		identity.AuthenticationType.ShouldBe(NorseLanes.Identity);
+		identity.NameClaimType.ShouldBe(ClaimTypes.Name);
+		identity.RoleClaimType.ShouldBe(ClaimTypes.Role);
+		identity.Name.ShouldBe("user@example.test");
+		result.Ticket!.AuthenticationScheme.ShouldBe(IdentityConstants.ApplicationScheme);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	async Task Anonymous_cookie_is_stamped_identity_and_keeps_its_role(bool hasAnonymousCookie)
+	{
+		var harness = AuthenticationHarness.ForBrowser();
+		if (hasAnonymousCookie)
+			harness.WithAnonymousCookie(Guid.NewGuid());
+
+		var result = await harness.AuthenticateAsync();
+
+		result.Principal!.Identities.ShouldHaveSingleItem().AuthenticationType.ShouldBe(NorseLanes.Identity);
+		result.Principal!.IsInRole(NorseAnonymousOptions.AnonymousRole).ShouldBeTrue();
+	}
+
+	// The rebuilt principal holds the ticket's primary identity alone, stamped: an identity the ticket itself typed as
+	// a lane never survives into it, so it admits the Identity lane and nothing beyond.
+	[Fact]
+	async Task A_ticket_identity_typed_as_a_lane_admits_nothing_beyond_identity()
+	{
+		var harness = AuthenticationHarness.ForBrowser().WithIdentityCookie(AuthenticationHarness.TicketWithALaneTypedIdentity());
+
+		var principal = (await harness.AuthenticateAsync()).Principal!;
+
+		(await AuthenticationHarness.AdmitsAsync(principal, NorseLanes.Machine)).ShouldBeFalse();
+		(await AuthenticationHarness.AdmitsAsync(principal, NorseLanes.User)).ShouldBeFalse();
+		(await AuthenticationHarness.AdmitsAsync(principal, NorseLanes.Identity)).ShouldBeTrue();
+		principal.Identities.ShouldHaveSingleItem().Name.ShouldBe("user@example.test");
 	}
 
 	[Fact]

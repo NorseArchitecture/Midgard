@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Authentication;
-using OpenIddict.Validation.AspNetCore;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using Norse.Abstractions.Components.Authorization;
+using Norse.Infrastructure.Web.Server.Authorization;
 
 namespace Norse.Infrastructure.Web.Server.Authentication;
 
@@ -16,11 +20,32 @@ public static class AuthenticationBuilderExtensions
 		///     <see cref="AuthenticationOptions.DefaultChallengeScheme" /> explicitly, which outrank a bare
 		///     <c>DefaultScheme</c> — Options composition is last-registration-wins per property, so this
 		///     call sets all three (plus <c>DefaultForbidScheme</c>) itself to win regardless. Leaves
-		///     <c>DefaultSignInScheme</c> alone — Norse never signs anyone in, that stays Identity's job.
+		///     <c>DefaultSignInScheme</c> alone — Norse never signs anyone in, that stays Identity's job. Also
+		///     registers the lane and audience requirement handlers, so every lane policy evaluates against the
+		///     lane this call's handlers stamp, and the freshness handler with its window
+		///     (<c>Norse:Authentication:RecentWindow</c>, default 10 minutes, validated on start, bound from the host's
+		///     <see cref="Microsoft.Extensions.Configuration.IConfiguration" />). The two bearer lanes, <see cref="NorseSchemes.Machine" /> and
+		///     <see cref="NorseSchemes.User" />, authenticate <see cref="NorseSchemes.Bearer" />, which this call never
+		///     registers: the bearer-validating realm must, and a host without it fails at startup.
 		/// </summary>
 		/// <returns>The <see cref="AuthenticationBuilder" /> for further chaining.</returns>
-		public AuthenticationBuilder AddNorseAuthentication() =>
-			services
+		public AuthenticationBuilder AddNorseAuthentication()
+		{
+			services.TryAddEnumerable([
+				ServiceDescriptor.Singleton<IAuthorizationHandler, LaneRequirementHandler>(),
+				ServiceDescriptor.Singleton<IAuthorizationHandler, AnyLaneRequirementHandler>(),
+				ServiceDescriptor.Singleton<IAuthorizationHandler, AudienceRequirementHandler>(),
+				ServiceDescriptor.Singleton<IAuthorizationHandler, RecentAuthenticationHandler>()
+			]);
+			services.TryAddSingleton(TimeProvider.System);
+			services.AddOptions<RecentAuthenticationOptions>()
+				.BindConfiguration(RecentAuthenticationOptions.SectionName)
+				.Validate(options => options.IsValid,
+					$"{RecentAuthenticationOptions.SectionName}:{nameof(RecentAuthenticationOptions.RecentWindow)} must be positive and no longer than one day.")
+				.ValidateOnStart();
+			services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<AuthenticationOptions>, BearerSchemeValidation>());
+			services.AddOptions<AuthenticationOptions>().ValidateOnStart();
+			return services
 				.AddAuthentication(options =>
 				{
 					options.DefaultScheme = NorseSchemes.Default;
@@ -34,8 +59,19 @@ public static class AuthenticationBuilderExtensions
 				.AddScheme<AuthenticationSchemeOptions, NorseBrowserHandler>(NorseSchemes.Browser, null)
 				.AddScheme<NorseAnonymousOptions, NorseAnonymousHandler>(NorseSchemes.Anonymous, null)
 				.AddScheme<AuthenticationSchemeOptions, NorseGrpcHandler>(NorseSchemes.IdentityCookieOnly, null)
-				.AddPolicyScheme(NorseSchemes.Machine, null,
-					options => options.ForwardDefault = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+				.AddScheme<NorseBearerLaneOptions, NorseBearerLaneHandler>(NorseSchemes.Machine, null,
+					options =>
+					{
+						options.Lane = NorseLanes.Machine;
+						options.Audience = NorseAudiences.Facade;
+					})
+				.AddScheme<NorseBearerLaneOptions, NorseBearerLaneHandler>(NorseSchemes.User, null,
+					options =>
+					{
+						options.Lane = NorseLanes.User;
+						options.Audience = NorseAudiences.User;
+					})
 				.AddScheme<AuthenticationSchemeOptions, NorseProbeHandler>(NorseSchemes.Probe, null);
+		}
 	}
 }

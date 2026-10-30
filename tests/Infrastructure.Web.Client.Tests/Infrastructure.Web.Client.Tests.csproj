@@ -4,6 +4,10 @@
 			<Repo>Asgard</Repo>
 		</NorseRef>
 		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*" PrivateAssets="all" />
+		<!-- The policy registration generator, referenced as a plain library: GeneratedPolicyLaneTests drives it
+		     in memory and evaluates the AddNorsePolicies() it emits. -->
+		<ProjectReference Include="../../gen/Infrastructure.Web.Client.Generator/Infrastructure.Web.Client.Generator.csproj" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
 		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>

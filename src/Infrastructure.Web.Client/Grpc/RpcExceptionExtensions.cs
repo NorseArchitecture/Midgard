@@ -21,6 +21,9 @@ namespace Norse.Infrastructure.Web.Client.Grpc;
 ///     platform never explains a failed authentication attempt. When <c>ErrorInfo.Metadata</c> carries both
 ///     <c>receipt</c> and <c>severedAt</c> entries, they are rehydrated into <see cref="Problem.Receipt" />;
 ///     either entry absent leaves <see cref="Problem.Receipt" /> <see langword="null" /> (tombstone producer).
+///     The <c>code</c> and <c>nextUrl</c> entries rehydrate <see cref="Problem.Code" /> and
+///     <see cref="Problem.NextUrl" /> as sent; the server validated nothing on the client's behalf, so a client
+///     navigates to <see cref="Problem.NextUrl" /> only through its own local-navigation check.
 /// </summary>
 public static class RpcExceptionExtensions
 {
@@ -47,6 +50,8 @@ public static class RpcExceptionExtensions
 			Dictionary<string, string[]> errors = [];
 			Guid? correlationId = null;
 			ErasureReceipt? receipt = null;
+			string? code = null;
+			string? nextUrl = null;
 
 			foreach (var detail in richStatus.Details)
 			{
@@ -54,6 +59,8 @@ public static class RpcExceptionExtensions
 					Enum.TryParse<ErrorCategory>(errorInfo.Reason, out var parsed))
 				{
 					category = parsed;
+					code = errorInfo.Metadata.TryGetValue("code", out var parsedCode) ? parsedCode : null;
+					nextUrl = errorInfo.Metadata.TryGetValue("nextUrl", out var parsedNextUrl) ? parsedNextUrl : null;
 					if (errorInfo.Metadata.TryGetValue("receipt", out var receiptId) &&
 						errorInfo.Metadata.TryGetValue("severedAt", out var severedAt) &&
 						Guid.TryParse(receiptId, out var parsedReceiptId) &&
@@ -82,7 +89,9 @@ public static class RpcExceptionExtensions
 				Category = category,
 				Errors = errors,
 				CorrelationId = correlationId,
-				Receipt = receipt
+				Receipt = receipt,
+				Code = code,
+				NextUrl = nextUrl
 			};
 		}
 	}

@@ -18,7 +18,6 @@ using Microsoft.Extensions.Options;
 using Norse.Abstractions.Components.Authorization;
 using Norse.Abstractions.Web.Server.Facade;
 using Norse.Infrastructure.Web.Server.Authentication;
-using OpenIddict.Validation.AspNetCore;
 using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Server;
@@ -33,13 +32,11 @@ namespace Norse.Infrastructure.Web.Server.Tests.Authentication;
 ///     (<c>"/alive"</c>/<c>"/health"</c>) that pin blocker 2's regression. The <see cref="IdentityConstants.ApplicationScheme" />
 ///     cookie handler is registered with its defaults (never exercised by any credentialless request below)
 ///     purely so <see cref="NorseSchemes.IdentityCookieOnly" />'s unconditional <c>ForwardAuthenticate</c>
-///     resolves to a real handler instead of throwing a handler-lookup exception. <see cref="NorseSchemes.Machine" />'s
-///     forward target, <see cref="OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme" />, gets the same
-///     treatment via <see cref="MachineStandInHandler" /> — a real OpenIddict validation registration is out of
-///     scope for this fixture, so this test-only stand-in reproduces the pre-Himinbjorg#49 rejection behavior
-///     for authenticate/forbid, purely so the forward resolves instead of throwing; challenge branches on
-///     whether authenticate already ran, modeling the real Authenticate-before-Challenge asymmetry this
-///     fixture pins (see <see cref="MachineStandInHandler" />'s own doc comment). <see cref="NorsePolicies.Machine" /> is
+///     resolves to a real handler instead of throwing a handler-lookup exception. <see cref="NorseSchemes.Bearer" />,
+///     which both bearer lanes authenticate and which Midgard never implements, gets the same treatment via
+///     <see cref="BearerStandInHandler" /> — a test-registered stub for the bearer-validating realm, which yields
+///     nothing on authenticate and answers challenge and forbid with a bare 401 and 403 (see
+///     <see cref="BearerStandInHandler" />'s own doc comment). <see cref="NorsePolicies.Machine" /> is
 ///     registered alongside <see cref="NorsePolicies.Probe" /> for the same class of reason on the
 ///     authorization side: <see cref="GrpcControllerBase" />'s class-level <c>[Authorize(Policy = ...)]</c>
 ///     names it, and an unregistered named policy throws at request time rather than the clean 401 below —
@@ -78,8 +75,7 @@ sealed class LaneHost : IDisposable
 
 		builder.Services.AddNorseAuthentication()
 			.AddCookie(IdentityConstants.ApplicationScheme)
-			.AddScheme<AuthenticationSchemeOptions, MachineStandInHandler>(
-				OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, null);
+			.AddScheme<AuthenticationSchemeOptions, BearerStandInHandler>(NorseSchemes.Bearer, null);
 		builder.Services.AddAuthorizationBuilder()
 			.AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe)
 			.AddPolicy(NorsePolicies.Machine, NorsePlatformPolicies.Machine);
@@ -143,47 +139,34 @@ sealed class LaneHost : IDisposable
 }
 
 /// <summary>
-///     A test-only stand-in for <see cref="OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme" /> --
-///     <see cref="LaneHost" /> composes <see cref="AuthenticationBuilderExtensions.AddNorseAuthentication" /> for
-///     real but never registers a real OpenIddict validation handler (out of scope for this fixture), so
-///     <see cref="NorseSchemes.Machine" />'s forward needs *something* registered under that exact scheme name
-///     or it throws a handler-lookup exception rather than the clean 401 a credentialless facade caller must
-///     get. Reproduces the deleted <c>NorseMachineRejectionHandler</c>'s behavior for authenticate (nothing,
-///     ever) and forbid (always 403, silently, never a cookie) exactly. Challenge is the one place this stand-in
-///     deliberately diverges from that deleted handler and instead models real OpenIddict's own asymmetry
-///     (decompiled <c>OpenIddict.Validation.AspNetCore</c> 7.6.0, Himinbjorg#49): Challenge only resolves to
-///     the specific "missing_token" -&gt; 401 outcome when <em>this scheme's own</em>
-///     <see cref="HandleAuthenticateAsync" /> already ran earlier in the same request and stashed that
-///     transaction; called cold, with no prior Authenticate pass on this scheme, it falls back to the generic
-///     "insufficient_access" default, which maps to 403. The <c>_authenticateRan</c> field is safe as
-///     per-request state -- ASP.NET Core's <c>AuthenticationHandlerProvider</c> is a scoped service that
-///     caches one handler instance per scheme for the lifetime of a single request, never reused across
-///     requests.
+///     A test-only stand-in for <see cref="NorseSchemes.Bearer" /> -- <see cref="LaneHost" /> composes
+///     <see cref="AuthenticationBuilderExtensions.AddNorseAuthentication" /> for real, but the bearer source is the
+///     bearer-validating realm's to register, never Midgard's, so the lanes that authenticate it need *something*
+///     registered under that name (the host fails at startup otherwise). Authenticate yields nothing, ever; forbid
+///     is always 403 and challenge always 401, silently, never a cookie. The challenge is a bare 401 whether or not
+///     this scheme authenticated first in the same request: that is the contract Midgard relies on now that
+///     <see cref="NorseGrpcHandler" /> no longer authenticates the bearer source before challenging it (spec §7.1). The
+///     authenticate-before-challenge behavior OpenIddict's validation handler needed (Himinbjorg#49) belongs to the
+///     realm that registers <see cref="NorseSchemes.Bearer" />, pinned there by its own bare-401 facts.
 /// </summary>
-sealed class MachineStandInHandler(
+sealed class BearerStandInHandler(
 	IOptionsMonitor<AuthenticationSchemeOptions> options,
 	ILoggerFactory logger,
 	UrlEncoder encoder)
 	: AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-	bool _authenticateRan;
+	protected override Task<AuthenticateResult> HandleAuthenticateAsync() =>
+		Task.FromResult(AuthenticateResult.NoResult());
 
-	protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-	{
-		_authenticateRan = true;
-		return Task.FromResult(AuthenticateResult.NoResult());
-	}
+	protected override Task HandleChallengeAsync(AuthenticationProperties properties) =>
+		Bare(StatusCodes.Status401Unauthorized);
 
-	protected override Task HandleChallengeAsync(AuthenticationProperties properties)
-	{
-		Response.StatusCode = _authenticateRan ? StatusCodes.Status401Unauthorized : StatusCodes.Status403Forbidden;
-		Response.ContentLength = 0;
-		return Task.CompletedTask;
-	}
+	protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
+		Bare(StatusCodes.Status403Forbidden);
 
-	protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
+	Task Bare(int statusCode)
 	{
-		Response.StatusCode = StatusCodes.Status403Forbidden;
+		Response.StatusCode = statusCode;
 		Response.ContentLength = 0;
 		return Task.CompletedTask;
 	}

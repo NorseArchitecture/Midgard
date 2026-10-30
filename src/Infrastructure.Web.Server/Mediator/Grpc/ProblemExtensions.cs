@@ -19,7 +19,9 @@ namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
 ///     name — the only field the client-side <c>RpcExceptionExtensions.DecodeProblem</c> method trusts (spec §2.1).
 ///     When <see cref="Problem.Receipt" /> is populated (the <see cref="ErrorCategory.Erased" /> crypto-shred
 ///     producer), the <c>ErrorInfo.Metadata</c> also carries <c>receipt</c> (Guid <c>"D"</c> format) and
-///     <c>severedAt</c> (<c>"O"</c> format, invariant culture).
+///     <c>severedAt</c> (<c>"O"</c> format, invariant culture). <see cref="Problem.Code" /> and
+///     <see cref="Problem.NextUrl" /> ride the same metadata as <c>code</c> and <c>nextUrl</c>, each written only
+///     when populated.
 /// </summary>
 public static class ProblemExtensions
 {
@@ -53,6 +55,11 @@ public static class ProblemExtensions
 				errorInfo.Metadata.Add("receipt", receipt.ReceiptId.ToString("D"));
 				errorInfo.Metadata.Add("severedAt", receipt.SeveredAt.ToString("O", CultureInfo.InvariantCulture));
 			}
+
+			if (problem.Code is { } code)
+				errorInfo.Metadata.Add("code", code);
+			if (problem.NextUrl is { } nextUrl)
+				errorInfo.Metadata.Add("nextUrl", nextUrl);
 
 			richStatus.Details.Add(Any.Pack(errorInfo));
 			if (problem.Errors.Count > 0)

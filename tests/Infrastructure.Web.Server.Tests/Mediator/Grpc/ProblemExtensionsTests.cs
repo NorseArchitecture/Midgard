@@ -110,4 +110,25 @@ public sealed class ProblemExtensionsTests
 		errorInfo.Reason.ShouldBe("Erased");
 		errorInfo.Metadata.ShouldNotContainKey("receipt");
 	}
+
+	[Fact]
+	void Code_and_next_url_ride_the_error_info_metadata()
+	{
+		var errorInfo = DecodeErrorInfo(new Problem
+		{
+			Category = ErrorCategory.Forbidden,
+			Code = NorseErrorCodes.ReauthenticationRequired,
+			NextUrl = "/Account/Login?returnUrl=%2FAccount%2FManage%2FPasskeys"
+		}.ToRpcException());
+
+		errorInfo.Reason.ShouldBe(nameof(ErrorCategory.Forbidden));
+		errorInfo.Metadata["code"].ShouldBe(NorseErrorCodes.ReauthenticationRequired);
+		errorInfo.Metadata["nextUrl"].ShouldBe("/Account/Login?returnUrl=%2FAccount%2FManage%2FPasskeys");
+	}
+
+	[Fact]
+	void A_problem_without_them_writes_no_metadata()
+	{
+		DecodeErrorInfo(new Problem { Category = ErrorCategory.Forbidden }.ToRpcException()).Metadata.ShouldBeEmpty();
+	}
 }

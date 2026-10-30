@@ -8,15 +8,20 @@ using Microsoft.Extensions.Options;
 namespace Norse.Infrastructure.Web.Server.Authentication;
 
 /// <summary>
-///     The gRPC lane's composite (authn-uniformity amendment, ../Glitnir/docs/Platform/plans/2026-08-21-principal-at-the-door.md):
-///     identity cookie, then a previously-established anonymous cookie — the same two-step
-///     <see cref="NorseBrowserHandler" /> already runs, so a gRPC-Web caller sharing the browser's cookie
-///     jar (Mímir's <c>CountryLookup</c> is the first consumer) authenticates exactly as the page that
-///     hosts it does. The one asymmetry is deliberate: this lane never mints. A gRPC/gRPC-Web caller
-///     presenting neither cookie gets <see cref="AuthenticateResult.NoResult" /> and falls through to
-///     <see cref="NorseSchemes.Machine" />'s bare 401/403 — there is no login page to redirect a client
-///     that cannot follow one to, and a credential-less machine caller must not walk away holding a free
-///     identity (<c>LaneWireupTests.A_credentialless_grpc_call_mints_nothing_and_writes_no_cookie</c>).
+///     The gRPC lane's composite (authn-uniformity amendment, ../Glitnir/docs/Platform/plans/2026-08-21-principal-at-the-door.md;
+///     spec §7.2 of ../Glitnir/docs/Himinbjorg/specs/2026-10-29-openiddict-authorization-code-pkce-step-up-design.md).
+///     An <c>Authorization</c> header whose scheme is <c>Bearer</c> decides the request alone: it authenticates
+///     <see cref="NorseSchemes.User" />, which stamps the user lane, and the cookies are then not read at all, so a
+///     request carrying both never mixes two identities and a rejected bearer never falls back to a cookie. With no
+///     bearer header, the cookie path runs: identity cookie, then a previously-established anonymous cookie — the same
+///     two-step <see cref="NorseBrowserHandler" /> already runs, so a gRPC-Web caller sharing the browser's cookie jar
+///     (Mímir's <c>CountryLookup</c> is the first consumer) authenticates exactly as the page that hosts it does, its
+///     identity stamped <c>NorseLanes.Identity</c> the same way (<see cref="IdentityLaneStamping" />). The one
+///     asymmetry is deliberate: this lane never mints. A gRPC/gRPC-Web caller presenting no credential gets
+///     <see cref="AuthenticateResult.NoResult" /> and is challenged through <see cref="NorseSchemes.Machine" />'s bare
+///     401/403 — there is no login page to redirect a client that cannot follow one to, and a credential-less machine
+///     caller must not walk away holding a free identity
+///     (<c>LaneWireupTests.A_credentialless_grpc_call_mints_nothing_and_writes_no_cookie</c>).
 /// </summary>
 sealed class NorseGrpcHandler(
 	IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -27,8 +32,17 @@ sealed class NorseGrpcHandler(
 	IDataProtectionProvider protection)
 	: AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
+	/// <summary>The lane this request's credential belongs to, and the scheme its challenge and forbid go through.</summary>
+	string ChallengeLane =>
+		HasBearer(Request) ?
+			NorseSchemes.User :
+			NorseSchemes.Machine;
+
 	protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
 	{
+		if (HasBearer(Request))
+			return await Context.AuthenticateAsync(NorseSchemes.User).ConfigureAwait(false);
+
 		var identityScheme = IdentityConstants.ApplicationScheme;
 		var identityCookieName = cookieOptions.Get(identityScheme).Cookie.Name ?? identityScheme;
 
@@ -36,7 +50,7 @@ sealed class NorseGrpcHandler(
 		{
 			var identity = await Context.AuthenticateAsync(identityScheme).ConfigureAwait(false);
 			if (identity.Succeeded)
-				return identity;
+				return identity.StampedIdentityLane();
 
 			// Same delete-and-fall-through as NorseBrowserHandler's identical branch: present but invalid
 			// (expired, revoked, key-rotated) is not "absent", so the stale cookie is removed with the
@@ -55,30 +69,30 @@ sealed class NorseGrpcHandler(
 		if (Request.Cookies.TryGetValue(anonymousOptions.Get(NorseSchemes.Anonymous).CookieName, out var anonymousPayload) &&
 			NorseAnonymousCookieReader.TryUnprotect(
 				protection.CreateProtector(NorseAnonymousOptions.ProtectionPurpose), anonymousPayload, out _))
-			return await Context.AuthenticateAsync(NorseSchemes.Anonymous).ConfigureAwait(false);
+			return (await Context.AuthenticateAsync(NorseSchemes.Anonymous).ConfigureAwait(false)).StampedIdentityLane();
 
 		return AuthenticateResult.NoResult();
 	}
 
-	// Both operations go bare through the machine lane's own handler, same as this scheme's previous
-	// AddPolicyScheme forwarding did -- a gRPC client cannot follow the identity cookie's login redirect
-	// and must not be sent one. Challenge has one extra step Forbid does not need: OpenIddict's real
-	// validation handler only stashes the specific failure reason ("missing_token" -> bare 401) in its
-	// per-request transaction when its OWN HandleAuthenticateAsync has already run in this same request
-	// (decompiled OpenIddict.Validation.AspNetCore 7.6.0, Himinbjorg#49). This handler's own
-	// HandleAuthenticateAsync above never touches the Machine scheme, so without an explicit
-	// AuthenticateAsync(Machine) call first, OpenIddict's Challenge handler finds nothing stashed and
-	// falls back to its generic "insufficient_access" default, which maps to 403 -- the bug this call
-	// fixes. The result is discarded: this call exists solely so OpenIddict's real handler runs its own
-	// Authenticate pass and populates that transaction state before Challenge reads it. Forbid needs no
-	// equivalent -- 403 is already OpenIddict's correct, unconditional default for Forbid, prior
-	// Authenticate or not.
-	protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
-	{
-		await Context.AuthenticateAsync(NorseSchemes.Machine).ConfigureAwait(false);
-		await Context.ChallengeAsync(NorseSchemes.Machine, properties).ConfigureAwait(false);
-	}
+	// Both operations go bare through a bearer lane, which delegates them to Norse.Bearer: a gRPC client cannot
+	// follow the identity cookie's login redirect and must not be sent one. A bearer request is answered by the lane
+	// that authenticated it, Norse.User; a cookie or credential-less request keeps going through Norse.Machine, as
+	// before. Neither authenticates anything first: whatever authenticate-before-challenge behavior the bearer
+	// validator needs is the bearer source's own, owned by the realm that registers Norse.Bearer (spec §7.1).
+	protected override Task HandleChallengeAsync(AuthenticationProperties properties) =>
+		Context.ChallengeAsync(ChallengeLane, properties);
 
 	protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
-		Context.ForbidAsync(NorseSchemes.Machine, properties);
+		Context.ForbidAsync(ChallengeLane, properties);
+
+	// An Authorization header whose scheme is Bearer, compared ordinal-ignore-case (RFC 9110 §11.1: the scheme is
+	// case-insensitive). A header naming the scheme with no token still selects the bearer lane, so it is refused
+	// there rather than falling back to a cookie.
+	static bool HasBearer(HttpRequest request) =>
+		request.Headers.Authorization.Any(static value =>
+		{
+			var credentials = value.AsSpan().Trim();
+			var separator = credentials.IndexOf(' ');
+			return (separator < 0 ? credentials : credentials[..separator]).Equals("Bearer", StringComparison.OrdinalIgnoreCase);
+		});
 }

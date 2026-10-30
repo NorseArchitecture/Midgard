@@ -63,4 +63,26 @@ public sealed class RpcExceptionExtensionsTests
 			.DecodeProblem()
 			.Receipt.ShouldBeNull();
 	}
+
+	[Fact]
+	void Code_and_next_url_round_trip_through_the_trailer()
+	{
+		Problem sent = new()
+		{
+			Category = ErrorCategory.Forbidden,
+			Code = NorseErrorCodes.ReauthenticationRequired,
+			NextUrl = "/app/Account/Login?returnUrl=%2Fapp%2FAccount%2FManage%2FPasskeys"
+		};
+
+		sent.ToRpcException().DecodeProblem().ShouldBeEquivalentTo(sent);
+	}
+
+	[Fact]
+	void A_problem_without_them_decodes_with_neither()
+	{
+		var decoded = new Problem { Category = ErrorCategory.Forbidden }.ToRpcException().DecodeProblem();
+
+		decoded.Code.ShouldBeNull();
+		decoded.NextUrl.ShouldBeNull();
+	}
 }
