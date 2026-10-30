@@ -2,7 +2,7 @@ namespace Norse.Infrastructure.Web.Server.Authentication;
 
 /// <summary>
 ///     The platform's authentication scheme names. Public because Yggdrasil's composition root and
-///     Himinbjorg#49's bearer wireup both name them.
+///     Himinbjörg's bearer wireup both name them.
 /// </summary>
 public static class NorseSchemes
 {
@@ -30,11 +30,23 @@ public static class NorseSchemes
 	public const string Probe = "Norse.Probe";
 
 	/// <summary>
-	///     The machine lane. Forwards to OpenIddict's own validation scheme
-	///     (<c>OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme</c>) — registered as a
-	///     <c>AddPolicyScheme</c> forward, not a hand-rolled handler, since OpenIddict's validation
-	///     builder always registers under its own fixed scheme name and cannot be told to use this one
-	///     directly (Himinbjorg#49).
+	///     The machine lane: a <see cref="NorseBearerLaneHandler" /> that authenticates <see cref="Bearer" /> and
+	///     stamps the result <c>NorseLanes.Machine</c>. The lane selector routes REST facade controllers here.
 	/// </summary>
 	public const string Machine = "Norse.Machine";
+
+	/// <summary>
+	///     The user lane: a <see cref="NorseBearerLaneHandler" /> that authenticates <see cref="Bearer" /> and
+	///     stamps the result <c>NorseLanes.User</c>.
+	/// </summary>
+	public const string User = "Norse.User";
+
+	/// <summary>
+	///     The one bearer source, a contract Midgard declares and never implements: the bearer-validating realm
+	///     registers it (Himinbjörg, as a forward to its validation scheme). Both bearer lanes authenticate it by
+	///     name and delegate challenge and forbid to it; a host that calls
+	///     <see cref="AuthenticationBuilderExtensions.AddNorseAuthentication" /> without registering it fails at
+	///     startup.
+	/// </summary>
+	public const string Bearer = "Norse.Bearer";
 }

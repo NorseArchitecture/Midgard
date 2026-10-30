@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
 		///     Registers the standard behavior chain — registration order <b>is</b> chain order, and it is
 		///     law (spec §2.2): Telemetry → ExceptionTranslation → Authorization → Validation → handler —
 		///     plus the scoped <see cref="PrincipalAccessor" />, the dispatch map, the
-		///     <see cref="ISender" />, and the controller channel's <see cref="PrincipalSeedingFilter" />
+		///     <see cref="ISender" />, the <see cref="IHttpContextAccessor" />, and the controller channel's <see cref="PrincipalSeedingFilter" />
 		///     (an inert <c>MvcOptions</c> configuration on a host that never builds MVC). A product realm
 		///     appends its own <c>IBehavior&lt;,&gt;</c> registration after this call; it lands between
 		///     Validation and the handler. Idempotent: a second call no-ops rather than double-running the
@@ -31,7 +31,9 @@ public static class ServiceCollectionExtensions
 				.AddScoped<PrincipalAccessor>()
 				.AddScoped<IPrincipalAccessor>(provider => provider.GetRequiredService<PrincipalAccessor>())
 				.AddSingleton<SenderDispatchMap>()
-				.AddScoped<ISender, Sender>();
+				.AddScoped<ISender, Sender>()
+				// The authorization behavior reads the live path base to author the re-authentication hop.
+				.AddHttpContextAccessor();
 			services.Configure<MvcOptions>(options => options.Filters.Add(new PrincipalSeedingFilter()));
 			return services;
 		}

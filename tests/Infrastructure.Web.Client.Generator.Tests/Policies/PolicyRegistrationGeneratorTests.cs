@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.DependencyInjection;
 using Norse.Abstractions.Components.Authorization;
+using Norse.Infrastructure.Web.Client.Authorization;
 using ClientPolicyRegistrationGenerator = Norse.Infrastructure.Web.Client.Generator.Policies.PolicyRegistrationGenerator;
 using ServerPolicyRegistrationGenerator = Norse.Infrastructure.Web.Server.Generator.Policies.PolicyRegistrationGenerator;
 
@@ -12,7 +13,8 @@ namespace Norse.Infrastructure.Web.Client.Generator.Tests.Policies;
 public sealed class PolicyRegistrationGeneratorTests
 {
 	const string ClientBootstrap =
-		"new global::Microsoft.AspNetCore.Authorization.AuthorizationBuilder(services.AddAuthorizationCore())";
+		"new global::Microsoft.AspNetCore.Authorization.AuthorizationBuilder("
+		+ "global::Norse.Infrastructure.Web.Client.Authorization.ClientAuthorizationExtensions.AddNorseClientAuthorization(services))";
 
 	const string ServerBootstrap = "services.AddAuthorizationBuilder()";
 
@@ -27,10 +29,17 @@ public sealed class PolicyRegistrationGeneratorTests
 		MetadataReference.CreateFromFile(typeof(NorsePolicyAttribute).Assembly.Location)
 	];
 
-	static readonly MetadataReference[] _baseReferences =
+	// The authorization seam without the client package that carries AddNorseClientAuthorization().
+	static readonly MetadataReference[] _withoutClientAuthorization =
 	[
 		.. _withoutAuthorization,
 		MetadataReference.CreateFromFile(typeof(AuthorizationBuilder).Assembly.Location)
+	];
+
+	static readonly MetadataReference[] _baseReferences =
+	[
+		.. _withoutClientAuthorization,
+		MetadataReference.CreateFromFile(typeof(ClientAuthorizationExtensions).Assembly.Location)
 	];
 
 	const string EmptySource = "namespace Norse.Hosting.Web.Client;";
@@ -70,7 +79,9 @@ public sealed class PolicyRegistrationGeneratorTests
 	{
 		var (_, output) = Run("Norse.Hosting.Web.Client", EmptySource, _imageA);
 
-		Generated(output).ShouldContain("""AddPolicy("AuthN.Public", global::Norse.AuthN.Services.AuthNPolicies.Public)""");
+		Generated(output).ShouldContain(
+			"""AddPolicy("AuthN.Public", static policy => { global::Norse.AuthN.Services.AuthNPolicies.Public(policy); """
+			+ "global::Norse.Abstractions.Components.Authorization.NorseLanePolicyExtensions.CloseLaneByDefault(policy); });");
 	}
 
 	[Fact]
@@ -99,7 +110,17 @@ public sealed class PolicyRegistrationGeneratorTests
 		var generated = Generated(Run("Norse.Hosting.Web.Client", EmptySource, _imageA).Output);
 
 		generated.ShouldNotContain("AddAuthorizationBuilder");
-		generated.ShouldContain("AddAuthorizationCore()");
+		generated.ShouldContain(ClientBootstrap);
+	}
+
+	// A WASM host registering the policies gets the client lane, any-lane and audience handlers by construction.
+	[Fact]
+	void The_client_output_bootstraps_over_AddNorseClientAuthorization()
+	{
+		var generated = Generated(Run("Norse.Hosting.Web.Client", EmptySource, _imageA).Output);
+
+		generated.ShouldContain("ClientAuthorizationExtensions.AddNorseClientAuthorization(services)");
+		generated.ShouldNotContain("AddAuthorizationCore()");
 	}
 
 	[Fact]
@@ -132,6 +153,20 @@ public sealed class PolicyRegistrationGeneratorTests
 			new ClientPolicyRegistrationGenerator(), "Norse.Hosting.Web.Client", EmptySource,
 			[.. _withoutAuthorization, _imageA, _imageOther]);
 
+		output.SyntaxTrees.ShouldNotContain(t => t.FilePath.EndsWith("NorsePolicyRegistration.g.cs", StringComparison.Ordinal));
+		diagnostics.ShouldBeEmpty();
+	}
+
+	[Fact]
+	void Nothing_is_emitted_when_AddNorseClientAuthorization_is_not_visible()
+	{
+		// The authorization seam is visible, so only the missing client package keeps the generator silent: the
+		// bootstrap it would emit names AddNorseClientAuthorization(), which this compilation cannot resolve.
+		var (diagnostics, output) = Drive(
+			new ClientPolicyRegistrationGenerator(), "Norse.Hosting.Web.Client", EmptySource,
+			[.. _withoutClientAuthorization, _imageA, _imageOther]);
+
+		output.GetTypeByMetadataName("Microsoft.AspNetCore.Authorization.AuthorizationBuilder").ShouldNotBeNull();
 		output.SyntaxTrees.ShouldNotContain(t => t.FilePath.EndsWith("NorsePolicyRegistration.g.cs", StringComparison.Ordinal));
 		diagnostics.ShouldBeEmpty();
 	}

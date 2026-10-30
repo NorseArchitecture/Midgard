@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -9,19 +11,31 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Norse.Abstractions.Components.Authorization;
+using Norse.Infrastructure.Web.Server.Authentication;
 using OpenTelemetry.Trace;
 
 namespace Norse.Infrastructure.ServiceDefaults.AspNet.Tests;
 
 public sealed class WebApplicationExtensionsTests
 {
+	// The Probe policy's handlers come from AddNorseAuthentication(), the registration a real host makes. Its
+	// bearer lanes require a Norse.Bearer scheme, the bearer-validating realm's to register: a stub stands in.
+	static void AddProbeAuthorization(IHostApplicationBuilder builder)
+	{
+		builder.Services.AddNorseAuthentication()
+			.AddScheme<AuthenticationSchemeOptions, BearerStubHandler>(NorseSchemes.Bearer, null);
+		builder.Services.AddAuthorizationBuilder().AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe);
+	}
+
 	static WebApplication BuildProbeHost(Action<IHostApplicationBuilder>? configure = null)
 	{
 		var builder = WebApplication.CreateSlimBuilder();
 		builder.WebHost.UseTestServer();
 		builder.AddAspNetServiceDefaults();
-		builder.Services.AddAuthorizationBuilder().AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe);
+		AddProbeAuthorization(builder);
 		configure?.Invoke(builder);
 		var app = builder.Build();
 		app.UseAuthorization();
@@ -94,7 +108,7 @@ public sealed class WebApplicationExtensionsTests
 		var builder = WebApplication.CreateSlimBuilder();
 		builder.WebHost.UseTestServer();
 		builder.AddAspNetServiceDefaults();
-		builder.Services.AddAuthorizationBuilder().AddPolicy(NorsePolicies.Probe, NorsePlatformPolicies.Probe);
+		AddProbeAuthorization(builder);
 		builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing.AddInMemoryExporter(exported));
 		await using var app = builder.Build();
 		app.UseAuthorization();
@@ -114,4 +128,11 @@ public sealed class WebApplicationExtensionsTests
 
 		exported.ShouldHaveSingleItem().DisplayName.ShouldContain(Sentinel);
 	}
+}
+
+/// <summary>A stand-in <see cref="NorseSchemes.Bearer" />: authenticates nothing. The probe endpoints never reach it.</summary>
+sealed class BearerStubHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+	: AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+{
+	protected override Task<AuthenticateResult> HandleAuthenticateAsync() => Task.FromResult(AuthenticateResult.NoResult());
 }

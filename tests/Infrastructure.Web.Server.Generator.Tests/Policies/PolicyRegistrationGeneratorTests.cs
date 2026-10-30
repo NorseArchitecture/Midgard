@@ -71,7 +71,7 @@ public sealed class PolicyRegistrationGeneratorTests
 		var (_, outputCompilation) = Run("Norse.Hosting.Web.Server", EmptySource, _imageA);
 
 		Generated(outputCompilation).ShouldContain(
-			"""AddPolicy("AuthN.Public", global::Norse.AuthN.Services.AuthNPolicies.Public)""");
+			"""AddPolicy("AuthN.Public", static policy => { global::Norse.AuthN.Services.AuthNPolicies.Public(policy);""");
 	}
 
 	[Fact]
@@ -82,7 +82,7 @@ public sealed class PolicyRegistrationGeneratorTests
 		var (_, outputCompilation) = Run("Norse.Hosting.Web.Server", EmptySource, _imageB, _imageA);
 
 		Generated(outputCompilation).ShouldContain(
-			"""AddPolicy("AuthN.Public", global::Norse.AuthN.Services.AuthNPolicies.Public)""");
+			"""AddPolicy("AuthN.Public", static policy => { global::Norse.AuthN.Services.AuthNPolicies.Public(policy);""");
 
 		// Compiling the output is the fact that matters here: it is what proves the emitter only ever
 		// names types this compilation can actually resolve.

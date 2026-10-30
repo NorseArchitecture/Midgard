@@ -15,7 +15,9 @@ namespace Norse.Infrastructure.Web.Server.Authentication;
 ///     principal. Fallback lives here rather than in the lane selector because a policy scheme cannot
 ///     supply it: <c>ForwardDefaultSelector</c> resolves one scheme name and a failed
 ///     <c>AuthenticateAsync</c> stays failed. The selector is therefore endpoint-shaped and result-blind,
-///     and everything credential-dependent happens inside this type.
+///     and everything credential-dependent happens inside this type. Whichever result contributes is stamped
+///     <c>NorseLanes.Identity</c> on the way out (<see cref="IdentityLaneStamping" />, spec §7.3); the anonymous role
+///     still tells the anonymous principal apart.
 /// </summary>
 /// <remarks>
 ///     The design's constructor also names <c>IOptionsMonitor&lt;NorseAnonymousOptions&gt;</c> and
@@ -41,7 +43,7 @@ sealed class NorseBrowserHandler(
 		{
 			var identity = await Context.AuthenticateAsync(identityScheme).ConfigureAwait(false);
 			if (identity.Succeeded)
-				return identity;
+				return identity.StampedIdentityLane();
 
 			// Present but not valid -- expired, revoked, or key-rotated. Delete it with the same options it
 			// was written with: a browser silently ignores a delete whose Path/Domain/Secure/SameSite do not
@@ -53,7 +55,7 @@ sealed class NorseBrowserHandler(
 			Response.Cookies.Delete(identityCookieName, cookieOptions.Get(identityScheme).Cookie.Build(Context));
 		}
 
-		return await Context.AuthenticateAsync(NorseSchemes.Anonymous).ConfigureAwait(false);
+		return (await Context.AuthenticateAsync(NorseSchemes.Anonymous).ConfigureAwait(false)).StampedIdentityLane();
 	}
 
 	// Challenge and forbid are separate operations from authenticate, and the base handler answers both with

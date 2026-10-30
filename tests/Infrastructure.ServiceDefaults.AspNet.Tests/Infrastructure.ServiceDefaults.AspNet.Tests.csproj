@@ -3,5 +3,8 @@
 		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.*-*" />
 		<PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="*" />
 		<ProjectReference Include="../../src/Infrastructure.ServiceDefaults.AspNet/Infrastructure.ServiceDefaults.AspNet.csproj" />
+		<!-- Test-only: the probe hosts compose AddNorseAuthentication() as a real host does, so the Probe policy's
+		     any-lane requirement is handled by the registration that ships it. The source project stays Norse-free. -->
+		<ProjectReference Include="../../src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
 	</ItemGroup>
 </Project>

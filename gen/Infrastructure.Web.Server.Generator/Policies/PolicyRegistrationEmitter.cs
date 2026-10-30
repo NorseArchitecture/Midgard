@@ -41,16 +41,26 @@ static class PolicyRegistrationEmitter
 		return builder.ToString();
 	}
 
-	static string Registrations(ImmutableArray<PolicyDeclaration> declarations) =>
-		declarations.Length == 0 ?
-			"\t\t// No [NorsePolicy] declarations in this compilation's reference set." :
-			// Sorted here too, not just by discovery upstream -- "same input -> identical bytes" is the
-			// emitter's own contract regardless of the order a caller happens to pass, and discovery is
-			// not the only caller a test (or a future one) is entitled to have.
-			string.Join("\n", declarations.OrderBy(d => d.Name, StringComparer.Ordinal).Select(d =>
-				// SymbolDisplay.FormatLiteral, never manual quoting: a policy name is authored data, and a
-				// perfectly valid constant containing a quote, a backslash, or a newline would otherwise
-				// emit source that does not parse. Roslyn owns C# literal escaping; we do not reimplement it.
-				$"\t\tbuilder.AddPolicy({SymbolDisplay.FormatLiteral(d.Name, quote: true)}, "
-				+ $"global::{d.DeclaringType}.{d.MethodName});"));
+	// Every entry closes its lane by default after its configure method (spec 7.5): a policy naming no lane of its
+	// own admits the identity lane alone. CloseLaneByDefault is named by its containing type, in the extension's
+	// static form, so the generated file assumes no using.
+	static string Registrations(ImmutableArray<PolicyDeclaration> declarations)
+	{
+		if (declarations.Length == 0)
+			return "\t\t// No [NorsePolicy] declarations in this compilation's reference set.";
+
+		StringBuilder builder = new();
+		// Sorted here too, not just by discovery upstream -- "same input -> identical bytes" is the
+		// emitter's own contract regardless of the order a caller happens to pass, and discovery is
+		// not the only caller a test (or a future one) is entitled to have.
+		foreach (var declaration in declarations.OrderBy(d => d.Name, StringComparer.Ordinal))
+			// SymbolDisplay.FormatLiteral, never manual quoting: a policy name is authored data, and a
+			// perfectly valid constant containing a quote, a backslash, or a newline would otherwise
+			// emit source that does not parse. Roslyn owns C# literal escaping; we do not reimplement it.
+			builder.AppendCSharp($$"""
+						builder.AddPolicy({{SymbolDisplay.FormatLiteral(declaration.Name, quote: true)}}, static policy => { global::{{declaration.DeclaringType}}.{{declaration.MethodName}}(policy); global::Norse.Abstractions.Components.Authorization.NorseLanePolicyExtensions.CloseLaneByDefault(policy); });
+				""");
+		// The template supplies the line break after the block; AppendCSharp's own last one would double it.
+		return builder.ToString().TrimEnd('\n');
+	}
 }

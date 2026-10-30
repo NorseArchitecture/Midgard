@@ -20,8 +20,23 @@ public sealed class PolicyRegistrationEmitterTests
 	{
 		var emitted = PolicyRegistrationEmitter.Emit("Norse.Hosting.Web.Server", Bootstrap, _two);
 
-		emitted.ShouldContain("""AddPolicy("AuthN.Public", global::Norse.AuthN.Services.AuthNPolicies.Public)""");
-		emitted.ShouldContain("""AddPolicy("Reference.Public", global::Norse.Reference.ReferencePolicies.Public)""");
+		emitted.ShouldContain("""AddPolicy("AuthN.Public", static policy => { global::Norse.AuthN.Services.AuthNPolicies.Public(policy);""");
+		emitted.ShouldContain("""AddPolicy("Reference.Public", static policy => { global::Norse.Reference.ReferencePolicies.Public(policy);""");
+	}
+
+	// Snapshot of the registration block: every entry runs its declared configure method, then closes the lane
+	// by default (spec 7.5), named by its containing type so the generated file assumes no using.
+	[Fact]
+	void Every_registration_closes_the_lane_by_default_after_its_configure_method()
+	{
+		var emitted = PolicyRegistrationEmitter.Emit("Norse.Hosting.Web.Server", Bootstrap, _two);
+
+		emitted.ShouldContain("""
+					var builder = services.AddAuthorizationBuilder();
+					builder.AddPolicy("AuthN.Public", static policy => { global::Norse.AuthN.Services.AuthNPolicies.Public(policy); global::Norse.Abstractions.Components.Authorization.NorseLanePolicyExtensions.CloseLaneByDefault(policy); });
+					builder.AddPolicy("Reference.Public", static policy => { global::Norse.Reference.ReferencePolicies.Public(policy); global::Norse.Abstractions.Components.Authorization.NorseLanePolicyExtensions.CloseLaneByDefault(policy); });
+					return services;
+			""".Replace("\r", string.Empty));
 	}
 
 	[Fact]

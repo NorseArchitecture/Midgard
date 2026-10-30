@@ -16,11 +16,16 @@ namespace Norse.Infrastructure.Web.Client.Generator.Policies;
 ///     <c>[Authorize(Policy = …)]</c> in the router, so a WASM host needs the same registration the server
 ///     generator emits. Discovery, diagnostics (NORSE014/NORSE015), and the emitter are the server's own
 ///     source, linked in — only the bootstrap differs: <c>AddAuthorizationBuilder()</c> lives in the ASP.NET
-///     Core shared framework a WASM host cannot reference, so the builder is constructed over
-///     <c>AddAuthorizationCore()</c> instead. Emits only when the authorization seam
-///     (<c>Microsoft.AspNetCore.Authorization.AuthorizationBuilder</c>) is visible to the compilation; emits
-///     nothing -- no source, no diagnostics -- when it is not, since such a compilation (this package's own
-///     gRPC client library among them) cannot host a policy. Also stands down when the ASP.NET Core shared
+///     Core shared framework a WASM host cannot reference, so the builder is constructed over this package's
+///     <c>AddNorseClientAuthorization()</c> instead -- <c>AddAuthorizationCore()</c> plus the client lane, any-lane
+///     and audience handlers, so a host registering the policies gets the handlers that evaluate them by
+///     construction. Emits only when both the authorization seam
+///     (<c>Microsoft.AspNetCore.Authorization.AuthorizationBuilder</c>) and that bootstrap
+///     (<c>Norse.Infrastructure.Web.Client.Authorization.ClientAuthorizationExtensions</c>) are visible to the
+///     compilation; emits nothing -- no source, no diagnostics -- when either is not, since such a compilation
+///     cannot host a policy, or could not compile the bootstrap. This package's own client library sees both (it
+///     declares the bootstrap), so it carries an unused internal registration of its own, as the server library
+///     does. Also stands down when the ASP.NET Core shared
 ///     framework itself is visible (<c>Microsoft.AspNetCore.Builder.WebApplication</c>): that host belongs to
 ///     the server generator, which emits the same <c>NorsePolicyRegistration</c> type, so a server project that
 ///     also references this package would otherwise collide (CS0101). Where the seam is visible and the
@@ -31,10 +36,15 @@ public sealed class PolicyRegistrationGenerator : IIncrementalGenerator
 {
 	const string AuthorizationBuilderMetadataName = "Microsoft.AspNetCore.Authorization.AuthorizationBuilder";
 
+	const string ClientAuthorizationMetadataName =
+		"Norse.Infrastructure.Web.Client.Authorization.ClientAuthorizationExtensions";
+
 	const string WebApplicationMetadataName = "Microsoft.AspNetCore.Builder.WebApplication";
 
+	// The extension's static form, so the generated file assumes no using.
 	const string Bootstrap =
-		"new global::Microsoft.AspNetCore.Authorization.AuthorizationBuilder(services.AddAuthorizationCore())";
+		"new global::Microsoft.AspNetCore.Authorization.AuthorizationBuilder("
+		+ "global::Norse.Infrastructure.Web.Client.Authorization.ClientAuthorizationExtensions.AddNorseClientAuthorization(services))";
 
 	/// <inheritdoc />
 	public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -62,6 +72,7 @@ public sealed class PolicyRegistrationGenerator : IIncrementalGenerator
 
 		var (compilation, options) = input;
 		if (compilation.GetTypeByMetadataName(AuthorizationBuilderMetadataName) is null
+			|| compilation.GetTypeByMetadataName(ClientAuthorizationMetadataName) is null
 			|| compilation.GetTypeByMetadataName(WebApplicationMetadataName) is not null)
 			return new DiscoveryResult(false, string.Empty, [], []);
 
