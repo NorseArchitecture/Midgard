@@ -70,7 +70,7 @@ flowchart BT
 	WebClientGen --> AEmit
 ```
 
-Dependencies are transitive-first by house law — `Infrastructure.Web.Client` reaches `Primitives` through `Infrastructure.Web.Grpc`, so no direct edge exists. The `ServiceDefaults` pair is deliberately Norse-free (OpenTelemetry, health checks, and console logging only) — Aspire's ServiceDefaults convention, ruled into Midgard on 2026-06-28 rather than Yggdrasil or Bifröst. `Infrastructure.Web.Grpc.Generator.Shared` is shared source, not an assembly — its discovery walkers compile into both wiring generators.
+Dependencies are transitive-first by house law — `Infrastructure.Web.Client` reaches `Primitives` through `Infrastructure.Web.Grpc`, so no direct edge exists. The `ServiceDefaults` pair is Norse-free apart from the probe policy's Asgard names (OpenTelemetry, health checks, console logging, and the `/livez`/`/readyz` probes) — Aspire's ServiceDefaults convention, ruled into Midgard on 2026-06-28 rather than Yggdrasil or Bifröst. The asset-host root registers the probe policy itself, so a host with no identity stack still answers its probes. `Infrastructure.Web.Grpc.Generator.Shared` is shared source, not an assembly — its discovery walkers compile into both wiring generators.
 
 ## What's embodied here
 

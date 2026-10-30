@@ -32,12 +32,17 @@ public static class AspNetServiceDefaultsExtensions
 		///     The root for a host that serves static content only — identical to
 		///     <see cref="AddAspNetServiceDefaults" /> minus request tracing. An asset host has no database,
 		///     no transport, and no downstream, so its spans would be asset fetches with nothing to
-		///     correlate against; its traffic and usage signal comes from metrics instead.
+		///     correlate against; its traffic and usage signal comes from metrics instead. It also registers the
+		///     probe policy, because an asset host has no identity stack to register it. A
+		///     <c>WebApplication</c> adds the authorization middleware itself once those services exist.
 		/// </summary>
 		/// <returns>The same <paramref name="builder" /> for chaining.</returns>
-		public IHostApplicationBuilder AddAssetHostServiceDefaults() =>
-			builder
+		public IHostApplicationBuilder AddAssetHostServiceDefaults()
+		{
+			AssetHostProbeAuthorization.Add(builder.Services);
+			return builder
 				.AddServiceDefaults(configureMetrics: static metrics => metrics.AddAspNetCoreInstrumentation())
 				.AddDefaultHealthChecks();
+		}
 	}
 }
